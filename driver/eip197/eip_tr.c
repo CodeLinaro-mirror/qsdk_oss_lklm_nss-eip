@@ -1,0 +1,296 @@
+/*
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+#include <linux/version.h>
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/kref.h>
+#include <linux/dma-mapping.h>
+#include <linux/crypto.h>
+#include <linux/cache.h>
+#include <linux/debugfs.h>
+#include <linux/slab.h>
+#include <asm/cacheflush.h>
+
+#include "eip_priv.h"
+
+/*
+ * eip_tr_append_stats()
+ */
+static void eip_tr_append_stats(struct eip_tr_stats *dst, const struct eip_tr_stats *src)
+{
+	int words = (sizeof(struct eip_tr_stats) / sizeof(uint64_t));
+	uint64_t *dst_ptr = (uint64_t *)dst;
+	uint64_t *src_ptr = (uint64_t *)src;
+	int i;
+
+	/*
+	 * All statistics are 64bit. So we can just iterate by words.
+	 */
+	for (i = 0; i < words; i++, dst_ptr++, src_ptr++)
+		*dst_ptr += *src_ptr;
+}
+
+/*
+ * eip_tr_inval_done()
+ *	Invalidation completion.
+ */
+static void eip_tr_inval_done(struct eip_tr *tr, struct eip_hw_desc *hw, struct eip_sw_desc *sw)
+{
+	struct eip_pdev *ep;
+	struct eip_ctx *ctx;
+
+	ctx = tr->ctx;
+	ep = ctx->ep;
+
+	/*
+	 * free the memory associated with the operation.
+	 */
+	kmem_cache_free(ctx->sw_cache, sw);
+
+	/*
+	 * Free TR and all dependent resource.
+	 * Reference: eip_tr_alloc()
+	 */
+	eip_ctx_del_tr(ctx, tr);
+	eip_ctx_deref(ctx);
+	tr->ctx = NULL;
+
+	free_percpu(tr->stats_pcpu);
+	kmem_cache_free(ep->tr_cache, tr);
+	pr_debug("%px: TR freed successfully\n", tr);
+}
+
+/*
+ * eip_tr_inval_err()
+ *	Invalidation completion with error.
+ */
+static void eip_tr_inval_err(struct eip_tr *tr, struct eip_hw_desc *hw, struct eip_sw_desc *sw, uint16_t cle_err, uint16_t tr_err)
+{
+	pr_err("%px: TR Invalidation failed with cle_err(%u) tr_err(%u)\n", tr, cle_err, tr_err);
+	eip_tr_inval_done(tr, hw, sw);
+}
+
+/*
+ * eip_tr_inval()
+ */
+static void eip_tr_inval(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct eip_sw_desc *sw;
+	uint32_t cmd_token_hdr;
+	struct scatterlist sg;
+	struct eip_dma *dma;
+	struct eip_ctx *ctx;
+	struct eip_tr *tr;
+	int cpu;
+
+	tr = container_of(dwork, struct eip_tr, inval_work);
+	ctx = tr->ctx;
+
+	/*
+	 * Initialize scatterlist with dummy data address.
+	 * Although Invalidation does not use any data buffer. We do it for DMA.
+	 */
+	sg_init_one(&sg, &tr->inval_dummy_buf, 0);
+
+	/*
+	 * Initialize command token header.
+	 */
+	cmd_token_hdr = EIP_HW_TOKEN_HDR_CMN;
+	cmd_token_hdr |= EIP_HW_TOKEN_HDR_REUSE_CTX;
+
+	/*
+	 * Allocate SW descriptor.
+	 */
+	sw = kmem_cache_alloc(ctx->sw_cache, GFP_KERNEL);
+	if (!sw) {
+		pr_warn("%px: Failed to allocate SW descriptor; Rescheduling..\n", tr);
+		schedule_delayed_work(&tr->inval_work, EIP_TR_INVAL_TIMEOUT);
+		return;
+	}
+
+	/*
+	 * Fill software descriptor.
+	 * We don't take TR reference as it is already reached zero and delinked from DB.
+	 */
+	sw->tr = tr;
+	sw->tk = NULL;
+	sw->comp = &eip_tr_inval_done;
+	sw->err_comp = &eip_tr_inval_err;
+	sw->cmd_token_hdr = cmd_token_hdr;
+	sw->tr_addr_type = tr->tr_addr_type;
+	sw->tk_addr = 0;
+	sw->tk_words = 0;
+	sw->hw_svc = EIP_HW_CMD_HWSERVICE_INV_TRC;
+	sw->req = NULL;
+
+	/*
+	 * We are in process context (workqueue). disable preemption.
+	 * We have per cpu DMA object. So this ensures that there is no race condition.
+	 */
+	cpu = get_cpu();
+
+	/*
+	 * Schedule the transformation.
+	 * There is potential chance that DMA fails to schedule this request during peak
+	 * traffic. In that case we need to reschedule the invalidation.
+	 */
+	dma = &ctx->dma[cpu];
+
+	if (eip_dma_tx_sg(dma, sw, &sg, &sg)) {
+		pr_warn("%px: DMA is busy for invalidation schedule\n", tr);
+
+		put_cpu();
+		kmem_cache_free(ctx->sw_cache, sw);
+		schedule_delayed_work(&tr->inval_work, EIP_TR_INVAL_TIMEOUT);
+		return;
+	}
+
+	/*
+	 * Re-enable preemption.
+	 */
+	put_cpu();
+	return;
+}
+
+/*
+ * eip_tr_get_stats()
+ *	Update the summary stats.
+ */
+void eip_tr_get_stats(struct eip_tr *tr, struct eip_tr_stats *stats)
+{
+	int cpu;
+
+	memset(stats, 0, sizeof(*stats));
+
+	/*
+	 * Interate over each cpu statistics and add it into the output stats.
+	 */
+	for_each_possible_cpu(cpu) {
+		const struct eip_tr_stats *sp = per_cpu_ptr(tr->stats_pcpu, cpu);
+		eip_tr_append_stats(stats, sp);
+	}
+}
+
+/*
+ * eip_tr_final()
+ *	Mark TR completion.
+ */
+void eip_tr_final(struct kref *kref)
+{
+	struct eip_tr *tr = container_of(kref, struct eip_tr, ref);
+
+	/*
+	 * Schedule invalidation. TR will be freed when Invalidation is done.
+	 */
+	schedule_delayed_work(&tr->inval_work, EIP_TR_INVAL_TIMEOUT);
+}
+
+/*
+ * eip_tr_alloc()
+ *	Allocate the transform record.
+ *
+ * This function may sleep and should not be called form atomic context.
+ */
+struct eip_tr *eip_tr_alloc(struct eip_ctx *ctx, struct eip_tr_info *info)
+{
+	const struct eip_svc_entry *algo;
+	struct eip_pdev *ep = ctx->ep;
+	struct eip_tr *tr;
+	void *addr;
+
+	might_sleep();
+
+	if (ctx->svc >= EIP_SVC_MAX) {
+		pr_err("%px: Invalid EIP context\n", ctx);
+		return NULL;
+	}
+
+	/*
+	 * Fetch algorithm entry associated with service.
+	 */
+	algo = eip_ctx_algo_lookup(ctx, info->base.alg_name);
+	if (!algo) {
+		pr_err("%px: Invalid algo(%s)\n", ctx, info->base.alg_name);
+		return NULL;
+	}
+
+	/*
+	 * Allocate memory for transform record & HW context words.
+	 */
+	addr = kmem_cache_alloc(ep->tr_cache, GFP_KERNEL);
+	if (!addr) {
+		pr_err("%px: Failed to allocate EIP context\n", ctx);
+		return NULL;
+	}
+
+	memset(addr, 0, EIP_TR_SIZE);
+
+	/*
+	 * Initialize common information for TR. Some specific information can be initialized
+	 * in respective TR init.
+	 */
+	tr = (struct eip_tr *)addr;
+	tr->tr_ptr = addr + L1_CACHE_ALIGN(sizeof(*tr));
+	tr->ctx = eip_ctx_ref(ctx);
+	kref_init(&tr->ref);
+	INIT_DELAYED_WORK(&tr->inval_work, eip_tr_inval);
+
+	tr->stats_pcpu = alloc_percpu_gfp(struct eip_tr_stats, GFP_KERNEL | __GFP_ZERO);
+	if (!tr->stats_pcpu) {
+		pr_err("%px: Failed to allocate stats memory for TR\n", tr);
+		goto fail_stats;
+	}
+
+	/*
+	 * Initialize Transform records words based on service type.
+	 */
+	if (!algo->tr_init(tr, info, algo)) {
+		pr_err("%px: TR initialization failed for svc(%u) algo(%s)\n", ctx, ctx->svc, algo->name);
+		goto fail;
+	}
+
+	/*
+	 * Add TR into context list.
+	 */
+	pr_debug("%px: Allocated transform record for service(%u) algo(%s)\n", tr, ctx->svc, algo->name);
+	eip_ctx_add_tr(ctx, tr);
+	return tr;
+
+fail:
+	free_percpu(tr->stats_pcpu);
+fail_stats:
+	kmem_cache_free(ep->tr_cache, addr);
+	return NULL;
+}
+EXPORT_SYMBOL(eip_tr_alloc);
+
+/*
+ * eip_tr_free()
+ *	Free the Transform record.
+ *
+ * Caller need to make sure to not schedule any new tranformation request on this tr.
+ * Else we may go in infinite wait.
+ */
+void eip_tr_free(struct eip_tr *tr)
+{
+	/*
+	 * Reference: eip_tr_alloc
+	 */
+	eip_tr_deref(tr);
+}
+EXPORT_SYMBOL(eip_tr_free);
