@@ -17,5 +17,6 @@ $(NSS_EIP_MOD_NAME)-objs += eip_tr_skcipher.o
 $(NSS_EIP_MOD_NAME)-objs += eip_tr_ahash.o
 $(NSS_EIP_MOD_NAME)-objs += eip_tr_aead.o
 $(NSS_EIP_MOD_NAME)-objs += eip_tr_ipsec.o
+$(NSS_EIP_MOD_NAME)-objs += eip_tk.o
 
 obj ?= .

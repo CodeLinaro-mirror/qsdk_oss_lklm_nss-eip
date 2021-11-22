@@ -399,4 +399,19 @@ int eip_tr_ipsec_enc(struct eip_tr *tr, struct sk_buff *skb);
  */
 int eip_tr_ipsec_dec(struct eip_tr *tr, struct sk_buff *skb);
 
+/*
+ * eip_ctx_algo_supported
+ *     Check if the algorithm is supported by DMA.
+ *
+ * @datatypes
+ * const char *
+ *
+ * @param[in] dma_ctx  Pointer to DMA context.
+ * @param[in] alg_name Algorithm name.
+ *
+ * @return
+ * True/False.
+ */
+bool eip_ctx_algo_supported(struct eip_ctx *dma_ctx, const char *algo_name);
+
 #endif /* __EIP_H */

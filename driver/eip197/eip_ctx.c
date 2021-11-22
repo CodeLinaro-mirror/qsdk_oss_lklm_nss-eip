@@ -288,3 +288,17 @@ void eip_ctx_free(struct eip_ctx *ctx)
 	eip_ctx_deref(ctx);
 }
 EXPORT_SYMBOL(eip_ctx_free);
+
+/*
+ * eip_ctx_algo_supported()
+ *     Check if the algo is supported by DMA.
+ */
+bool eip_ctx_algo_supported(struct eip_ctx *ctx, const char *algo_name)
+{
+	if (!eip_ctx_algo_lookup(ctx, (char *)algo_name)) {
+		return false;
+	}
+
+	return true;
+}
+EXPORT_SYMBOL(eip_ctx_algo_supported);

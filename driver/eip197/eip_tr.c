@@ -294,3 +294,77 @@ void eip_tr_free(struct eip_tr *tr)
 	eip_tr_deref(tr);
 }
 EXPORT_SYMBOL(eip_tr_free);
+
+/*
+ * eip_tr_classify_err()
+ *     API to classify hw errors to linux errors.
+ */
+int eip_tr_classify_err(uint16_t cle_err, uint16_t tr_err)
+{
+	/*
+	 * On success we return 0.
+	 */
+	if (!cle_err && !tr_err) {
+		return 0;
+	}
+
+	/*
+	 * Check for tr_err.
+	 */
+	switch (tr_err) {
+	case EIP_HW_RES_ERROR_E0_NUM:
+	case EIP_HW_RES_ERROR_E1_NUM:
+	case EIP_HW_RES_ERROR_E3_NUM:
+	case EIP_HW_RES_ERROR_E4_NUM:
+	case EIP_HW_RES_ERROR_E5_NUM:
+	case EIP_HW_RES_ERROR_E6_NUM:
+	case EIP_HW_RES_ERROR_E8_NUM:
+	case EIP_HW_RES_ERROR_E12_NUM:
+		return -EINVAL;
+	case EIP_HW_RES_ERROR_E2_NUM:
+		return -E2BIG;
+	case EIP_HW_RES_ERROR_E7_NUM:
+		return -EOVERFLOW;
+	case EIP_HW_RES_ERROR_E9_NUM:
+	case EIP_HW_RES_ERROR_E11_NUM:
+	case EIP_HW_RES_ERROR_E13_NUM:
+		return -ECANCELED;
+	case EIP_HW_RES_ERROR_E10_NUM:
+		return -EILSEQ;
+	case EIP_HW_RES_ERROR_E14_NUM:
+		return -ETIME;
+	}
+
+	/*
+	 * Check for cle_err.
+	 */
+	switch(cle_err) {
+	case EIP_HW_RES_CLE_ERROR_E0:
+		return 0;
+	case EIP_HW_RES_CLE_ERROR_E1:
+	case EIP_HW_RES_CLE_ERROR_E2:
+		return -EOPNOTSUPP;
+	case EIP_HW_RES_CLE_ERROR_E3:
+	case EIP_HW_RES_CLE_ERROR_E5:
+	case EIP_HW_RES_CLE_ERROR_E6:
+	case EIP_HW_RES_CLE_ERROR_E7:
+	case EIP_HW_RES_CLE_ERROR_E8:
+	case EIP_HW_RES_CLE_ERROR_E9:
+	case EIP_HW_RES_CLE_ERROR_E10:
+	case EIP_HW_RES_CLE_ERROR_E12:
+	case EIP_HW_RES_CLE_ERROR_E13:
+	case EIP_HW_RES_CLE_ERROR_E14:
+	case EIP_HW_RES_CLE_ERROR_E15:
+	case EIP_HW_RES_CLE_ERROR_E16:
+	case EIP_HW_RES_CLE_ERROR_E18:
+	case EIP_HW_RES_CLE_ERROR_E20:
+	case EIP_HW_RES_CLE_ERROR_E21:
+	case EIP_HW_RES_CLE_ERROR_E22:
+	case EIP_HW_RES_CLE_ERROR_E23:
+	case EIP_HW_RES_CLE_ERROR_E24:
+	case EIP_HW_RES_CLE_ERROR_E25:
+		return -ECANCELED;
+	}
+
+	return -EINVAL;
+}

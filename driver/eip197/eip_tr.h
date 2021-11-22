@@ -19,6 +19,7 @@
 
 #define EIP_TR_INVAL_TIMEOUT msecs_to_jiffies(10)
 #define EIP_TR_SIZE (sizeof(struct eip_tr) + EIP_HW_CTX_SIZE_LARGE_BYTES + L1_CACHE_BYTES)
+#define EIP_TR_CTRL_CONTEXT_WORDS(x) (((x) & 0x3F) << 8)
 
 struct eip_svc_entry;
 typedef bool (*eip_tr_init_t) (struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo);
@@ -108,6 +109,7 @@ size_t eip_tr_ipsec_get_svc_len(void);
 bool eip_tr_ahash_key2digest(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo);
 void eip_tr_get_stats(struct eip_tr *tr, struct eip_tr_stats *stats);
 void eip_tr_final(struct kref *kref);
+int eip_tr_classify_err(uint16_t cle_err, uint16_t tr_err);
 
 /*
  * eip_tr_ref()
