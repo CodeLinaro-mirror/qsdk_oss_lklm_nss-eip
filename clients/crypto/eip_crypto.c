@@ -82,6 +82,23 @@ static int eip_crypto_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	/*
+	 * Initialize the skcipher service.
+	 */
+	if ((ret = eip_crypto_skcipher_init(np))) {
+		eip_crypto_aead_exit(np);
+		return ret;
+	}
+
+	/*
+	 * Initialize the ahash service.
+	 */
+	if ((ret = eip_crypto_ahash_init(np))) {
+		eip_crypto_skcipher_exit(np);
+		eip_crypto_aead_exit(np);
+		return ret;
+	}
+
 	pr_info("%px: Crypto probe done.\n", pdev);
 	return 0;
 }
@@ -102,6 +119,16 @@ static int eip_crypto_remove(struct platform_device *pdev)
 		pr_warn("%px: Invalid driver.\n", pdev);
 		return -EINVAL;
 	}
+
+	/*
+	 * De-initialize the crypto AHASH services.
+	 */
+	eip_crypto_ahash_exit(np);
+
+	/*
+	 * De-initialize the crypto SKCIPHER services.
+	 */
+	eip_crypto_skcipher_exit(np);
 
 	/*
 	 * De-initialize the crypto AEAD services.

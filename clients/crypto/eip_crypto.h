@@ -83,6 +83,10 @@ struct eip_crypto {
 
 extern int eip_crypto_aead_init(struct device_node *node);
 extern void eip_crypto_aead_exit(struct device_node *node);
+extern int eip_crypto_skcipher_init(struct device_node *node);
+extern void eip_crypto_skcipher_exit(struct device_node *node);
+extern int eip_crypto_ahash_init(struct device_node *node);
+extern void eip_crypto_ahash_exit(struct device_node *node);
 
 /*
  * eip_crypto_tfm_add_tfmctx()
