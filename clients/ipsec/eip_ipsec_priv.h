@@ -59,6 +59,7 @@ struct eip_ipsec_drv {
 	struct hlist_head __rcu sa_hlist[EIP_IPSEC_HASH_SIZE];
 					/* SA hash list based on IP & SPI */
 
+	struct list_head dev_head;	/* Device database */
 	struct kmem_cache *sa_cache;	/* Kmem cache for SA memory */
 	struct eip_ctx *ctx;		/* DMA context to use for transformation request */
 	struct dentry *dentry;		/* Driver debugfs dentry */

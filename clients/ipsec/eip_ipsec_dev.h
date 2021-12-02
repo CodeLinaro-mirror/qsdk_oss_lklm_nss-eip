@@ -55,8 +55,9 @@ struct eip_ipsec_dev_stats {
  * IPsec device object.
  */
 struct eip_ipsec_dev {
-	struct list_head node;		/* Node in Global device map hash list */
+	struct list_head node;		/* Node in Global device list */
 	struct net_device *ndev;	/* Linux netdevice representation for this device */
+	int64_t devid;			/* Device ID */
 	struct list_head enc_sa;	/* Encap SA list protected by RCU read lock and spinlock for modification */
 	struct list_head dec_sa;	/* Decap SA list protected by RCU read lock and spinlock for modification */
 	struct eip_ipsec_dev_stats __percpu *stats_pcpu;	/* Device statistics */
@@ -70,5 +71,10 @@ struct eip_ipsec_dev {
 void eip_ipsec_dev_enc_err(void *app_data, eip_req_t req, int err);
 void eip_ipsec_dev_enc_done_v4(void *app_data, eip_req_t req);
 void eip_ipsec_dev_enc_done_v6(void *app_data, eip_req_t req);
+
+struct net_device *eip_ipsec_dev_get_by_id(int64_t devid);
+void eip_ipsec_dev_link_id(struct net_device *dev, int64_t devid);
+void eip_ipsec_dev_unlink_id(struct net_device *dev, int64_t devid);
+bool eip_ipsec_dev_sa_exist(struct net_device *dev);
 
 #endif /* !__EIP_IPSEC_DEV_H */

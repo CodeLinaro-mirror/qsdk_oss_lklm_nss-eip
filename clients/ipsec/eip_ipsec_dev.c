@@ -621,12 +621,102 @@ static void eip_ipsec_dev_setup(struct net_device *ndev)
 }
 
 /*
+ * eip_ipsec_dev_get_by_id()
+ *	Fetch the net_device from the db for the given ID.
+ */
+struct net_device *eip_ipsec_dev_get_by_id(int64_t devid)
+{
+	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
+	struct eip_ipsec_dev *eid;
+
+	spin_lock_bh(&drv->lock);
+	list_for_each_entry(eid, &drv->dev_head, node) {
+		if ((eid->devid == devid) && ((!list_empty(&eid->enc_sa)) || (!list_empty(&eid->dec_sa)))) {
+			spin_unlock_bh(&drv->lock);
+			return eid->ndev;
+		}
+	}
+
+	spin_unlock_bh(&drv->lock);
+	return NULL;
+}
+
+/*
+ * eip_ipsec_dev_unlink_id()
+ *	Delete the net_device entry from the db.
+ */
+void eip_ipsec_dev_unlink_id(struct net_device *ndev, int64_t devid)
+{
+	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
+	struct eip_ipsec_dev *eid = netdev_priv(ndev);
+
+	/*
+	 * devid should be >=0 prior to
+	 * entering this API.
+	 */
+	BUG_ON(eid->devid < 0);
+
+	spin_lock_bh(&drv->lock);
+	list_del(&eid->node);
+	dev_put(ndev);
+	eid->devid = -1;
+	spin_unlock_bh(&drv->lock);
+}
+
+/*
+ * eip_ipsec_dev_link_id()
+ *	Add the net_device entry into the db.
+ */
+void eip_ipsec_dev_link_id(struct net_device *ndev, int64_t devid)
+{
+	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
+	struct eip_ipsec_dev *eid = netdev_priv(ndev);
+
+	/*
+	 * devid should be -1 prior to
+	 * entering this API.
+	 */
+	BUG_ON(eid->devid >= 0);
+
+	spin_lock_bh(&drv->lock);
+	eid->devid = devid;
+	list_add(&eid->node, &drv->dev_head);
+	dev_hold(ndev);
+	spin_unlock_bh(&drv->lock);
+}
+
+/*
+ * eip_ipsec_dev_sa_exist()
+ *	Checks whether encap/decap SA's are currently mapped to a given net_device.
+ */
+bool eip_ipsec_dev_sa_exist(struct net_device *ndev)
+{
+	struct eip_ipsec_dev *eid = netdev_priv(ndev);
+	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
+
+	spin_lock_bh(&drv->lock);
+	if ((!list_empty(&eid->enc_sa)) || (!list_empty(&eid->dec_sa))) {
+		spin_unlock_bh(&drv->lock);
+		return true;
+	}
+
+	spin_unlock_bh(&drv->lock);
+	return false;
+}
+
+/*
  * eip_ipsec_dev_del()
  *	Delete IPsec device associated with the netdevice.
  */
 void eip_ipsec_dev_del(struct net_device *ndev)
 {
 	struct eip_ipsec_dev *eid = netdev_priv(ndev);
+
+	/*
+	 * the given net_device should be unlinked from the db
+	 * before deletion.
+	 */
+	BUG_ON(eid->devid >= 0);
 
 	/*
 	 * User is require to remove SA first.
@@ -682,6 +772,8 @@ struct net_device *eip_ipsec_dev_add(void)
 	 */
 	eid = netdev_priv(ndev);
 	eid->ndev = ndev;
+	eid->devid = -1;
+
 	INIT_LIST_HEAD(&eid->enc_sa);
 	INIT_LIST_HEAD(&eid->dec_sa);
 

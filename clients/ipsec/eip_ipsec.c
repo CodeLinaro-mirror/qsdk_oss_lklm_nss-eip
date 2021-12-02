@@ -142,6 +142,11 @@ int __init eip_ipsec_init_module(void)
 	}
 
 	/*
+	 * Initializes the device db.
+	 */
+	INIT_LIST_HEAD(&drv->dev_head);
+
+	/*
 	 * Create DMA context.
 	 */
 	drv->ctx = eip_ctx_alloc(EIP_IPSEC_DEFAULT_SVC, &drv->dentry);
