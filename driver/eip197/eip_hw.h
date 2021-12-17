@@ -668,7 +668,8 @@
 #define EIP_HW_CTRL_WORDS 2
 #define EIP_HW_CTRL_LEN(x) (((x) & 0x3F) << 8)
 #define EIP_HW_CTRL_OPTION_UNFINISH_HASH_TO_CTX (0x5 << 4)
-#define EIP_HW_CTRL_HASH_OP(x) (((x) & 0x7) << 23)
+#define EIP_HW_CTRL_HASH_OP(x) (((x) & 0xF) << 23)
+#define EIP_HW_CTRL_HASH_OP_MASK (0xF << 23)
 #define EIP_HW_CTRL_DIGEST_TYPE (0x3 << 21)
 
 #define EIP_HW_CTRL_ALGO_AES128 (0xB << 16)

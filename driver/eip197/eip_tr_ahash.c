@@ -40,6 +40,58 @@ static const struct eip_svc_entry ahash_algo_list[] = {
 };
 
 /*
+ * eip_tr_ahash_tx_complete()
+ *	Free Resources held during transmit.
+ *
+ * TR should not be used after calling this function.
+ */
+static inline void eip_tr_ahash_tx_complete(struct eip_tr *tr, struct eip_sw_desc *sw)
+{
+	struct eip_ctx *ctx = tr->ctx;
+
+	/*
+	 * free the memory associated with the operation.
+	 */
+	kmem_cache_free(ctx->tk_cache, sw->tk);
+	kmem_cache_free(ctx->sw_cache, sw);
+
+	/*
+	 * Reference: eip_tr_ahash_digest()
+	 */
+	eip_tr_deref(tr);
+}
+
+/*
+ * eip_tr_ahash_digest_err()
+ *	Error in Digest DMA operation.
+ */
+static void eip_tr_ahash_digest_err(struct eip_tr *tr, struct eip_hw_desc *hw, struct eip_sw_desc *sw, uint16_t cle_err, uint16_t tr_err)
+{
+	/*
+	 * Digest computation must not fail unless there is any programming error.
+	 */
+	pr_err("%px: Digest completed with cle_err(%u) tr_err(%u)\n", tr, cle_err, tr_err);
+	BUG_ON(1);
+}
+
+/*
+ * eip_tr_ahash_digest_done()
+ *	Finish Digest DMA operation.
+ */
+static void eip_tr_ahash_digest_done(struct eip_tr *tr, struct eip_hw_desc *hw, struct eip_sw_desc *sw)
+{
+	struct completion *completion = sw->req;
+
+	/*
+	 * Free transmit resources.
+	 */
+	eip_tr_ahash_tx_complete(tr, sw);
+
+	pr_debug("%px: Digest completed\n", tr);
+	complete(completion);
+}
+
+/*
  * eip_tr_ahash_init()
  *	Initialize the transform record for Crypto AHASH.
  */
@@ -143,5 +195,134 @@ size_t eip_tr_ahash_get_svc_len(void)
  */
 bool eip_tr_ahash_key2digest(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo)
 {
+	struct eip_tr_base *base = &info->base;
+	struct eip_ctx *ctx = tr->ctx;
+	uint32_t cmd_token_hdr = 0;
+	struct eip_sw_desc *sw;
+	struct scatterlist sg;
+	struct eip_dma *dma;
+	struct eip_tk *tk;
+	uint8_t pad_offst;
+	void *key_data;
+	uint32_t data_len;
+	uint32_t tk_words;
+	int cpu;
+
+	DECLARE_COMPLETION_ONSTACK(completion);
+
+	/*
+	 * Sanity check.
+	 */
+	if (!tr->digest_len || !base->auth.key_len) {
+		pr_err("%px: Invalid hmac parameter, digest_len(%u) key len(%u)\n", tr,
+				tr->digest_len, base->auth.key_len);
+		return false;
+	}
+
+	/*
+	 * Allocate inner & outer padded keys for precalculation.
+	 * Each key will be of block length.
+	 */
+	data_len = base->auth.key_len;
+	key_data = kzalloc(data_len, GFP_KERNEL);
+	if (!key_data) {
+		pr_err("%px: Failed to allocate key data\n", tr);
+		return false;
+	}
+
+	memcpy(key_data, base->auth.key_data, base->auth.key_len);
+
+	/*
+	 * Initialize data scatterlist for DMA operation.
+	 */
+	sg_init_one(&sg, key_data, data_len);
+
+	/*
+	 * Allocate HW token.
+	 */
+	tk = kmem_cache_alloc(ctx->tk_cache, GFP_KERNEL);
+	if (!tk) {
+		pr_err("%px: Failed to allocate Token\n", tr);
+		goto fail_alloc_tk;
+	}
+
+	/*
+	 * Allocate SW descriptor.
+	 */
+	sw = kmem_cache_alloc(ctx->sw_cache, GFP_KERNEL);
+	if (!sw) {
+		pr_err("%px: Failed to allocate SW descriptor\n", tr);
+		goto fail_alloc_desc;
+	}
+
+	/*
+	 * Fill token for digest.
+	 */
+	pad_offst = EIP_HW_CTRL_WORDS + (base->cipher.key_len / sizeof(uint32_t));
+	tk_words = eip_tk_digest(tk, tr, &sg, &cmd_token_hdr, pad_offst, algo->auth_state_len / sizeof(uint32_t));
+
+	/*
+	 * Flush & invalidate token memory for device. We should not access token after this.
+	 */
+	dmac_clean_range(tk, tk + 1);
+
+	/*
+	 * Fill software descriptor.
+	 */
+	sw->tr = eip_tr_ref(tr);
+	sw->tk = tk;
+	sw->comp = &eip_tr_ahash_digest_done;
+	sw->err_comp = &eip_tr_ahash_digest_err;
+	sw->cmd_token_hdr = cmd_token_hdr;
+	sw->tk_addr = virt_to_phys(tk);
+	sw->tr_addr_type = tr->tr_addr_type;
+	sw->tk_words = tk_words;
+	sw->hw_svc = EIP_HW_CMD_HWSERVICE_LAC;
+	sw->req = &completion;
+
+	/*
+	 * We may be in process context. disable bottom half to prevent preemption.
+	 * We have per cpu DMA object. So this ensures that there is no race condition.
+	 */
+	cpu = get_cpu();
+
+	/*
+	 * Schedule the transformation.
+	 * There is potential chance that DMA fails to schedule this request during peak
+	 * traffic. In that case we need to reschedule the digest calculation.
+	 */
+	dma = &ctx->dma[cpu];
+
+retry:
+	if (eip_dma_tx_sg(dma, sw, &sg, &sg)) {
+		pr_warn("%px: DMA is busy for digest schedule\n", tr);
+
+		/*
+		 * TODO: Find better way to handle this scenario than sleeping.
+		 */
+		put_cpu();
+		usleep_range(1000, 1000);
+		get_cpu();
+		goto retry;
+	}
+
+	/*
+	 * Re-enable preemption.
+	 */
+	put_cpu();
+
+	/*
+	 * Wait for digest computation. We only free data memory here.
+	 * TK & SW free is done in completion.
+	 */
+	pr_debug("%px: Waiting for Digest completion\n", tr);
+	wait_for_completion(&completion);
+	kfree(key_data);
+	return true;
+
+fail_alloc_desc:
+	kmem_cache_free(ctx->tk_cache, tk);
+fail_alloc_tk:
+	kfree(key_data);
 	return false;
 }

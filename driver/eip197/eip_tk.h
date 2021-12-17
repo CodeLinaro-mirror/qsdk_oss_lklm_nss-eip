@@ -21,6 +21,8 @@
 
 struct eip_tr;
 
+#define EIP_TK_INST_CONTEXT_ACCESS_LEN(words) (((words) & 0xF) << 24)
+
 /*
  * eip_tk_ctrl_op
  *	Token control word bits.
@@ -58,7 +60,12 @@ enum eip_tk_inst {
 	EIP_TK_INST_HMAC = 0x03000000,		/* Hash */
 	EIP_TK_INST_GCM_HMAC = 0x0B000000,	/* Hash */
 	EIP_TK_INST_HASH = 0x02920000,		/* HASH ONLY */
+	EIP_TK_INST_NOP = 0x20000000,		/* NOP instruction */
 	EIP_TK_INST_DIGEST = 0x02020000,	/* Used for Intermediate DIGEST ONLY */
+	EIP_TK_INST_IPAD_GEN = 0x20E00000,	/* Generate inner digest */
+	EIP_TK_INST_OPAD_GEN = 0x20E60000,	/* Generate outer digest */
+	EIP_TK_INST_IPAD_ADD = 0xE0EE0800,	/* Write inner digest to context at offset */
+	EIP_TK_INST_OPAD_ADD = 0xE0E60800,	/* Write outer digest to context at offset */
 	EIP_TK_INST_DEL_DATA = 0xa0800000,	/* Used for Insert data */
 	EIP_TK_INST_ADD_DATA = 0x25000000,	/* Used for Removing data */
 	EIP_TK_INST_HMAC_ADD = 0x21E60000,	/* Insert generated hash */
@@ -83,5 +90,7 @@ uint8_t eip_tk_encauth_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t req, 
 uint8_t eip_tk_authdec_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t req, uint32_t *tk_hdr);
 uint8_t eip_tk_encauth_ctr_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t req, uint32_t *tk_hdr);
 uint8_t eip_tk_authdec_ctr_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t req, uint32_t *tk_hdr);
+uint8_t eip_tk_digest(struct eip_tk *tk, struct eip_tr *tr, struct scatterlist *sg, uint32_t *tk_hdr,
+		uint8_t ipad_offst, uint8_t opad_offst);
 
 #endif /* __EIP_TK_H */

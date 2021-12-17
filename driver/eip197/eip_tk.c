@@ -14,6 +14,9 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <linux/version.h>
+#include <linux/kernel.h>
+#include <linux/module.h>
 #include "eip_priv.h"
 
 /*
@@ -215,3 +218,54 @@ uint8_t eip_tk_authdec_ctr_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t e
 	return (tk_word - tk->words);
 }
 EXPORT_SYMBOL(eip_tk_authdec_ctr_rfc);
+
+/*
+ * eip_tk_digest()
+ *	Fill instruction for Digest calculation.
+ */
+uint8_t eip_tk_digest(struct eip_tk *tk, struct eip_tr *tr, struct scatterlist *sg, uint32_t *cmd_tk_hdr,
+		uint8_t ipad_offst, uint8_t pad_words)
+{
+	uint32_t *tk_word = tk->words;
+	uint32_t *tk_ctrl;
+	uint8_t opad_offst;
+
+	/*
+	 * Initialize the token for ipad & opad generation.
+	 */
+	tk_ctrl = tk_word;
+	tk_word += 2;
+
+	tk_ctrl[0] = EIP_HW_CTRL_LEN(EIP_HW_MAX_CTRL);
+	tk_ctrl[0] |= EIP_HW_CTRL_OPTION_UNFINISH_HASH_TO_CTX;
+	tk_ctrl[0] |= EIP_HW_CTRL_TOP_HMAC_ADD;
+	tk_ctrl[0] |= EIP_HW_CTRL_DIGEST_TYPE;
+
+	/*
+	 * Hash algo number is filled in cached TR control word.
+	 */
+	tk_ctrl[0] |= (tr->ctrl_words[0] & EIP_HW_CTRL_HASH_OP_MASK);
+	tk_ctrl[1] = 0x0;
+
+	/*
+	 * Fill instructiion.
+	 * We first update inner digest and then outer digest. Both of having same size.
+	 */
+	opad_offst = ipad_offst + pad_words;
+
+	*tk_word++ = EIP_TK_INST_DIGEST | sg->length;
+	*tk_word++ = EIP_TK_INST_IPAD_GEN;
+	*tk_word++ = EIP_TK_INST_NOP;
+	*tk_word++ = EIP_TK_INST_OPAD_GEN;
+	*tk_word++ = EIP_TK_INST_IPAD_ADD | EIP_TK_INST_CONTEXT_ACCESS_LEN(pad_words) | ipad_offst;
+	*tk_word++ = EIP_TK_INST_OPAD_ADD | EIP_TK_INST_CONTEXT_ACCESS_LEN(pad_words) | opad_offst;
+
+	/*
+	 * Fill command token header.
+	 */
+	*cmd_tk_hdr = EIP_HW_TOKEN_HDR_DIGEST | sg->length;
+
+	pr_debug("%px: Digest token filled for digest size(%u) pad words(%u) data len(%u)\n", tk,
+			tr->digest_len, pad_words, sg->length);
+	return (tk_word - tk->words);
+}
