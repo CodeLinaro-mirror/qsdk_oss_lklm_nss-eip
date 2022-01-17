@@ -31,12 +31,176 @@
 #include "eip_priv.h"
 
 /*
+ * Function prototypes.
+ */
+bool eip_tr_ahash_init(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo);
+
+/*
  * Global constant algorith information.
  */
 static const struct eip_svc_entry ahash_algo_list[] = {
 	/*
-	 * TODO: Fill algo database.
+	 * *******************************
+	 * Async non-keyed HASH digests. *
+	 * *******************************
 	 */
+	{
+		.name = "eip-md5",
+		.enc_tk_fill = NULL,
+		.dec_tk_fill = NULL,
+		.auth_tk_fill = &eip_tk_auth,
+		.auth_block_len = MD5_HMAC_BLOCK_SIZE,
+		.auth_state_len = 0,
+		.auth_digest_len = MD5_DIGEST_SIZE,
+		.tr_init = &eip_tr_ahash_init,
+		.ctrl_words_0 = EIP_HW_CTX_ALGO_MD5,
+		.ctrl_words_1 = 0x0,
+	},
+	{
+		.name = "eip-sha1",
+		.enc_tk_fill = NULL,
+		.dec_tk_fill = NULL,
+		.auth_tk_fill = &eip_tk_auth,
+		.auth_block_len = SHA1_BLOCK_SIZE,
+		.auth_state_len = 0,
+		.auth_digest_len = SHA1_DIGEST_SIZE,
+		.tr_init = &eip_tr_ahash_init,
+		.ctrl_words_0 = EIP_HW_CTX_ALGO_SHA1,
+		.ctrl_words_1 = 0x0,
+	},
+	{
+		.name = "eip-sha224",
+		.enc_tk_fill = NULL,
+		.dec_tk_fill = NULL,
+		.auth_tk_fill = &eip_tk_auth,
+		.auth_block_len = SHA224_BLOCK_SIZE,
+		.auth_state_len = 0,
+		.auth_digest_len = SHA224_DIGEST_SIZE,
+		.tr_init = &eip_tr_ahash_init,
+		.ctrl_words_0 = EIP_HW_CTX_ALGO_SHA224,
+		.ctrl_words_1 = 0x0,
+	},
+	{
+		.name = "eip-sha256",
+		.enc_tk_fill = NULL,
+		.dec_tk_fill = NULL,
+		.auth_tk_fill = &eip_tk_auth,
+		.auth_block_len = SHA256_BLOCK_SIZE,
+		.auth_state_len = 0,
+		.auth_digest_len = SHA256_DIGEST_SIZE,
+		.tr_init = &eip_tr_ahash_init,
+		.ctrl_words_0 = EIP_HW_CTX_ALGO_SHA256,
+		.ctrl_words_1 = 0x0,
+	},
+	{
+		.name = "eip-sha384",
+		.enc_tk_fill = NULL,
+		.dec_tk_fill = NULL,
+		.auth_tk_fill = &eip_tk_auth,
+		.auth_block_len = SHA384_BLOCK_SIZE,
+		.auth_state_len = 0,
+		.auth_digest_len = SHA384_DIGEST_SIZE,
+		.tr_init = &eip_tr_ahash_init,
+		.ctrl_words_0 = EIP_HW_CTX_ALGO_SHA384,
+		.ctrl_words_1 = 0x0,
+	},
+	{
+		.name = "eip-sha512",
+		.enc_tk_fill = NULL,
+		.dec_tk_fill = NULL,
+		.auth_tk_fill = &eip_tk_auth,
+		.auth_block_len = SHA512_BLOCK_SIZE,
+		.auth_state_len = 0,
+		.auth_digest_len = SHA512_DIGEST_SIZE,
+		.tr_init = &eip_tr_ahash_init,
+		.ctrl_words_0 = EIP_HW_CTX_ALGO_SHA512,
+		.ctrl_words_1 = 0x0,
+	},
+
+	/*
+	 * ******************************
+	 * Aynsc keyed HMAC digests.	*
+	 * ******************************
+	 */
+	{
+		.name = "eip-hmac-md5",
+		.enc_tk_fill = NULL,
+		.dec_tk_fill = NULL,
+		.auth_tk_fill = &eip_tk_auth,
+		.auth_block_len = MD5_HMAC_BLOCK_SIZE,
+		.auth_state_len = EIP_HW_PAD_KEYSZ_MD5,
+		.auth_digest_len = MD5_DIGEST_SIZE,
+		.tr_init = &eip_tr_ahash_init,
+		.ctrl_words_0 = EIP_HW_CTX_ALGO_MD5 | EIP_HW_CTX_AUTH_MODE_HMAC |
+			EIP_HW_CTX_SIZE_8WORDS,
+		.ctrl_words_1 = 0x0,
+	},
+	{
+		.name = "eip-hmac-sha1",
+		.enc_tk_fill = NULL,
+		.dec_tk_fill = NULL,
+		.auth_tk_fill = &eip_tk_auth,
+		.auth_block_len = SHA1_BLOCK_SIZE,
+		.auth_state_len = EIP_HW_PAD_KEYSZ_SHA1,
+		.auth_digest_len = SHA1_DIGEST_SIZE,
+		.tr_init = &eip_tr_ahash_init,
+		.ctrl_words_0 = EIP_HW_CTX_ALGO_SHA1 | EIP_HW_CTX_AUTH_MODE_HMAC |
+			EIP_HW_CTX_SIZE_10WORDS,
+		.ctrl_words_1 = 0x0,
+	},
+	{
+		.name = "eip-hmac-sha224",
+		.enc_tk_fill = NULL,
+		.dec_tk_fill = NULL,
+		.auth_tk_fill = &eip_tk_auth,
+		.auth_block_len = SHA224_BLOCK_SIZE,
+		.auth_state_len = EIP_HW_PAD_KEYSZ_SHA224,
+		.auth_digest_len = SHA224_DIGEST_SIZE,
+		.tr_init = &eip_tr_ahash_init,
+		.ctrl_words_0 = EIP_HW_CTX_ALGO_SHA224 | EIP_HW_CTX_AUTH_MODE_HMAC |
+			EIP_HW_CTX_SIZE_16WORDS,
+		.ctrl_words_1 = 0x0,
+	},
+	{
+		.name = "eip-hmac-sha256",
+		.enc_tk_fill = NULL,
+		.dec_tk_fill = NULL,
+		.auth_tk_fill = &eip_tk_auth,
+		.auth_block_len = SHA256_BLOCK_SIZE,
+		.auth_state_len = EIP_HW_PAD_KEYSZ_SHA256,
+		.auth_digest_len = SHA256_DIGEST_SIZE,
+		.tr_init = &eip_tr_ahash_init,
+		.ctrl_words_0 = EIP_HW_CTX_ALGO_SHA256 | EIP_HW_CTX_AUTH_MODE_HMAC |
+			EIP_HW_CTX_SIZE_16WORDS,
+		.ctrl_words_1 = 0x0,
+	},
+	{
+		.name = "eip-hmac-sha384",
+		.enc_tk_fill = NULL,
+		.dec_tk_fill = NULL,
+		.auth_tk_fill = &eip_tk_auth,
+		.auth_block_len = SHA384_BLOCK_SIZE,
+		.auth_state_len = EIP_HW_PAD_KEYSZ_SHA384,
+		.auth_digest_len = SHA384_DIGEST_SIZE,
+		.tr_init = &eip_tr_ahash_init,
+		.ctrl_words_0 = EIP_HW_CTX_ALGO_SHA384 | EIP_HW_CTX_AUTH_MODE_HMAC |
+			EIP_HW_CTX_SIZE_32WORDS,
+		.ctrl_words_1 = 0x0,
+	},
+	{
+		.name = "eip-hmac-sha512",
+		.enc_tk_fill = NULL,
+		.dec_tk_fill = NULL,
+		.auth_tk_fill = &eip_tk_auth,
+		.auth_block_len = SHA512_BLOCK_SIZE,
+		.auth_state_len = EIP_HW_PAD_KEYSZ_SHA512,
+		.auth_digest_len = SHA512_DIGEST_SIZE,
+		.tr_init = &eip_tr_ahash_init,
+		.ctrl_words_0 = EIP_HW_CTX_ALGO_SHA512 | EIP_HW_CTX_AUTH_MODE_HMAC |
+			EIP_HW_CTX_SIZE_32WORDS,
+		.ctrl_words_1 = 0x0,
+	},
+
 };
 
 /*
@@ -173,7 +337,7 @@ bool eip_tr_ahash_init(struct eip_tr *tr, struct eip_tr_info *info, const struct
 
 /*
  * eip_tr_ahash_get_svc()
- *	Get algo database for ahash.
+ * 	Get algo database for ahash.
  */
 const struct eip_svc_entry *eip_tr_ahash_get_svc(void)
 {
@@ -182,7 +346,7 @@ const struct eip_svc_entry *eip_tr_ahash_get_svc(void)
 
 /*
  * eip_tr_ahash_get_svc_len()
- *	Get algo database length for ahash.
+ * 	Get algo database length for ahash.
  */
 size_t eip_tr_ahash_get_svc_len(void)
 {
@@ -326,3 +490,142 @@ fail_alloc_tk:
 	kfree(key_data);
 	return false;
 }
+
+/*
+ * eip_tr_ahash_done()
+ *	Hardware callback API for authentication.
+ */
+static void eip_tr_ahash_done(struct eip_tr *tr, struct eip_hw_desc *hw, struct eip_sw_desc *sw)
+{
+	eip_req_t eip_req = sw->req;
+	struct eip_ctx *ctx = tr->ctx;
+	void *app_data = tr->crypto.app_data;
+	eip_tr_callback_t cb = tr->crypto.auth.cb;
+
+	/*
+	 * Free token and sw cache.
+	 */
+	kmem_cache_free(ctx->tk_cache, sw->tk);
+	kmem_cache_free(ctx->sw_cache, sw);
+
+	/*
+	 * Reference: eip_tr_skcipher_enc()
+	 */
+	eip_tr_deref(tr);
+
+	/*
+	 * Call the client callback.
+	 */
+	cb(app_data, eip_req);
+}
+
+/*
+ * eip_tr_ahash_err()
+ *	Hardware callback API for error in authentication.
+ */
+static void eip_tr_ahash_err(struct eip_tr *tr, struct eip_hw_desc *hw, struct eip_sw_desc *sw, uint16_t cle_err, uint16_t tr_err)
+{
+	eip_req_t eip_req = sw->req;
+	struct eip_ctx *ctx = tr->ctx;
+	void *app_data = tr->crypto.app_data;
+	eip_tr_err_callback_t cb = tr->crypto.auth.err_cb;
+	int err = 0;
+
+	/*
+	 * Free token and sw cache.
+	 */
+	kmem_cache_free(ctx->tk_cache, sw->tk);
+	kmem_cache_free(ctx->sw_cache, sw);
+
+	/*
+	 * Reference: eip_tr_skcipher_enc()
+	 */
+	eip_tr_deref(tr);
+
+	/*
+	 * Classify hardware errors and convert to linux errors.
+	 */
+	err = eip_tr_classify_err(cle_err, tr_err);
+
+	/*
+	 * Call the client callback.
+	 */
+	cb(app_data, eip_req, err);
+}
+
+/*
+ * eip_tr_ahash_auth()
+ *	Authentication API.
+ */
+int eip_tr_ahash_auth(struct eip_tr *tr, struct ahash_request *req, struct scatterlist *res)
+{
+	struct eip_ctx *ctx = tr->ctx;
+	uint32_t cmd_token_hdr = 0;
+	struct eip_sw_desc *sw;
+	struct eip_dma *dma;
+	struct eip_tk *tk;
+	uint32_t tk_words;
+	int status = 0;
+
+	/*
+	 * Allocate HW token.
+	 */
+	tk = kmem_cache_alloc(ctx->tk_cache, GFP_KERNEL);
+	if (!tk) {
+		pr_err("%px: Failed to allocate token.\n", tr);
+		return -ENOMEM;
+	}
+
+	/*
+	 * Fill token for hmac and decryption.
+	 */
+	tk_words = tr->crypto.auth.tk_fill(tk, tr, req, &cmd_token_hdr);
+
+	dmac_clean_range(tk, tk + 1);
+
+	/*
+	 * Allocate SW descriptor.
+	 */
+	sw = kmem_cache_alloc(ctx->sw_cache, GFP_KERNEL);
+	if (!sw) {
+		pr_err("%px: Failed to allocate SW descriptor.\n", tr);
+		status = -ENOMEM;
+		goto fail_sw_alloc;
+	}
+
+	/*
+	 * Fill software descriptor.
+	 */
+	sw->tr = eip_tr_ref(tr);
+	sw->tk = tk;
+	sw->comp = &eip_tr_ahash_done;
+	sw->err_comp = &eip_tr_ahash_err;
+	sw->cmd_token_hdr = cmd_token_hdr;
+	sw->tk_addr = virt_to_phys(tk);
+	sw->tr_addr_type = tr->tr_addr_type;
+	sw->tk_words = tk_words;
+	sw->hw_svc = EIP_HW_CMD_HWSERVICE_LAC;
+	sw->req = req;
+
+	dma = &ctx->dma[get_cpu()];
+
+	status = eip_dma_tx_sg(dma, sw, req->src, res);
+	if (status < 0) {
+		dma->stats.tx_error++;
+		put_cpu();
+		goto fail_tx;
+	}
+
+	/*
+	 * Reenable bottom half.
+	 */
+	put_cpu();
+	return 0;
+fail_tx:
+	eip_tr_deref(tr);
+	kmem_cache_free(ctx->sw_cache, sw);
+fail_sw_alloc:
+	kmem_cache_free(ctx->tk_cache, tk);
+	return status;
+}
+EXPORT_SYMBOL(eip_tr_ahash_auth);

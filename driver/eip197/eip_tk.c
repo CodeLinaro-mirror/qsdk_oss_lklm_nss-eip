@@ -20,6 +20,304 @@
 #include "eip_priv.h"
 
 /*
+ * eip_tk_enc_3des()
+ *     Fill encryption tokens.
+ */
+uint8_t eip_tk_enc_3des(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *cmd_tk_hdr)
+{
+	struct skcipher_request *req = eip_req2skcipher_request(eip_req);
+	uint32_t *iv_word = (uint32_t *)req->iv;
+	uint32_t *tk_word = tk->words;
+
+	/*
+	 * Fill token control info.
+	 */
+	*tk_word++ = tr->ctrl_words[0] | EIP_TK_CTRL_OP_ENC;
+	*tk_word++ = tr->ctrl_words[1];
+
+	/*
+	 * We construct IV here.
+	 */
+	*tk_word++ = iv_word[0];
+	*tk_word++ = iv_word[1];
+
+	/*
+	 * Fill encryption instructions.
+	 */
+	*tk_word++ = EIP_TK_INST_ENC | req->cryptlen;	/* Encrypt data */
+	*tk_word++ = EIP_TK_INST_PAD_ENC;		/* Padding before encrypt */
+
+	/*
+	 * Fill token header.
+	 */
+	*cmd_tk_hdr |= EIP_HW_TOKEN_HDR_CRYPTO_IV8;
+	*cmd_tk_hdr |= (EIP_HW_TOKEN_HDR_OUTBOUND | req->cryptlen);
+
+	/*
+	 * Total token words.
+	 */
+	return (tk_word - tk->words);
+}
+EXPORT_SYMBOL(eip_tk_enc_3des);
+
+/*
+ * eip_tk_dec_3des()
+ *     Fill decryption tokens.
+ */
+uint8_t eip_tk_dec_3des(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *cmd_tk_hdr)
+{
+	struct skcipher_request *req = eip_req2skcipher_request(eip_req);
+	uint32_t *iv_word = (uint32_t *)req->iv;
+	uint32_t *tk_word = tk->words;
+
+	/*
+	 * Fill token control info.
+	 */
+	*tk_word++ = tr->ctrl_words[0] | EIP_TK_CTRL_OP_DEC;
+	*tk_word++ = tr->ctrl_words[1];
+
+	/*
+	 * We construct IV here.
+	 */
+	*tk_word++ = iv_word[0];
+	*tk_word++ = iv_word[1];
+
+	/*
+	 * Fill decryption instructions.
+	 */
+	*tk_word++ = EIP_TK_INST_DEC | req->cryptlen;	/* Decrypt data */
+	*tk_word++ = EIP_TK_INST_DEC_CHK_PAD;		/* Check padding */
+
+	/*
+	 * Fill token header.
+	 */
+	*cmd_tk_hdr |= EIP_HW_TOKEN_HDR_CRYPTO_IV8;
+	*cmd_tk_hdr |= (EIP_HW_TOKEN_HDR_INBOUND | req->cryptlen);
+
+	/*
+	 * Total token words.
+	 */
+	return (tk_word - tk->words);
+}
+EXPORT_SYMBOL(eip_tk_dec_3des);
+
+/*
+ * eip_tk_enc()
+ *	Fill encryption tokens.
+ */
+uint8_t eip_tk_enc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *cmd_tk_hdr)
+{
+	struct skcipher_request *req = eip_req2skcipher_request(eip_req);
+	uint32_t *iv_word = (uint32_t *)req->iv;
+	uint32_t *tk_word = tk->words;
+
+	/*
+	 * Fill token control info.
+	 */
+	*tk_word++ = tr->ctrl_words[0] | EIP_TK_CTRL_OP_ENC;
+	*tk_word++ = tr->ctrl_words[1];
+
+	/*
+	 * We construct IV here.
+	 */
+	*tk_word++ = iv_word[0];
+	*tk_word++ = iv_word[1];
+	*tk_word++ = iv_word[2];
+	*tk_word++ = iv_word[3];
+
+	/*
+	 * Fill encryption instructions.
+	 */
+	*tk_word++ = EIP_TK_INST_ENC | req->cryptlen;	/* Encrypt data */
+	*tk_word++ = EIP_TK_INST_PAD_ENC;		/* Padding before encrypt */
+
+	/*
+	 * Fill token header.
+	 */
+	*cmd_tk_hdr |= EIP_HW_TOKEN_HDR_CRYPTO_IV16;
+	*cmd_tk_hdr |= (EIP_HW_TOKEN_HDR_OUTBOUND | req->cryptlen);
+
+	/*
+	 * Total token words.
+	 */
+	return (tk_word - tk->words);
+}
+EXPORT_SYMBOL(eip_tk_enc);
+
+/*
+ * eip_tk_dec()
+ *	Fill decryption tokens.
+ */
+uint8_t eip_tk_dec(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *cmd_tk_hdr)
+{
+	struct skcipher_request *req = eip_req2skcipher_request(eip_req);
+	uint32_t *iv_word = (uint32_t *)req->iv;
+	uint32_t *tk_word = tk->words;
+
+	/*
+	 * Fill token control info.
+	 */
+	*tk_word++ = tr->ctrl_words[0] | EIP_TK_CTRL_OP_DEC;
+	*tk_word++ = tr->ctrl_words[1];
+
+	/*
+	 * We construct IV here.
+	 */
+	*tk_word++ = iv_word[0];
+	*tk_word++ = iv_word[1];
+	*tk_word++ = iv_word[2];
+	*tk_word++ = iv_word[3];
+
+	/*
+	 * Fill decryption instructions.
+	 */
+	*tk_word++ = EIP_TK_INST_DEC | req->cryptlen;	/* Decrypt data */
+	*tk_word++ = EIP_TK_INST_DEC_CHK_PAD;		/* Check padding */
+
+	/*
+	 * Fill token header.
+	 */
+	*cmd_tk_hdr |= EIP_HW_TOKEN_HDR_CRYPTO_IV16;
+	*cmd_tk_hdr |= (EIP_HW_TOKEN_HDR_INBOUND | req->cryptlen);
+
+	/*
+	 * Total token words.
+	 */
+	return (tk_word - tk->words);
+}
+EXPORT_SYMBOL(eip_tk_dec);
+
+/*
+ * eip_tk_enc_ctr_rfc()
+ *	Fill encryption tokens.
+ */
+uint8_t eip_tk_enc_ctr_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *cmd_tk_hdr)
+{
+	struct skcipher_request *req = eip_req2skcipher_request(eip_req);
+	uint32_t *iv_word = (uint32_t *)req->iv;
+	uint32_t *tk_word = tk->words;
+
+	/*
+	 * Fill token control info.
+	 */
+	*tk_word++ = tr->ctrl_words[0] | EIP_TK_CTRL_OP_ENC;
+	*tk_word++ = tr->ctrl_words[1];
+
+	/*
+	 * We construct IV here from cached nonce during setkey.
+	 * Byte[0]: nonce from key.
+	 * Byte[1]: IV[0] from request.
+	 * Byte[2]: IV[1] from request.
+	 * Byte[3]: Counter set to 1.
+	 */
+	*tk_word++ = tr->nonce;
+	*tk_word++ = iv_word[0];
+	*tk_word++ = iv_word[1];
+	*tk_word++ = ntohl(0x1);
+
+	/*
+	 * Fill encryption instructions.
+	 */
+	*tk_word++ = EIP_TK_INST_ENC | req->cryptlen;	/* Encrypt data */
+	*tk_word++ = EIP_TK_INST_PAD_ENC;		/* Padding */
+
+	/*
+	 * Fill token header.
+	 */
+	*cmd_tk_hdr |= EIP_HW_TOKEN_HDR_CRYPTO_IV16;
+	*cmd_tk_hdr |= (EIP_HW_TOKEN_HDR_OUTBOUND | req->cryptlen);
+
+	/*
+	 * Total token words.
+	 */
+	return (tk_word - tk->words);
+}
+EXPORT_SYMBOL(eip_tk_enc_ctr_rfc);
+
+/*
+ * eip_tk_dec_ctr_rfc()
+ *	Fill decryption tokens.
+ */
+uint8_t eip_tk_dec_ctr_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *cmd_tk_hdr)
+{
+	struct skcipher_request *req = eip_req2skcipher_request(eip_req);
+	uint32_t *iv_word = (uint32_t *)req->iv;
+	uint32_t *tk_word = tk->words;
+
+	/*
+	 * Fill token control info.
+	 */
+	*tk_word++ = tr->ctrl_words[0] | EIP_TK_CTRL_OP_DEC;
+	*tk_word++ = tr->ctrl_words[1];
+
+	/*
+	 * We construct IV here from cached nonce during setkey.
+	 * Byte[0]: nonce from key.
+	 * Byte[1]: IV[0] from request.
+	 * Byte[2]: IV[1] from request.
+	 * Byte[3]: Counter set to 1.
+	 */
+	*tk_word++ = tr->nonce;
+	*tk_word++ = iv_word[0];
+	*tk_word++ = iv_word[1];
+	*tk_word++ = ntohl(0x1);
+
+	/*
+	 * Fill decryption instructions.
+	 */
+	*tk_word++ = EIP_TK_INST_DEC | req->cryptlen;	/* Decrypt data */
+	*tk_word++ = EIP_TK_INST_DEC_CHK_PAD;		/* Check padding */
+
+	/*
+	 * Fill token header.
+	 */
+	*cmd_tk_hdr |= EIP_HW_TOKEN_HDR_CRYPTO_IV16;
+	*cmd_tk_hdr |= (EIP_HW_TOKEN_HDR_INBOUND | req->cryptlen);
+
+	/*
+	 * Total token words.
+	 */
+	return (tk_word - tk->words);
+}
+EXPORT_SYMBOL(eip_tk_dec_ctr_rfc);
+
+/*
+ * eip_tk_auth()
+ *	Fill auth tokens.
+ */
+uint8_t eip_tk_auth(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *cmd_tk_hdr)
+{
+	struct ahash_request *req = eip_req2ahash_request(eip_req);
+	struct crypto_ahash *tfm = crypto_ahash_reqtfm(req);
+	unsigned int hmac_len = crypto_ahash_digestsize(tfm);
+	uint32_t *tk_word = tk->words;
+
+	/*
+	 * Fill token control info.
+	 */
+	*tk_word++ = tr->ctrl_words[0] | EIP_TK_CTRL_OP_HMAC_ADD;
+	*tk_word++ = tr->ctrl_words[1];
+
+	/*
+	 * Fill the instructions.
+	 */
+	*tk_word++ = EIP_TK_INST_HASH | req->nbytes;	/* Generate hash. */
+	*tk_word++ = EIP_TK_INST_HMAC_ADD | hmac_len;	/* Fetch hash. */
+
+	/*
+	 * Fill token header.
+	 */
+	*cmd_tk_hdr |= EIP_HW_TOKEN_HDR_CRYPTO_CMN;
+	*cmd_tk_hdr |= (EIP_HW_TOKEN_HDR_OUTBOUND | req->nbytes);
+
+	/*
+	 * Total token words.
+	 */
+	return (tk_word - tk->words);
+}
+EXPORT_SYMBOL(eip_tk_auth);
+
+/*
  * eip_tk_encauth_cbc()
  *	Fill tokens for AEAD outbound traffic.
  */

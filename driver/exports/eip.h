@@ -332,12 +332,13 @@ int eip_tr_skcipher_dec(struct eip_tr *tr, struct skcipher_request *cipher);
  *
  * @param[in] tr	Pointer to the transformation record.
  * @param[in] hash	Pointer to the ahash request.
+ * @param[in] res	Pointer to the result scatterlist.
  *
  * @return
  * Enqueue error.
  */
 
-int eip_tr_ahash_auth(struct eip_tr *tr, struct ahash_request *hash);
+int eip_tr_ahash_auth(struct eip_tr *tr, struct ahash_request *hash, struct scatterlist *res);
 
 /*
  * eip_tr_aead_enc

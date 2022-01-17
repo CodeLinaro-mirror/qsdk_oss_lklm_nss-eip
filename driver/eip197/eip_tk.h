@@ -70,7 +70,7 @@ enum eip_tk_inst {
 	EIP_TK_INST_ADD_DATA = 0x25000000,	/* Used for Removing data */
 	EIP_TK_INST_HMAC_ADD = 0x21E60000,	/* Insert generated hash */
 	EIP_TK_INST_HMAC_GET = 0x41E60000,	/* Retrieve hash */
-	EIP_TK_INST_HMAC_CHK = 0xD0070000,	/* Verify hash */
+	EIP_TK_INST_HMAC_CHK = 0xD0070000,	/* Disable pad verification */
 };
 
 /*
@@ -92,5 +92,12 @@ uint8_t eip_tk_encauth_ctr_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t r
 uint8_t eip_tk_authdec_ctr_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t req, uint32_t *tk_hdr);
 uint8_t eip_tk_digest(struct eip_tk *tk, struct eip_tr *tr, struct scatterlist *sg, uint32_t *tk_hdr,
 		uint8_t ipad_offst, uint8_t opad_offst);
+uint8_t eip_tk_auth(struct eip_tk *tk, struct eip_tr *tr, eip_req_t req, uint32_t *tk_hdr);
+uint8_t eip_tk_enc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t req, uint32_t *tk_hdr);
+uint8_t eip_tk_dec(struct eip_tk *tk, struct eip_tr *tr, eip_req_t req, uint32_t *tk_hdr);
+uint8_t eip_tk_enc_3des(struct eip_tk *tk, struct eip_tr *tr, eip_req_t req, uint32_t *tk_hdr);
+uint8_t eip_tk_dec_3des(struct eip_tk *tk, struct eip_tr *tr, eip_req_t req, uint32_t *tk_hdr);
+uint8_t eip_tk_enc_ctr_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t req, uint32_t *tk_hdr);
+uint8_t eip_tk_dec_ctr_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t req, uint32_t *tk_hdr);
 
 #endif /* __EIP_TK_H */

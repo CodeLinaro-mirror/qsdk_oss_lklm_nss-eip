@@ -30,6 +30,7 @@
 #include <crypto/sha.h>
 #include <crypto/sha3.h>
 #include <crypto/aes.h>
+#include <crypto/des.h>
 
 #include "eip_priv.h"
 
