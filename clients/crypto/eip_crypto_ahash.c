@@ -656,7 +656,7 @@ int eip_crypto_ahash_setkey(struct crypto_ahash *tfm, const u8 *key, unsigned in
 	/*
 	 * Fill EIP crypto session data
 	 */
-	strlcpy(base->alg_name, alg_name, strlen(alg_name));
+	strlcpy(base->alg_name, alg_name, CRYPTO_MAX_ALG_NAME);
 	base->auth.key_data = key;
 	base->auth.key_len = keylen;
 
@@ -735,7 +735,7 @@ int eip_crypto_ahash_tfm_init(struct ahash_request *req)
 	/*
 	 * Fill EIP crypto session data
 	 */
-	strlcpy(base->alg_name, alg_name, strlen(alg_name));
+	strlcpy(base->alg_name, alg_name, CRYPTO_MAX_ALG_NAME);
 	base->auth.key_data = NULL;
 
 	/*

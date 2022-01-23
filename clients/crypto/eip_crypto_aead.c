@@ -626,7 +626,7 @@ static int eip_crypto_aead_setkey(struct crypto_aead *tfm, const u8 *key, unsign
 	/*
 	 * Fill info object.
 	 */
-	strlcpy(base->alg_name, alg_name, strlen(alg_name));
+	strlcpy(base->alg_name, alg_name, CRYPTO_MAX_ALG_NAME);
 	base->cipher.key_data = keys.enckey;
 	base->auth.key_data = keys.authkey;
 	base->auth.key_len = keys.authkeylen;

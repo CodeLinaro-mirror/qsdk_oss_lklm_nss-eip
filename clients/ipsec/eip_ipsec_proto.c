@@ -1,0 +1,325 @@
+/*
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+#include <linux/version.h>
+#include <linux/types.h>
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/slab.h>
+#include <linux/if.h>
+#include <linux/rculist.h>
+#include <linux/netdevice.h>
+#include <linux/ip.h>
+#include <net/addrconf.h>
+#include <net/esp.h>
+#include <net/protocol.h>
+#include <net/xfrm.h>
+
+#include "eip_ipsec_priv.h"
+
+/*
+ * Original ESP ptotocol handlers
+ */
+static const struct net_protocol *linux_esp_handler;
+static const struct inet6_protocol *linux_esp6_handler;
+
+/*
+ * eip_ipsec_proto_dec_err()
+ *	Decapsulation completion callback.
+ */
+void eip_ipsec_proto_dec_err(void *app_data, eip_req_t req, int err)
+{
+	struct eip_ipsec_sa *sa = eip_ipsec_sa_ref_unless_zero((struct eip_ipsec_sa *)app_data);
+	struct sk_buff *skb = eip_req2skb(req);
+	struct eip_ipsec_dev_stats *dev_stats;
+	struct eip_ipsec_sa_stats *sa_stats;
+	struct eip_ipsec_dev *eid;
+
+	if (unlikely(!sa)) {
+		pr_debug("%px: Failed to take reference on SA\n", sa);
+		consume_skb(skb);
+		return;
+	}
+
+	eid = sa->eid;
+	dev_stats = this_cpu_ptr(eid->stats_pcpu);
+	dev_stats->rx_fail++;
+
+	/*
+	 * Update SA statistics.
+	 */
+	sa_stats = this_cpu_ptr(sa->stats_pcpu);
+	sa_stats->rx_pkts++;
+	sa_stats->rx_bytes += skb->len;
+	sa_stats->fail_transform++;
+
+	eip_ipsec_sa_deref(sa);
+	skb_dump(KERN_DEBUG, skb, false);
+	consume_skb(skb);
+}
+
+/*
+ * eip_ipsec_proto_dec_done()
+ *	Decapsulation completion callback.
+ */
+void eip_ipsec_proto_dec_done(void *app_data, eip_req_t req)
+{
+	struct eip_ipsec_sa *sa = eip_ipsec_sa_ref_unless_zero((struct eip_ipsec_sa *)app_data);
+	struct sk_buff *skb = eip_req2skb(req);
+	struct eip_ipsec_dev_stats *dev_stats;
+	struct eip_ipsec_sa_stats *sa_stats;
+	struct eip_ipsec_dev *eid;
+
+	if (unlikely(!sa)) {
+		pr_debug("%px: Failed to take reference on SA\n", sa);
+		consume_skb(skb);
+		return;
+	}
+
+	eid = sa->eid;
+	dev_stats = this_cpu_ptr(eid->stats_pcpu);
+	sa_stats = this_cpu_ptr(sa->stats_pcpu);
+
+	/*
+	 * Update SA statistics.
+	 */
+	sa_stats->rx_pkts++;
+	sa_stats->rx_bytes += skb->len;
+
+#if defined(EIP_IPSEC_XFRM)
+	/*
+	 * Linux requires sp in SKB when xfrm is enabled.
+	 */
+	if (sa->xs) {
+		struct sec_path *sp;
+		sp = secpath_set(skb);
+		if(!sp) {
+			sa_stats->fail_sp_alloc++;
+			dev_stats->rx_fail++;
+			eip_ipsec_sa_deref(sa);
+			consume_skb(skb);
+			return;
+		}
+
+		xfrm_state_hold(sa->xs);
+		sp->xvec[sp->len++] = sa->xs;
+	}
+#endif
+
+	/*
+	 * Reset General SKB fields for further processing.
+	 */
+	skb_reset_mac_header(skb);
+	skb_reset_network_header(skb);
+	skb->dev = sa->ndev;
+	skb->skb_iif = sa->ndev->ifindex;
+	skb->ip_summed = CHECKSUM_NONE;
+
+	if (ip_hdr(skb)->version == IPVERSION) {
+		skb->protocol = htons(ETH_P_IP);
+		skb_set_transport_header(skb, sizeof(struct iphdr));
+	} else {
+		skb->protocol = htons(ETH_P_IPV6);
+		skb_set_transport_header(skb, sizeof(struct ipv6hdr));
+	}
+
+	/*
+	 * Update device statistics.
+	 */
+	dev_stats->rx_pkts++;
+	dev_stats->rx_bytes += skb->len;
+
+	netif_receive_skb(skb);
+	eip_ipsec_sa_deref(sa);
+	return;
+}
+
+/*
+ * eip_ipsec_proto_esp_rx()
+ *	ESP Protocol handler for IPsec encapsulated packets.
+ */
+static inline int eip_ipsec_proto_esp_rx(struct eip_ipsec_sa *sa, struct sk_buff *skb)
+{
+	struct eip_ipsec_dev *eid = netdev_priv(sa->ndev);
+	struct eip_ipsec_dev_stats *dev_stats;
+	struct eip_ipsec_sa_stats *sa_stats;
+	unsigned int len;
+	bool expand_skb;
+	int error;
+
+	sa_stats = this_cpu_ptr(sa->stats_pcpu);
+	dev_stats = this_cpu_ptr(eid->stats_pcpu);
+	dev_stats->rx_host++;
+	len = skb->len;
+
+	/*
+	 * Unshare the SKB as we will be modifying it.
+	 */
+	if (unlikely(skb_shared(skb))) {
+		skb = skb_unshare(skb, in_atomic() ? GFP_ATOMIC : GFP_KERNEL);
+		if (!skb)
+			return 0;
+	}
+
+
+	expand_skb = (skb_cloned(skb) || (skb_headroom(skb) < sa->head_room) || (skb_tailroom(skb) < sa->tail_room));
+	if (expand_skb && pskb_expand_head(skb, sa->head_room, sa->tail_room, GFP_KERNEL)) {
+		pr_debug("%px: Failed to expand SKB with headroom(%u) tailroom(%u)\n",
+				sa, skb_headroom(skb), skb_tailroom(skb));
+		sa_stats->fail_expand++;
+		goto fail;
+	}
+
+	/*
+	 * skb->data points to ESP header. So, We need to push ip header.
+	 */
+	skb_push(skb, skb->data - skb_network_header(skb));
+
+	error = eip_tr_ipsec_dec(sa->tr, skb);
+	if (unlikely(error < 0)) {
+		/*
+		 * TODO: We need to reschedule packet during congestion.
+		 */
+		sa_stats->fail_enqueue++;
+		goto fail;
+	}
+
+	/*
+	 * Update SA statistics.
+	 */
+	sa_stats->tx_pkts++;
+	sa_stats->tx_bytes += len;
+
+	return 0;
+
+fail:
+	dev_stats->rx_fail++;
+	consume_skb(skb);
+	return 0;
+}
+
+/*
+ * eip_ipsec_proto_esp4_rx()
+ *	ESP Protocol handler for IPv4 IPsec encapsulated packets.
+ */
+static int eip_ipsec_proto_esp4_rx(struct sk_buff *skb)
+{
+	struct eip_ipsec_sa *sa;
+	int ret;
+
+	/*
+	 * Lookup SA using <ESP SPI, IP Destination address>.
+	 * We can't use skb->dev because ECM is only pushing rule for 3 tuple (Single rule for multiple decap SAs).
+	 */
+	sa = eip_ipsec_sa_ref_get_decap_v4(&ip_hdr(skb)->daddr, ip_esp_hdr(skb)->spi);
+	if (!sa) {
+		pr_debug("IPv4 SA not found %pI4n %x\n", ipv6_hdr(skb)->daddr.s6_addr32, ip_esp_hdr(skb)->spi);
+		return -EHOSTUNREACH;
+	}
+
+	ret = eip_ipsec_proto_esp_rx(sa, skb);
+
+	eip_ipsec_sa_deref(sa);
+	return ret;
+}
+
+/*
+ * eip_ipsec_proto_esp6_rx()
+ *	ESP Protocol handler for IPv6 IPsec encapsulated packets.
+ */
+static int eip_ipsec_proto_esp6_rx(struct sk_buff *skb)
+{
+	struct eip_ipsec_sa *sa;
+	int ret;
+
+	/*
+	 * Lookup SA using <ESP SPI, IP Destination address>.
+	 * We can't use skb->dev because ECM is only pushing rule for 3 tuple (Single rule for multiple decap SAs).
+	 */
+	sa = eip_ipsec_sa_ref_get_decap_v6(ipv6_hdr(skb)->daddr.s6_addr32, ip_esp_hdr(skb)->spi);
+	if (!sa) {
+		pr_debug("IPv6 SA not found %pI6 %x\n", ipv6_hdr(skb)->daddr.s6_addr32, ip_esp_hdr(skb)->spi);
+		return -EHOSTUNREACH;
+	}
+
+	ret = eip_ipsec_proto_esp_rx(sa, skb);
+
+	eip_ipsec_sa_deref(sa);
+	return ret;
+}
+
+/*
+ * IPv4 ESP handler
+ */
+static struct net_protocol esp_protocol = {
+	.handler = eip_ipsec_proto_esp4_rx,
+	.no_policy = 1,
+	.netns_ok  = 1,
+};
+
+/*
+ * IPv6 ESP handler
+ */
+static struct inet6_protocol esp6_protocol = {
+	.handler = eip_ipsec_proto_esp6_rx,
+	.flags = INET6_PROTO_NOPOLICY,
+};
+
+/*
+ * eip_ipsec_proto_esp_init()
+ *	Register ESP handler with the Linux.
+ */
+bool eip_ipsec_proto_esp_init(void)
+{
+	const struct net_protocol *ip_prot = &esp_protocol;
+
+	if (inet_update_protocol(&esp_protocol, IPPROTO_ESP, &linux_esp_handler) < 0) {
+		pr_err("Failed to update ESP protocol handler for IPv4\n");
+		return false;
+	}
+
+	if (inet6_update_protocol(&esp6_protocol, IPPROTO_ESP, &linux_esp6_handler) < 0) {
+		pr_err("Failed to update ESP protocol handler for IPv4\n");
+		/*
+		 * Revert v4 ESP handler to original handler.
+		 */
+		xchg(&linux_esp6_handler, NULL);
+		inet_update_protocol(linux_esp_handler, IPPROTO_ESP, &ip_prot);
+		xchg(&linux_esp_handler, NULL);
+		return false;
+	}
+
+	return true;
+}
+
+/*
+ * eip_ipsec_proto_esp_deinit()
+ *	De-register ESP handler with the Linux.
+ */
+void eip_ipsec_proto_esp_deinit(void)
+{
+	const struct inet6_protocol *ip6_prot;
+	const struct net_protocol *ip_prot;
+
+	/*
+	 * Revert v4 ESP handler to original handler.
+	 */
+	inet_update_protocol(linux_esp_handler, IPPROTO_ESP, &ip_prot);
+	xchg(&linux_esp_handler, NULL);
+
+	inet6_update_protocol(linux_esp6_handler, IPPROTO_ESP, &ip6_prot);
+	xchg(&linux_esp6_handler, NULL);
+}

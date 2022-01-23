@@ -516,7 +516,7 @@ static int eip_crypto_skcipher_setkey(struct crypto_skcipher *tfm, const u8 *key
 	/*
 	 * Fill algo info data
 	 */
-	strlcpy(base->alg_name, alg_name, strlen(alg_name));
+	strlcpy(base->alg_name, alg_name, CRYPTO_MAX_ALG_NAME);
 	base->cipher.key_data = key;
 
 	/*
