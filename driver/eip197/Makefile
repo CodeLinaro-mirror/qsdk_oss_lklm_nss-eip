@@ -11,6 +11,7 @@ obj-m += $(NSS_EIP_MOD_NAME).o
 $(NSS_EIP_MOD_NAME)-objs += eip.o
 $(NSS_EIP_MOD_NAME)-objs += eip_ctx.o
 $(NSS_EIP_MOD_NAME)-objs += eip_dma.o
+$(NSS_EIP_MOD_NAME)-objs += eip_dma_hy.o
 $(NSS_EIP_MOD_NAME)-objs += eip_hw.o
 $(NSS_EIP_MOD_NAME)-objs += eip_tr.o
 $(NSS_EIP_MOD_NAME)-objs += eip_tr_skcipher.o

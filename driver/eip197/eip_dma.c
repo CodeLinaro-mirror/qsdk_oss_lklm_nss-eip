@@ -57,18 +57,6 @@ static inline void eip_dma_notify(struct eip_dma *dma, uint8_t in_desc, uint8_t 
 }
 
 /*
- * eip_dma_avail_idx_and_count()
- *	Return available descriptor count & producer index in a ring.
- */
-static inline uint32_t eip_dma_avail_idx_and_count(struct eip_hw_ring *ring, uint32_t *prod_idx)
-{
-	uint32_t cons_idx;
-	(*prod_idx) = atomic_read(&ring->prod_idx);
-	cons_idx = atomic_read(&ring->cons_idx);
-	return EIP_DMA_AVAIL_COUNT(cons_idx - 1, *prod_idx);
-}
-
-/*
  * eip_dma_tx_res()
  *	Schedule single command for transformation. The function must be called with prempt disabled.
  */
@@ -120,13 +108,14 @@ static inline void eip_dma_tx_cmd(struct eip_dma *dma, struct eip_sw_desc *sw, s
 	cmd = &dma->in.desc[frag->idx];
 
 	cmd->frag[0] = frag->flag;
-	cmd->frag[0] |= EIP_HW_CMD_TOKEN_WORDS(sw->tk_words);
 	cmd->frag[0] |= EIP_HW_CMD_FRAG_LEN(frag->len);
 	cmd->frag[1] = 0;
 	cmd->frag[2] = virt_to_phys(frag->data);
 	cmd->frag[3] = 0;
 
 	if (frag->flag & EIP_HW_CMD_FLAGS_FIRST) {
+		cmd->frag[0] |= EIP_HW_CMD_TOKEN_WORDS(sw->tk_words);
+
 		cmd->token[0] = sw->tk_addr;
 		cmd->token[1] = 0;
 		cmd->token[2] = sw->cmd_token_hdr;
@@ -158,6 +147,7 @@ static ssize_t eip_dma_read_dma_stats(struct file *filep, char __user *ubuf, siz
 	ssize_t len;
 	ssize_t ret;
 	char *buf;
+	int i;
 
 	/*
 	 * We need to allocate space for the string and the value
@@ -180,6 +170,7 @@ static ssize_t eip_dma_read_dma_stats(struct file *filep, char __user *ubuf, siz
 	len += snprintf(buf + len, max_buf_len - len, "Rx fragment - %llu\n", stats->rx_frags);
 	len += snprintf(buf + len, max_buf_len - len, "Rx bytes - %llu\n", stats->rx_bytes);
 	len += snprintf(buf + len, max_buf_len - len, "Rx Error - %llu\n", stats->rx_error);
+	len += snprintf(buf + len, max_buf_len - len, "Rx Dropped - %llu\n", stats->rx_dropped);
 
 	len += snprintf(buf + len, max_buf_len - len, "Cmd Prod Idx - %u\n",
 		atomic_read(&dma->in.prod_idx));
@@ -190,6 +181,12 @@ static ssize_t eip_dma_read_dma_stats(struct file *filep, char __user *ubuf, siz
 	len += snprintf(buf + len, max_buf_len - len, "Res Cons Idx - %u\n",
 		atomic_read(&dma->out.cons_idx));
 
+	for (i = 0; i < ARRAY_SIZE(stats->rx_err_code); i++) {
+		if (stats->rx_err_code[i]) {
+			len += snprintf(buf + len, max_buf_len - len, "Rx error seen for %u = %u\n",
+					i, stats->rx_err_code[i]);
+		}
+	}
 
 	ret = simple_read_from_buffer(ubuf, count, ppos, buf, len);
 	vfree(buf);
@@ -309,6 +306,7 @@ static int eip_dma_rx(struct eip_dma *dma, int budget)
 		 * Call completion callback.
 		 */
 		if (unlikely(err)) {
+			dma->stats.rx_err_code[tr_err]++;
 			sw->err_comp(sw->tr, res, sw, cle_err, tr_err);
 			continue;
 		}
@@ -339,39 +337,103 @@ static irqreturn_t eip_dma_handle_irq(int irq, void *ctx)
 	struct eip_dma *dma = ctx;
 
 	/*
-	 * Acknowledge and disable interrupt until our bottom half re-enables it.
+	 * Acknowledge interrupt. HW interrupt remain in disabled state
+	 * until our bottom half re-enables it.
 	 */
 	iowrite32(EIP_HW_RDR_PROC_IRQ_STATUS, dma->out.proc_status);
-	disable_irq_nosync(dma->irq);
 
 	/*
 	 * Schedule tasklet to process interrupt.
 	 */
-	napi_schedule(&dma->napi);
+	napi_schedule(&dma->out.napi);
 	return IRQ_HANDLED;
 }
 
 /*
- * eip_dma_napi_poll()
+ * eip_dma_napi_rx_poll()
  *	NAPI poll callback to handle EIP197 interrupt.
  */
-static int eip_dma_napi_poll(struct napi_struct *napi, int budget)
+static int eip_dma_napi_rx_poll(struct napi_struct *napi, int budget)
 {
-	struct eip_dma *dma = container_of(napi, struct eip_dma, napi);
+	struct eip_dma *dma = container_of(napi, struct eip_dma, out.napi);
 	int processed;
 
 	/*
 	 * Reap Rx ring. If we have processed all packet in queue
-	 * then disable napi and re-enable irq in linux and EIP.
+	 * then disable napi and re-enable irq in EIP.
 	 */
 	processed = eip_dma_rx(dma, budget);
 	if (processed < budget) {
 		napi_complete(napi);
-		enable_irq(dma->irq);
 		iowrite32(EIP_HW_RDR_HIA_THR_VAL, dma->out.proc_thresh);
 	}
 
 	return processed;
+}
+
+/*
+ * eip_dma_tx_linear_skb()
+ *	Schedule linear SKB for transformation. The function must be called with prempt disabled.
+ */
+int eip_dma_tx_linear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct sk_buff *skb)
+{
+	struct eip_tr_stats *tr_stats = this_cpu_ptr(sw->tr->stats_pcpu);
+	struct eip_frag src;
+	struct eip_frag dst;
+	uint32_t out_count;
+	uint32_t in_count;
+
+	BUG_ON(skb_is_nonlinear(skb));
+
+	in_count = eip_dma_avail_idx_and_count(&dma->in, &src.idx);
+	out_count = eip_dma_avail_idx_and_count(&dma->out, &dst.idx);
+
+	if ((!in_count | !out_count))
+		return -EBUSY;
+
+	/*
+	 * Fill Source fragment for Command ring.
+	 */
+	src.data = skb->data;
+	src.len = skb->len;
+	src.flag = EIP_HW_CMD_FLAGS(1, 1);
+	sw->src_nsegs = 1;
+	eip_dma_tx_cmd(dma, sw, &src);
+
+	/*
+	 * Fill Destination fragment for result ring.
+	 * Output length can be higher for encap. Hence, we include tailroom length.
+	 */
+	dst.data = skb->data;
+	dst.len = skb->len + skb_tailroom(skb);
+	dst.flag = EIP_HW_RES_FLAGS(1, 1);
+	sw->dst_nsegs = 1;
+	eip_dma_tx_res(dma, sw, &dst);
+
+	/*
+	 * Increament Tx statistics.
+	 */
+	tr_stats->tx_frags += 1;
+	dma->stats.tx_frags += 1;
+	tr_stats->tx_pkts++;
+	dma->stats.tx_pkts++;
+	tr_stats->tx_bytes += src.len;
+	dma->stats.tx_bytes += src.len;
+
+	eip_dma_notify(dma, 1, 1, EIP_DMA_IDX_INC(src.idx), EIP_DMA_IDX_INC(dst.idx));
+	return 0;
+}
+
+/*
+ * eip_dma_tx_nonlinear_skb()
+ *	Schedule non-linear SKB for transformation. The function must be called with prempt disabled.
+ */
+int eip_dma_tx_nonlinear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct sk_buff *skb)
+{
+	/*
+	 * TODO: Add support.
+	 */
+	return -EINVAL;
 }
 
 /*
@@ -493,10 +555,11 @@ int eip_dma_cmd_init(struct eip_dma *dma, void __iomem *base_addr, bool irq, uin
 	 * Allocate memory for
 	 * - DMA FIFO
 	 * - Extra padding for cache alignment
+	 * - Software shadow FIFO for meta pointers.
 	 */
 	dma_sz = sizeof(struct eip_hw_desc) * EIP_DMA_DESC_MAX;
-	total_sz = dma_sz + L1_CACHE_BYTES;
-
+	total_sz = dma_sz + L1_CACHE_BYTES + L1_CACHE_BYTES;
+	total_sz += (sizeof(uintptr_t) * EIP_DMA_DESC_MAX);
 	addr = kzalloc(total_sz, GFP_KERNEL);
 	if (!addr) {
 		pr_err("%px: Failed to allocate in ring memory\n", cmd);
@@ -505,6 +568,7 @@ int eip_dma_cmd_init(struct eip_dma *dma, void __iomem *base_addr, bool irq, uin
 
 	cmd->kaddr = addr;
 	cmd->desc = PTR_ALIGN(addr, L1_CACHE_BYTES);
+	cmd->meta = (void *)cmd->desc + dma_sz;
 	atomic_set(&cmd->prod_idx, 0);
 	atomic_set(&cmd->cons_idx, 0);
 
@@ -570,9 +634,11 @@ int eip_dma_res_init(struct eip_dma *dma, void __iomem *base_addr, bool irq, uin
 	 * Allocate memory for
 	 * - DMA FIFO
 	 * - Extra padding for cache alignment
+	 * - Software shadow FIFO for meta pointers.
 	 */
 	dma_sz = sizeof(struct eip_hw_desc) * EIP_DMA_DESC_MAX;
-	total_sz = dma_sz + L1_CACHE_BYTES;
+	total_sz = dma_sz + L1_CACHE_BYTES + L1_CACHE_BYTES;
+	total_sz += (sizeof(uintptr_t) * EIP_DMA_DESC_MAX);
 	addr = kzalloc(total_sz, GFP_KERNEL);
 	if (!addr) {
 		pr_err("%px: Failed to allocate in ring memory\n", res);
@@ -581,6 +647,7 @@ int eip_dma_res_init(struct eip_dma *dma, void __iomem *base_addr, bool irq, uin
 
 	res->kaddr = addr;
 	res->desc = PTR_ALIGN(addr, L1_CACHE_BYTES);
+	res->meta = (uintptr_t *)((uint8_t *)res->desc + dma_sz);
 	atomic_set(&res->prod_idx, 0);
 	atomic_set(&res->cons_idx, 0);
 
@@ -641,10 +708,9 @@ void eip_dma_la_deinit(struct eip_dma *dma)
 	}
 
 	debugfs_remove_recursive(dma->dentry);
-	disable_irq(dma->irq);
 	free_irq(dma->irq, dma);
-	napi_disable(&dma->napi);
-	netif_napi_del(&dma->napi);
+	napi_disable(&dma->out.napi);
+	netif_napi_del(&dma->out.napi);
 	kfree(dma->out.kaddr);
 	kfree(dma->in.kaddr);
 
@@ -678,6 +744,7 @@ int eip_dma_la_init(struct eip_dma *dma, struct platform_device *pdev, uint8_t t
 
 	/*
 	 * Initialize and allocate ring.
+	 * Enable interrupt only for result ring.
 	 */
 	status = eip_dma_cmd_init(dma, base_addr, false, rx_cpu);
 	if (status < 0) {
@@ -695,15 +762,15 @@ int eip_dma_la_init(struct eip_dma *dma, struct platform_device *pdev, uint8_t t
 	/*
 	 * Initialize the interrupt and NAPI.
 	 */
-	status = request_irq(dma->irq, eip_dma_handle_irq, 0, irq_name[ring_id], dma);
+	status = request_irq(dma->irq, eip_dma_handle_irq, IRQF_SHARED, irq_name[ring_id], dma);
 	if (status < 0) {
 		pr_err("%px: IRQ %u request failed\n", dma, dma->irq);
 		goto fail_irq;
 	}
 
-	init_dummy_netdev(&dma->ndev);
-	netif_napi_add(&dma->ndev, &dma->napi, eip_dma_napi_poll, EIP_HW_NAPI_WEIGHT);
-	napi_enable(&dma->napi);
+	init_dummy_netdev(&dma->out.ndev);
+	netif_napi_add(&dma->out.ndev, &dma->out.napi, eip_dma_napi_rx_poll, EIP_DMA_RX_LA_NAPI_WEIGHT);
+	napi_enable(&dma->out.napi);
 
 	/*
 	 * Interrupt can only be handled by the specified CPU.

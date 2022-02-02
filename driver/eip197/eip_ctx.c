@@ -30,8 +30,7 @@ static const char *svcname[EIP_SVC_MAX] = {
 	[EIP_SVC_AHASH] = "eip_ahash",
 	[EIP_SVC_AEAD] = "eip_aead",
 	[EIP_SVC_IPSEC] = "eip_ipsec",
-	[EIP_SVC_DTLS] = "eip_dtls",
-	[EIP_SVC_TLS] = "eip_tls"
+	[EIP_SVC_HYBRID_IPSEC] = "eip_hy_ipsec",
 };
 
 /*
@@ -79,6 +78,7 @@ static ssize_t eip_ctx_read_tr_stats(struct file *filep, char __user *ubuf, size
 		 */
 		eip_tr_get_stats(tr, &stats);
 		len += snprintf(buf + len, max_buf_len - len, "Transform Record (%u) (%X) ----\n", i++, tr->tr_addr_type);
+		len += snprintf(buf + len, max_buf_len - len, "\tActive Ref (%u)  ----\n", kref_read(&tr->ref));
 		len += snprintf(buf + len, max_buf_len - len, "\tTx Packets - %llu\n", stats.tx_pkts);
 		len += snprintf(buf + len, max_buf_len - len, "\tTx SG fragments - %llu\n", stats.tx_frags);
 		len += snprintf(buf + len, max_buf_len - len, "\tTx bytes - %llu\n", stats.tx_bytes);
@@ -207,18 +207,22 @@ struct eip_ctx *eip_ctx_alloc(enum eip_svc svc, struct dentry **dentry)
 	case EIP_SVC_SKCIPHER:
 		ctx->svc_db = eip_tr_skcipher_get_svc();
 		ctx->db_size = eip_tr_skcipher_get_svc_len();
+		ctx->dma = ep->la;
 		break;
 	case EIP_SVC_AHASH:
 		ctx->svc_db = eip_tr_ahash_get_svc();
 		ctx->db_size = eip_tr_ahash_get_svc_len();
+		ctx->dma = ep->la;
 		break;
 	case EIP_SVC_AEAD:
 		ctx->svc_db = eip_tr_aead_get_svc();
 		ctx->db_size = eip_tr_aead_get_svc_len();
+		ctx->dma = ep->la;
 		break;
-	case EIP_SVC_IPSEC:
+	case EIP_SVC_HYBRID_IPSEC:
 		ctx->svc_db = eip_tr_ipsec_get_svc();
 		ctx->db_size = eip_tr_ipsec_get_svc_len();
+		ctx->dma = ep->hy;
 		break;
 	default:
 		pr_err("%px: Service database not found\n", ep);
@@ -254,7 +258,6 @@ struct eip_ctx *eip_ctx_alloc(enum eip_svc svc, struct dentry **dentry)
 	rwlock_init(&ctx->tr.lock);
 	kref_init(&ctx->ref);
 	ctx->ep = ep;
-	ctx->dma = ep->la;
 	ctx->svc = svc;
 
 	/*

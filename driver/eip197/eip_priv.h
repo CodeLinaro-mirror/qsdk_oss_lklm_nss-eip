@@ -29,8 +29,13 @@
 #define EIP_MAX_STR_LEN 25		/* Maximum string length */
 #define EIP_DEBUGFS_MAX_NAME 128	/* Maximum string length for debugfs */
 
-#define EIP_IDX_ADD(i, val, max) (((i) + (val)) & ((max) - 1))
-#define EIP_IDX_SUB(i, val, max) (((i) - (val) + (max)) & ((max) - 1))
+/*
+ * TODO: what should be correct value?
+ */
+#define EIP_RX_BUFFER_HEADROOM 128
+#define EIP_RX_BUFFER_TAILROOM 192
+#define EIP_RX_BUFFER_DATA_LEN 1500
+#define EIP_RX_BUFFER_SIZE ((EIP_RX_BUFFER_HEADROOM) + (EIP_RX_BUFFER_TAILROOM) + (EIP_RX_BUFFER_DATA_LEN))
 
 
 /*
@@ -51,6 +56,9 @@ struct eip_svc_entry {
 	uint16_t auth_block_len;		/* Authentication Block length */
 	uint16_t auth_digest_len;		/* Authentication digest size */
 	uint16_t auth_state_len;		/* Intermidiate state length of hash operation */
+
+	uint16_t iv_len;			/* Cipher IV length */
+	uint8_t cipher_blk_len;			/* Cipher block length */
 };
 
 /*
@@ -101,11 +109,13 @@ struct eip_drv {
  */
 struct eip_pdev {
 	struct platform_device *pdev;		/* Device associated with the driver */
-	struct eip_dma la[NR_CPUS];		/* DMA object per CPU */
+	struct eip_dma la[NR_CPUS];		/* Lookaside DMA object per CPU */
+	struct eip_dma hy[NR_CPUS];		/* Hybrid DMA object per CPU */
 	struct kmem_cache *tr_cache;		/* Transform Record cache */
 	struct dentry *dentry;			/* Driver debugfs dentry */
 	void __iomem *dev_vaddr;		/* starting virtual address of device */
 	dma_addr_t dev_paddr;			/* starting physical address of device */
+	bool redirect_en;			/* Redirection / Hybrid mode is configured */
 };
 
 extern struct eip_drv eip_drv_g;	/* Global Driver object */

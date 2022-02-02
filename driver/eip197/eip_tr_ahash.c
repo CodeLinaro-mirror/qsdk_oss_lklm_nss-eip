@@ -263,7 +263,7 @@ bool eip_tr_ahash_init(struct eip_tr *tr, struct eip_tr_info *info, const struct
 {
 	struct eip_tr_info_crypto *crypto = &info->crypto;
 	struct eip_tr_base *base = &info->base;
-	uint32_t *tr_words = tr->tr_ptr;
+	uint32_t *tr_words = tr->hw_words;
 	uint32_t size;
 
 	if (base->cipher.key_len) {
@@ -275,7 +275,7 @@ bool eip_tr_ahash_init(struct eip_tr *tr, struct eip_tr_info *info, const struct
 	 * We use small record for aead.
 	 */
 	tr->tr_addr_type = EIP_HW_CTX_TYPE_SMALL;
-	tr->tr_addr_type |= virt_to_phys(tr->tr_ptr);
+	tr->tr_addr_type |= virt_to_phys(tr->hw_words);
 	tr->digest_len = algo->auth_digest_len;
 	tr->ctrl_words[0] = algo->ctrl_words_0;
 	tr->ctrl_words[1] = algo->ctrl_words_1;
@@ -306,7 +306,7 @@ bool eip_tr_ahash_init(struct eip_tr *tr, struct eip_tr_info *info, const struct
 		 * Driver must not make any update in transform records words after this.
 		 * EIP197 will do ipad/opad update.
 		 */
-		dmac_clean_range(tr->tr_ptr, tr->tr_ptr + EIP_HW_CTX_SIZE_SMALL_BYTES);
+		dmac_clean_range(tr->hw_words, tr->hw_words + EIP_HW_CTX_SIZE_SMALL_BYTES);
 		return true;
 	}
 
@@ -322,7 +322,7 @@ bool eip_tr_ahash_init(struct eip_tr *tr, struct eip_tr_info *info, const struct
 	 * Driver must not make any update in transform records words after this.
 	 * EIP197 will do ipad/opad update.
 	 */
-	dmac_clean_range(tr->tr_ptr, tr->tr_ptr + EIP_HW_CTX_SIZE_SMALL_BYTES);
+	dmac_clean_range(tr->hw_words, tr->hw_words+ EIP_HW_CTX_SIZE_SMALL_BYTES);
 
 	/*
 	 * HMAC Inner and Outer Digest Precalculation
@@ -455,7 +455,7 @@ bool eip_tr_ahash_key2digest(struct eip_tr *tr, struct eip_tr_info *info, const 
 	 * There is potential chance that DMA fails to schedule this request during peak
 	 * traffic. In that case we need to reschedule the digest calculation.
 	 */
-	dma = &ctx->dma[cpu];
+	dma = &ctx->ep->la[cpu];
 
 retry:
 	if (eip_dma_tx_sg(dma, sw, &sg, &sg)) {

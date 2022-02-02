@@ -17,10 +17,18 @@
 #ifndef __EIP_DMA_H
 #define __EIP_DMA_H
 
+#define EIP_IDX_ADD(i, val, max) (((i) + (val)) & ((max) - 1))
+#define EIP_IDX_SUB(i, val, max) (((i) - (val) + (max)) & ((max) - 1))
+
 #define EIP_DMA_DESC_MAX 256
 #define EIP_DMA_AVAIL_COUNT(head, tail) EIP_IDX_SUB(head, tail, EIP_DMA_DESC_MAX)
 #define EIP_DMA_IDX_ADD(i, val) EIP_IDX_ADD((i), (val), EIP_DMA_DESC_MAX)
 #define EIP_DMA_IDX_INC(i) EIP_DMA_IDX_ADD((i), 1)
+
+#define EIP_DMA_TX_COMPL_NAPI_WEIGHT 128
+#define EIP_DMA_RX_HY_NAPI_WEIGHT 64
+#define EIP_DMA_RX_LA_NAPI_WEIGHT 64
+
 
 struct eip_sw_desc;
 
@@ -30,6 +38,7 @@ struct eip_sw_desc;
  */
 enum eip_dma_type {
 	EIP_DMA_TYPE_LA = 1,	/* Ring is configured in Lookaside mode */
+	EIP_DMA_TYPE_HYBRID,	/* Ring is configured in hybrid mode */
 	EIP_DMA_TYPE_MAX
 };
 
@@ -49,6 +58,7 @@ struct eip_hw_desc {
  */
 struct eip_hw_ring {
 	struct eip_hw_desc *desc;	/* Ring descriptor FIFO */
+	uintptr_t *meta;		/* shadow meta ring for sw pointer */
 	atomic_t prod_idx;		/* Written by TX  */
 	atomic_t cons_idx;		/* Written by RX & Read by TX */
 
@@ -58,6 +68,10 @@ struct eip_hw_ring {
 	void __iomem *proc_cnt;		/* HW processed count register */
 	void __iomem *proc_thresh;	/* HW processed threshold register */
 	void __iomem *proc_status;	/* HW status register */
+
+	struct net_device ndev;		/* Dummy_netdev for NAPI */
+	struct napi_struct napi;	/* NAPI handler */
+
 	void *kaddr;			/* Pointer to allocated memory */
 };
 
@@ -74,6 +88,9 @@ struct eip_dma_stats {
 	uint64_t rx_frags;		/* fragments recieved on this DMA */
 	uint64_t rx_bytes;		/* bytes recieved on this DMA */
 	uint64_t rx_error;		/* buffer/packet recieved with error on this DMA */
+	uint64_t rx_dropped;		/* buffer/packet dropped in driver due to unknown TR */
+
+	uint32_t rx_err_code[256];	/* Detailed error stats for received packet */
 };
 
 /*
@@ -91,19 +108,45 @@ struct eip_dma {
 	uint32_t irq_mask;		/* IRQ mask for this ring */
 	void __iomem *irq_status;	/* HW status register */
 
-	struct net_device ndev;		/* Dummy_netdev for NAPI */
-	struct napi_struct napi;	/* NAPI handler */
+	struct sk_buff *head_skb;	/* Head SKB in in-progress SG chain */
+	struct sk_buff *tail_skb;	/* Tail SKB in in-progress SG chain */
+	uint8_t nsegs;			/* Segments in SG chain */
+
 	struct eip_dma_stats stats;	/* Stats */
 	struct dentry *dentry;		/* debugfs dentry */
 };
 
+/*
+ * eip_dma_avail_idx_and_count()
+ *	Return available descriptor count & producer index in a ring.
+ */
+static inline uint32_t eip_dma_avail_idx_and_count(struct eip_hw_ring *ring, uint32_t *prod_idx)
+{
+	uint32_t cons_idx;
+	(*prod_idx) = atomic_read(&ring->prod_idx);
+	cons_idx = atomic_read(&ring->cons_idx);
+	return EIP_DMA_AVAIL_COUNT(cons_idx - 1, *prod_idx);
+}
+
 typedef void (*eip_dma_callback_t)(struct eip_tr *tr, struct eip_hw_desc *hw, struct eip_sw_desc *sw);
 typedef void (*eip_dma_err_callback_t)(struct eip_tr *tr, struct eip_hw_desc *hw, struct eip_sw_desc *sw, uint16_t cle_err, uint16_t tr_err);
 
+extern const char *irq_name[];
+extern const char *dma_name[];
+extern struct file_operations dma_stats_ops;
+
 int eip_dma_tx_sg(struct eip_dma *dma, struct eip_sw_desc *sw, struct scatterlist *src, struct scatterlist *dst);
+int eip_dma_hy_tx_linear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct sk_buff *skb);
+int eip_dma_hy_tx_nonlinear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct sk_buff *skb);
+
+int eip_dma_cmd_init(struct eip_dma *dma, void __iomem *base_addr, bool irq, uint8_t rx_cpu);
+int eip_dma_res_init(struct eip_dma *dma, void __iomem *base_addr, bool irq, uint8_t rx_cpu);
 int eip_dma_la_init(struct eip_dma *dma, struct platform_device *pdev, uint8_t tx_cpu,
 		uint8_t rx_cpu,	uint32_t ring_id, void __iomem *base_addr);
-
 void eip_dma_la_deinit(struct eip_dma *dma);
+
+int eip_dma_hy_init(struct eip_dma *dma, struct platform_device *pdev, uint8_t tx_cpu,
+		uint8_t rx_cpu,	uint32_t ring_id, void __iomem *base_addr);
+void eip_dma_hy_deinit(struct eip_dma *dma);
 
 #endif /* __EIP_DMA_H */

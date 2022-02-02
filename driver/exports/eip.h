@@ -72,8 +72,7 @@ enum eip_svc {
 	EIP_SVC_AHASH,
 	EIP_SVC_AEAD,
 	EIP_SVC_IPSEC,
-	EIP_SVC_DTLS,
-	EIP_SVC_TLS,
+	EIP_SVC_HYBRID_IPSEC,
 	EIP_SVC_MAX
 };
 
@@ -100,6 +99,7 @@ struct eip_tr_base {
 	struct {
 		const char *key_data;
 		uint16_t key_len;
+		uint8_t blk_len;
 	} cipher, auth;
 
 	uint32_t nonce;
@@ -136,6 +136,7 @@ struct eip_tr_info_ipsec {
 	__be16 src_port;	/* Source port for ESP-over-UDP flow */
 	__be16 dst_port;	/* Destination port for ESP-over-UDP flow */
 
+	uint32_t ppe_mdata[4];	/* EIP-PPE meta/bypass information */
 	uint8_t ip_ver;		/* Version 4 or 6 */
 	uint8_t ip_ttl;		/* Default time-to-live */
 	uint8_t ip_df;		/* Default don't fragment bit */

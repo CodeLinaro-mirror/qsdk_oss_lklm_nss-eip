@@ -98,14 +98,14 @@ bool eip_tr_skcipher_init(struct eip_tr *tr, struct eip_tr_info *info, const str
 {
 	struct eip_tr_info_crypto *crypto = &info->crypto;
 	struct eip_tr_base *base = &info->base;
-	uint32_t *tr_words = tr->tr_ptr;
+	uint32_t *tr_words = tr->hw_words;
 	uint8_t ctx_sz;
 
 	/*
 	 * We use small record for skcipher.
 	 */
 	tr->tr_addr_type = EIP_HW_CTX_TYPE_SMALL;
-	tr->tr_addr_type |= virt_to_phys(tr->tr_ptr);
+	tr->tr_addr_type |= virt_to_phys(tr->hw_words);
 	tr->ctrl_words[0] = algo->ctrl_words_0;
 	tr->ctrl_words[1] = algo->ctrl_words_1;
 	tr->nonce = base->nonce;
@@ -138,7 +138,7 @@ bool eip_tr_skcipher_init(struct eip_tr *tr, struct eip_tr_info *info, const str
 	 */
 	tr->ctrl_words[0] = algo->ctrl_words_0;
 	tr->ctrl_words[1] = algo->ctrl_words_1;
-	ctx_sz = tr_words - tr->tr_ptr - EIP_HW_MAX_CTRL;
+	ctx_sz = tr_words - tr->hw_words - EIP_HW_MAX_CTRL;
 
 	switch(base->cipher.key_len) {
 	case AES_KEYSIZE_128:
@@ -168,7 +168,7 @@ bool eip_tr_skcipher_init(struct eip_tr *tr, struct eip_tr_info *info, const str
 	 * Driver must not make any update in transform records words after this.
 	 * EIP197 will do ipad/opad update.
 	 */
-	dmac_clean_range(tr->tr_ptr, tr->tr_ptr + EIP_HW_CTX_SIZE_SMALL_BYTES);
+	dmac_clean_range(tr->hw_words, tr->hw_words+ EIP_HW_CTX_SIZE_SMALL_BYTES);
 
 	return true;
 }

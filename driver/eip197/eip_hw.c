@@ -416,7 +416,7 @@ static void eip_hw_boot_ofpp(struct device *dev, void __iomem *base_addr, const 
 	 * put OCE RAM into reset so that the next engine can load
 	 */
 	iowrite32(0x0, base_addr + EIP_HW_PE_OCE_RAM_CTRL);
-	iowrite32(0x0, base_addr + EIP_HW_PE_OCE_FPP_CTRL);
+	iowrite32(EIP_HW_ENB_OFPP_DBG(fw->size), base_addr + EIP_HW_PE_OCE_FPP_CTRL);
 
 	release_firmware(fw);
 
@@ -460,7 +460,7 @@ static void eip_hw_boot_opue(struct device *dev, void __iomem *base_addr, const 
 	 * put OCE RAM into reset
 	 */
 	iowrite32(0x0, base_addr + EIP_HW_PE_OCE_RAM_CTRL);
-	iowrite32(0x0, base_addr + EIP_HW_PE_OCE_PUE_CTRL);
+	iowrite32(EIP_HW_ENB_OPUE_DBG(fw->size), base_addr + EIP_HW_PE_OCE_PUE_CTRL);
 
 	release_firmware(fw);
 
@@ -504,7 +504,7 @@ static void eip_hw_boot_ifpp(struct device *dev, void __iomem *base_addr, const 
 	 * put ICE (input classification engine) RAM into reset
 	 */
 	iowrite32(0x0, base_addr + EIP_HW_PE_ICE_RAM_CTRL);
-	iowrite32(0x0, base_addr + EIP_HW_PE_ICE_FPP_CTRL);
+	iowrite32(EIP_HW_ENB_IFPP_DBG(fw->size), base_addr + EIP_HW_PE_ICE_FPP_CTRL);
 
 	release_firmware(fw);
 
@@ -548,7 +548,7 @@ static void eip_hw_boot_ipue(struct device *dev, void __iomem *base_addr, const 
 	 * put ICE (input classification engine) RAM into reset
 	 */
 	iowrite32(0x0, base_addr + EIP_HW_PE_ICE_RAM_CTRL);
-	iowrite32(0x0, base_addr + EIP_HW_PE_ICE_PUE_CTRL);
+	iowrite32(EIP_HW_ENB_IPUE_DBG(fw->size), base_addr + EIP_HW_PE_ICE_PUE_CTRL);
 
 	release_firmware(fw);
 
@@ -684,6 +684,18 @@ void eip_hw_deinit(struct platform_device *pdev)
 	for (i = 0; i < NR_CPUS; i++) {
 		eip_dma_la_deinit(&ep->la[i]);
 	}
+
+	if (!ep->redirect_en) {
+		return;
+	}
+
+	for (i = 0; i < NR_CPUS; i++) {
+		eip_dma_hy_deinit(&ep->hy[i]);
+	}
+
+	/*
+	 * TODO: Deinitialize the flow lookup table.
+	 */
 }
 
 /*
@@ -696,6 +708,7 @@ int eip_hw_init(struct platform_device *pdev)
 	struct eip_pdev *ep = platform_get_drvdata(pdev);
 	void __iomem *base_addr = ep->dev_vaddr;
 	struct device_node *child = NULL;
+	uint32_t redirect_en = 0;
 	uint8_t ring_id = 0;
 	int status;
 
@@ -723,6 +736,22 @@ int eip_hw_init(struct platform_device *pdev)
 	 * input to output.
 	 */
 	iowrite32(EIP_HW_ENB_MDATA, base_addr + EIP_HW_METADATA_EN_OFFSET);
+
+	/*
+	 * Disable ECN check.
+	 */
+	iowrite32(EIP_HW_PE_EIP96_ECN_DISABLE, base_addr + EIP_HW_PE_EIP96_ECN_TABLE(0));
+	iowrite32(EIP_HW_PE_EIP96_ECN_DISABLE, base_addr + EIP_HW_PE_EIP96_ECN_TABLE(1));
+	iowrite32(EIP_HW_PE_EIP96_ECN_DISABLE, base_addr + EIP_HW_PE_EIP96_ECN_TABLE(2));
+	iowrite32(EIP_HW_PE_EIP96_ECN_DISABLE, base_addr + EIP_HW_PE_EIP96_ECN_TABLE(3));
+
+	/*
+	 * Enabled Packet ID increment for IPv4.
+	 * TODO: ICE also has same config. Do we need that as well?
+	 */
+	iowrite32(EIP_HW_OCE_OPUE_PACKET_ID_START | EIP_HW_OCE_OPUE_PACKET_ID_INC,
+			base_addr + EIP_HW_OCE_OPUE_PACKET_ID_CFG);
+
 
 	/*
 	 * Initialize all lookaside DMA.
@@ -772,6 +801,91 @@ int eip_hw_init(struct platform_device *pdev)
 			goto fail_init;
 		}
 	}
+
+	/*
+	 * Initialize all hybrid DMA.
+	 */
+	for_each_available_child_of_node(np, child) {
+		struct eip_dma *dma;
+		uint8_t tx_cpu = 0;
+		uint8_t rx_cpu = 0;
+
+		status = of_property_match_string(child, "ring-name", "hybrid");
+		if (status < 0) {
+			continue;
+		}
+
+		status = of_property_read_u8(child, "tx_cpu", &tx_cpu);
+		if (status < 0) {
+			pr_err("%px: Failed to read tx_cpu\n", pdev);
+			goto fail_init;
+		}
+
+		if (tx_cpu >= NR_CPUS) {
+			pr_err("%px: Invalid tx_cpu number(%u)\n", pdev, tx_cpu);
+			goto fail_init;
+		}
+
+		status = of_property_read_u8(child, "rx_cpu", &rx_cpu);
+		if (status < 0) {
+			pr_err("%px: Failed to read rx_cpu\n", pdev);
+			goto fail_init;
+		}
+
+		if (rx_cpu >= NR_CPUS) {
+			pr_err("%px: Invalid rx_cpu number(%u)\n", pdev, rx_cpu);
+			goto fail_init;
+		}
+
+		status = of_property_read_u8(child, "ring-id", &ring_id);
+		if (status < 0) {
+			pr_err("%px: Failed to read ring_id\n", pdev);
+			goto fail_init;
+		}
+
+		dma = &ep->hy[tx_cpu];
+		status = eip_dma_hy_init(dma, pdev, tx_cpu, rx_cpu, ring_id, base_addr);
+		if (status < 0) {
+			pr_err("%px: LA DMA initialization failed for cpu(%u)\n", pdev, tx_cpu);
+			goto fail_init;
+		}
+
+		redirect_en |= EIP_HW_ICE_REDIRECT_EN(ring_id);
+	}
+
+	/*
+	 * Configure HW for Redirection.
+	 */
+	if (redirect_en) {
+		uint8_t err_redir_ring = __builtin_ffs(redirect_en) - 1;
+		uint32_t cfg;
+
+		ep->redirect_en = !!redirect_en;
+
+		/*
+		 * Enable inorder bit when redirection is used.
+		 */
+		cfg = EIP_HW_INLINE_CFG | EIP_HW_INLINE_INORDER;
+		iowrite32(cfg, base_addr + EIP_HW_HIA_INLINE_CTRL0);
+
+		/*
+		 * Allow redirection from those interface.
+		 */
+		redirect_en |= EIP_HW_ICE_REDIRECT_EN(EIP_HW_ICE_INLINE_BIT);
+		iowrite32(redirect_en, base_addr + EIP_HW_ICE_REDIRECT_CFG);
+
+		/*
+		 * Redirect all error packet to hybrid ring with lowest ring index (4).
+		 */
+		cfg = EIP_HW_OCE_OPUE_REDIRECT_ENABLE | EIP_HW_OCE_OPUE_REDIRECT_RING_ID(err_redir_ring);
+		iowrite32(cfg, base_addr + EIP_HW_OCE_OPUE_REDIRECT_CFG);
+
+		/*
+		 * TODO: Initialize hardware flow lookup table.
+		 */
+		pr_info("%px: Redirection enabled, map(%x) error ring(%u)\n", pdev, redirect_en, err_redir_ring);
+	}
+
 
 	of_node_put(np);
 	return 0;

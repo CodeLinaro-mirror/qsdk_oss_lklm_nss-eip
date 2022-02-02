@@ -45,6 +45,32 @@ static void eip_tr_append_stats(struct eip_tr_stats *dst, const struct eip_tr_st
 }
 
 /*
+ * eip_tr_dummy_cb()
+ *	Dummy callback for inactive TR.
+ */
+static void eip_tr_dummy_cb(void *app_data, eip_req_t req)
+{
+	/*
+	 * This will only get called for SKB. As crypto client is ensuring TR free is issued only after
+	 * all requests are processed.
+	 */
+	pr_debug("%px: TR dummy cb called\n", req);
+	consume_skb(eip_req2skb(req));
+	return;
+}
+
+/*
+ * eip_tr_dummy_err()
+ *	Dummy callback for inactive TR.
+ */
+static void eip_tr_dummy_err(void *app_data, eip_req_t req, int err)
+{
+	pr_debug("%px: TR dummy cb called with err(%u)\n", req, err);
+	consume_skb(eip_req2skb(req));
+	return;
+}
+
+/*
  * eip_tr_inval_done()
  *	Invalidation completion.
  */
@@ -149,7 +175,7 @@ static void eip_tr_inval(struct work_struct *work)
 	 * There is potential chance that DMA fails to schedule this request during peak
 	 * traffic. In that case we need to reschedule the invalidation.
 	 */
-	dma = &ctx->dma[cpu];
+	dma = &ctx->ep->la[cpu];
 
 	if (eip_dma_tx_sg(dma, sw, &sg, &sg)) {
 		pr_warn("%px: DMA is busy for invalidation schedule\n", tr);
@@ -196,6 +222,11 @@ void eip_tr_final(struct kref *kref)
 
 	/*
 	 * Schedule invalidation. TR will be freed when Invalidation is done.
+	 * Timeout must be enough for Driver to process all the packets seating in hardware queue.
+	 *
+	 * We make sure no new packet get schedule to EIP in following cases
+	 * case 1: For lookaside Tx, Host does not schedule new buffer once TR became inactive (TR deletion has called)
+	 * case 2: For inline Rx, Outer EIP flow is deleted once TR became inactive.
 	 */
 	schedule_delayed_work(&tr->inval_work, EIP_TR_INVAL_TIMEOUT);
 }
@@ -211,7 +242,6 @@ struct eip_tr *eip_tr_alloc(struct eip_ctx *ctx, struct eip_tr_info *info)
 	const struct eip_svc_entry *algo;
 	struct eip_pdev *ep = ctx->ep;
 	struct eip_tr *tr;
-	void *addr;
 
 	might_sleep();
 
@@ -232,21 +262,25 @@ struct eip_tr *eip_tr_alloc(struct eip_ctx *ctx, struct eip_tr_info *info)
 	/*
 	 * Allocate memory for transform record & HW context words.
 	 */
-	addr = kmem_cache_alloc(ep->tr_cache, GFP_KERNEL);
-	if (!addr) {
+	tr = kmem_cache_alloc(ep->tr_cache, GFP_KERNEL);
+	if (!tr) {
 		pr_err("%px: Failed to allocate EIP context\n", ctx);
 		return NULL;
 	}
 
-	memset(addr, 0, EIP_TR_SIZE);
+	memset(tr, 0, EIP_TR_SIZE);
+
+	/*
+	 * hw_words must be cacheline aligned.
+	 */
+	BUG_ON(!IS_ALIGNED((uintptr_t)tr->hw_words, L1_CACHE_BYTES));
 
 	/*
 	 * Initialize common information for TR. Some specific information can be initialized
 	 * in respective TR init.
 	 */
-	tr = (struct eip_tr *)addr;
-	tr->tr_ptr = addr + L1_CACHE_ALIGN(sizeof(*tr));
 	tr->ctx = eip_ctx_ref(ctx);
+	tr->svc = ctx->svc;
 	kref_init(&tr->ref);
 	INIT_DELAYED_WORK(&tr->inval_work, eip_tr_inval);
 
@@ -269,12 +303,17 @@ struct eip_tr *eip_tr_alloc(struct eip_ctx *ctx, struct eip_tr_info *info)
 	 */
 	pr_debug("%px: Allocated transform record for service(%u) algo(%s)\n", tr, ctx->svc, algo->name);
 	eip_ctx_add_tr(ctx, tr);
+
+	/*
+	 * TODO: eip_flow_add()
+	 */
+	atomic_set(&tr->active, 1);
 	return tr;
 
 fail:
 	free_percpu(tr->stats_pcpu);
 fail_stats:
-	kmem_cache_free(ep->tr_cache, addr);
+	kmem_cache_free(ep->tr_cache, tr);
 	return NULL;
 }
 EXPORT_SYMBOL(eip_tr_alloc);
@@ -284,10 +323,48 @@ EXPORT_SYMBOL(eip_tr_alloc);
  *	Free the Transform record.
  *
  * Caller need to make sure to not schedule any new tranformation request on this tr.
- * Else we may go in infinite wait.
  */
 void eip_tr_free(struct eip_tr *tr)
 {
+	struct eip_tr_template *tmpl;
+
+	/*
+	 * Mark TR as inactive.
+	 */
+	atomic_set(&tr->active, 0);
+
+	/*
+	 * Atomically change callback to dummy.
+	 */
+	switch (tr->svc) {
+	case EIP_SVC_SKCIPHER:
+	case EIP_SVC_AEAD:
+		tmpl = &tr->crypto.enc;
+		xchg(&tmpl->cb, eip_tr_dummy_cb);
+		xchg(&tmpl->err_cb, eip_tr_dummy_err);
+
+		tmpl = &tr->crypto.dec;
+		xchg(&tmpl->cb, eip_tr_dummy_cb);
+		xchg(&tmpl->err_cb, eip_tr_dummy_err);
+		break;
+
+	case EIP_SVC_AHASH:
+		tmpl = &tr->crypto.auth;
+		xchg(&tmpl->cb, eip_tr_dummy_cb);
+		xchg(&tmpl->err_cb, eip_tr_dummy_err);
+		break;
+
+	case EIP_SVC_HYBRID_IPSEC:
+		tmpl = &tr->ipsec.op;
+		xchg(&tmpl->cb, eip_tr_dummy_cb);
+		xchg(&tmpl->err_cb, eip_tr_dummy_err);
+		break;
+
+	default:
+		pr_err("%px: Service database not found\n", tr);
+		break;
+	}
+
 	/*
 	 * Reference: eip_tr_alloc
 	 */

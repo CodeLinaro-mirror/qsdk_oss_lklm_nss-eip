@@ -19,8 +19,6 @@
 
 #include <linux/types.h>
 
-#define EIP_HW_NAPI_WEIGHT 64
-
 /*
  * Common configuration data for command and result
  * descriptor rings
@@ -73,7 +71,10 @@
 /*
  * HIA LA and inline mode control value
  */
+#define EIP_HW_INLINE_RING 0x9
+#define EIP_HW_ICE_INLINE_BIT 15
 #define EIP_HW_INLINE_CFG 0x387000
+#define EIP_HW_INLINE_INORDER (1 << 31)
 #define EIP_HW_HIA_MST_CFG 0xfe000033
 #define EIP_HW_MST_CFG 0x22
 
@@ -91,7 +92,10 @@
  */
 #define EIP_HW_HIA_IRQ_DISABLE 0x0
 #define EIP_HW_HIA_IRQ_CLEAR 0xFFFFFFFF
-#define EIP_HW_RDR_PROC_IRQ_STATUS 0x10
+#define EIP_HW_RDR_PROC_IRQ_STATUS 0x10 /* proc_cd_thresh_irq */
+#define EIP_HW_CDR_PROC_IRQ_STATUS 0x10 /* proc_cd_thresh_irq */
+#define EIP_HW_RDR_PREP_IRQ_STATUS 0x02 /* prep_cd_thresh_irq */
+#define EIP_HW_CDR_PREP_IRQ_STATUS 0x02 /* prep_cd_thresh_irq */
 
 /*
  * HIA Ring Arbiter Macros
@@ -161,10 +165,10 @@
  * These are useful for reading the scratchpad RAM
  */
 #define EIP_HW_ENB_FW_SZ(sz) (((((sz) >> 2) - 3) & 0x7ff0) << 16)
-#define EIP_HW_ENB_OFPP_DBG (0x000c008 | EIP_HW_ENB_FW_SZ(sz))
-#define EIP_HW_ENB_OPUE_DBG (0x000c008 | EIP_HW_ENB_FW_SZ(sz))
-#define EIP_HW_ENB_IFPP_DBG (0x000c008 | EIP_HW_ENB_FW_SZ(sz))
-#define EIP_HW_ENB_IPUE_DBG (0x000c008 | EIP_HW_ENB_FW_SZ(sz))
+#define EIP_HW_ENB_OFPP_DBG(sz) (0x000c008 | EIP_HW_ENB_FW_SZ(sz))
+#define EIP_HW_ENB_OPUE_DBG(sz) (0x000c008 | EIP_HW_ENB_FW_SZ(sz))
+#define EIP_HW_ENB_IFPP_DBG(sz) (0x000c008 | EIP_HW_ENB_FW_SZ(sz))
+#define EIP_HW_ENB_IPUE_DBG(sz) (0x000c008 | EIP_HW_ENB_FW_SZ(sz))
 
 #define EIP_HW_SIGNATURE 0x23235ca
 
@@ -351,6 +355,8 @@
 #define EIP_HW_ICE_IFPP_CTRL_REG (EIP_HW_PE_ICE_SCRATCH_RAM + 0x18)
 #define EIP_HW_ICE_DISABLE_STATS (EIP_HW_PE_ICE_SCRATCH_RAM + 0x58)
 #define EIP_HW_METADATA_EN_OFFSET (EIP_HW_PE_ICE_SCRATCH_RAM + 0x60)
+#define EIP_HW_ICE_REDIRECT_CFG (EIP_HW_PE_ICE_SCRATCH_RAM + 0x20)
+#define EIP_HW_ICE_REDIRECT_EN(i) ((1 <<(i)) & 0xFFFF)
 
 #define EIP_HW_PE_ICE_ADAPT_CTRL (EIP_HW_PE_BASE + 0xC00)
 #define EIP_HW_PE_ICE_PUE_CTRL (EIP_HW_PE_BASE + 0xC80)
@@ -501,11 +507,12 @@
  * Scratchpad RAM inline mode related macros
  */
 #define EIP_HW_OCE_SCRATCHPAD_RAM (EIP_HW_PE_EIP96_BASE + 0x400)
+#define EIP_HW_OCE_OPUE_PACKET_ID_CFG (EIP_HW_OCE_SCRATCHPAD_RAM + 0x1C)
+#define EIP_HW_OCE_OPUE_PACKET_ID_START (1)
+#define EIP_HW_OCE_OPUE_PACKET_ID_INC (1 << 0x10)
 #define EIP_HW_OCE_OPUE_REDIRECT_CFG (EIP_HW_OCE_SCRATCHPAD_RAM + 0x20)
 #define EIP_HW_OCE_OPUE_REDIRECT_ENABLE (1 << 0x10)
-#define EIP_HW_OCE_OPUE_REDIRECT_RING_ID(x) ((x) & 0x7)
-#define EIP_HW_OCE_OPUE_ECN_CFG (EIP_HW_OCE_SCRATCHPAD_RAM + 0x24)
-#define EIP_HW_OCE_OPUE_ECN_DISABLE 0x1F
+#define EIP_HW_OCE_OPUE_REDIRECT_RING_ID(x) ((x) & 0xF)
 
 /*
  * Flow record cache registers
@@ -549,6 +556,8 @@
 #define EIP_HW_FHASH_IV1 (EIP_HW_FLUE_BASE + 0x8C4)
 #define EIP_HW_FHASH_IV2 (EIP_HW_FLUE_BASE + 0x8C8)
 #define EIP_HW_FHASH_IV3 (EIP_HW_FLUE_BASE + 0x8CC)
+
+#define EIP_HW_FLUE_CFG 0xC7000030
 
 /*
  * Classification registers
@@ -667,6 +676,7 @@
  */
 #define EIP_HW_CTRL_WORDS 2
 #define EIP_HW_CTRL_LEN(x) (((x) & 0x3F) << 8)
+#define EIP_HW_CTRL_LEN_MASK (0x3F << 8)
 #define EIP_HW_CTRL_OPTION_UNFINISH_HASH_TO_CTX (0x5 << 4)
 #define EIP_HW_CTRL_HASH_OP(x) (((x) & 0xF) << 23)
 #define EIP_HW_CTRL_HASH_OP_MASK (0xF << 23)
@@ -699,6 +709,7 @@
 
 #define EIP_HW_TOKEN_HDR_CMN (EIP_HW_TOKEN_HDR_BASIC | EIP_HW_TOKEN_HDR_CTX_PTR | EIP_HW_TOKEN_HDR_APP_ID)
 #define EIP_HW_TOKEN_HDR_DIGEST (EIP_HW_TOKEN_HDR_CMN | EIP_HW_TOKEN_HDR_CTX_CTRL)
+#define EIP_HW_TOKEN_HDR_EXTENDED EIP_HW_TOKEN_HDR_CMN
 #define EIP_HW_TOKEN_HDR_CRYPTO_CMN (EIP_HW_TOKEN_HDR_APP_ID | EIP_HW_TOKEN_HDR_CTX_PTR \
 				| EIP_HW_TOKEN_HDR_REUSE_CTX | EIP_HW_TOKEN_HDR_CTX_CTRL \
 				| EIP_HW_TOKEN_HDR_BASIC)
@@ -764,6 +775,7 @@
 #define EIP_HW_RES_FLAGS_FIRST (0x1 << 23)
 #define EIP_HW_RES_FLAGS_LAST (0x1 << 22)
 #define EIP_HW_RES_FLAGS_MASK (EIP_HW_RES_FLAGS_FIRST | EIP_HW_RES_FLAGS_LAST)
+#define EIP_HW_RES_FLAGS_LINEAR (EIP_HW_RES_FLAGS_MASK)
 #define EIP_HW_RES_APP_ID(res_word) (((res_word) >> 9) & 0x7F)
 #define EIP_HW_RES_ERROR_MASK 0xFF /* Detailed error code */
 #define EIP_HW_RES_ERROR_CLE_MASK 0x1F
@@ -771,11 +783,13 @@
 #define EIP_HW_RES_ERROR(res) (((res) >> 17) & EIP_HW_RES_ERROR_MASK)
 #define EIP_HW_RES_ERROR_CLE(res) (((res) >> 16) & EIP_HW_RES_ERROR_CLE_MASK)
 #define EIP_HW_RES_NEXT_HDR(res) ((res) & 0xFF)
+#define EIP_HW_RES_TR_ADDR(res) ((res) & 0xFFFFFFFC)
+#define EIP_HW_RES_ERR_FLOW_FAIL 188
 
 /*
  * HW specific service number.
  */
-#define EIP_HW_SERVICE_IPSEC 0x3
+#define EIP_HW_HWSERVICE_IPSEC 0x3
 #define EIP_HW_HWSERVICE_CRYPTO 0x4
 #define EIP_HW_CMD_HWSERVICE_INV_TRC (0x6 << 24)
 #define EIP_HW_CMD_HWSERVICE_LIP (EIP_HW_HWSERVICE_IPSEC << 24)
