@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -199,6 +199,7 @@ const struct eip_svc_entry *eip_tr_ipsec_get_svc(void);
 size_t eip_tr_ipsec_get_svc_len(void);
 
 bool eip_tr_ahash_key2digest(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo);
+int eip_tr_genkey(struct eip_tr *tr, struct eip_tr_info *info, uint8_t *key, uint16_t len);
 void eip_tr_get_stats(struct eip_tr *tr, struct eip_tr_stats *stats);
 void eip_tr_final(struct kref *kref);
 int eip_tr_classify_err(uint16_t cle_err, uint16_t tr_err);
