@@ -183,6 +183,7 @@ struct eip_tr {
 	enum eip_svc svc;			/* Service number */
 	uint32_t inval_dummy_buf;		/* Dummy 4 byte buffer for Invalidation. */
 	struct delayed_work inval_work;		/* Workqueue for Invalidation schedule */
+	struct eip_flow *flow;			/* Software flow object*/
 
 	uint32_t hw_words[] __attribute__((aligned (L1_CACHE_BYTES)));
 						/* Hardware record words. Aligned it to exact L1 cache line boundary */

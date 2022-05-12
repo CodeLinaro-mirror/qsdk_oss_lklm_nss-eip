@@ -28,6 +28,26 @@
 #include "eip_priv.h"
 
 /*
+ * eip_tr_info_to_flow_tuple(info, &ftuple)
+ *      Populate the flow_tuple
+ */
+static void eip_tr_info_to_flow_tuple(struct eip_tr_info *info, struct eip_flow_tuple *ftuple)
+{
+	int i;
+
+	for(i = 0; i < 4; i++){
+		ftuple->src_ip[i] = info->ipsec.src_ip[i];
+		ftuple->dst_ip[i] = info->ipsec.dst_ip[i];
+	}
+	ftuple->spi = info->ipsec.spi_idx;
+	ftuple->src_port = info->ipsec.src_port;
+	ftuple->dst_port = info->ipsec.dst_port;
+	ftuple->ip_proto = (info->ipsec.sa_flags & EIP_TR_IPSEC_FLAG_UDP) ? IPPROTO_UDP : IPPROTO_ESP;
+	ftuple->ip_ver = info->ipsec.ip_ver;
+	ftuple->epoch = 0;
+}
+
+/*
  * eip_tr_append_stats()
  */
 static void eip_tr_append_stats(struct eip_tr_stats *dst, const struct eip_tr_stats *src)
@@ -305,8 +325,23 @@ struct eip_tr *eip_tr_alloc(struct eip_ctx *ctx, struct eip_tr_info *info)
 	eip_ctx_add_tr(ctx, tr);
 
 	/*
-	 * TODO: eip_flow_add()
+	 * If the TR is for hybrid encapsulation IPsec, then the flow is added
+	 * TODO: EIP Driver will send those packets to Linux for which there is no flow
 	 */
+	if (tr->svc == EIP_SVC_HYBRID_IPSEC && !(info->ipsec.sa_flags & EIP_TR_IPSEC_FLAG_ENC)) {
+		struct eip_flow_tuple ftuple = {0};
+
+		eip_tr_info_to_flow_tuple(info, &ftuple);
+		tr->flow = eip_flow_add(&ftuple, tr);
+		if (!tr->flow) {
+			pr_warn("%px: Failed to add the outer flow : src ip(%px) dst ip(%px) protocol(%d) \n",
+				       	ctx, ftuple.src_ip,ftuple.dst_ip,ftuple.ip_proto);
+		} else {
+			pr_debug("Flow added at index %u , sentinel value %i\n", EIP_FLOW_HASH_IDX(tr->flow->hash), tr->flow->sentinel);
+		}
+
+	}
+
 	atomic_set(&tr->active, 1);
 	return tr;
 
@@ -332,6 +367,13 @@ void eip_tr_free(struct eip_tr *tr)
 	 * Mark TR as inactive.
 	 */
 	atomic_set(&tr->active, 0);
+
+	/*
+	 * Remove the outer flow from hardware for IPsec hybrid service.
+	 */
+	if ((tr->svc == EIP_SVC_HYBRID_IPSEC) && tr->flow) {
+		eip_flow_del(&tr->flow->tuple, tr);
+	}
 
 	/*
 	 * Atomically change callback to dummy.

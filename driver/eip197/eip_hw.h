@@ -809,6 +809,12 @@
 #define EIP_HW_RING_DESC_SZ(x) ((x) << 2)
 
 /*
+ * Macros to store table size for hardware flow table
+ */
+#define EIP_HW_FLUE_CONFIG_TABLE_SZ 3   /* Max val 1 to 15 */
+#define EIP_HW_FLUE_CONFIG_VAL ((EIP_HW_FLUE_CONFIG_TABLE_SZ << 4) | (3 << 30))
+
+/*
  * error macros.
  */
 #define EIP_HW_RES_ERROR_E0_NUM 0
