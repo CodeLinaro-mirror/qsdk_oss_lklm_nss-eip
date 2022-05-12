@@ -694,8 +694,9 @@ void eip_hw_deinit(struct platform_device *pdev)
 	}
 
 	/*
-	 * TODO: Deinitialize the flow lookup table.
+	 * Deinitialize the flow table
 	 */
+	eip_flow_table_deinit(pdev);
 }
 
 /*
@@ -886,8 +887,13 @@ int eip_hw_init(struct platform_device *pdev)
 		iowrite32(cfg, base_addr + EIP_HW_OCE_OPUE_REDIRECT_CFG);
 
 		/*
-		 * TODO: Initialize hardware flow lookup table.
+		 * Initialize hardware flow lookup table.
 		 */
+		if(!(eip_flow_table_init(pdev))) {
+			pr_err("%px: Failed to initializ flow table\n",pdev);
+			goto fail_init;
+		}
+
 		pr_info("%px: Redirection enabled, map(%x) error ring(%u)\n", pdev, redirect_en, err_redir_ring);
 	}
 
