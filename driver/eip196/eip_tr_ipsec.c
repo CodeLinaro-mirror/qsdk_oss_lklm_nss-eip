@@ -333,17 +333,6 @@ static void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *inf
 		tr_words[65] |= EIP_TR_IPSEC_IPV6_EN;
 	}
 
-	/*
-	 * Redirect packet to inline chanel after encapsulation.
-	 * TODO: Round robin ring
-	 */
-	if (tr->svc == EIP_SVC_HYBRID_IPSEC) {
-		struct eip_ctx *ctx = tr->ctx;
-		tr_words[65] |= EIP_TR_REDIR_EN;
-		tr_words[65] |= EIP_TR_REDIR_IFACE(ctx->dma[1].ring_id);;
-		pr_debug("%px: Redirection enable to ring(%u) for decap record\n", tr, ctx->dma[0].ring_id);
-	}
-
 	tr_words[66] = EIP_TR_IPSEC_TTL(ipsec->ip_ttl);
 	tr_words[66]|= (algo->cipher_blk_len / 2);
 
@@ -501,15 +490,6 @@ static void eip_tr_ipsec_enc_cmn_init(struct eip_tr *tr, struct eip_tr_info *inf
 	tr_words[65] |= EIP_TR_IPSEC_DSCP_COPY_EN(!copy_dscp);
 	tr_words[65] |= EIP_TR_IPSEC_IPHDR_PROC;
 	tr_words[65] |= EIP_TR_IPSEC_EXT_SEQ_NUM_PROC(esn);
-
-	/*
-	 * Redirect packet to inline chanel after encapsulation.
-	 */
-	if (tr->svc == EIP_SVC_HYBRID_IPSEC) {
-		tr_words[65] |= EIP_TR_REDIR_EN;
-		tr_words[65] |= EIP_TR_REDIR_IFACE(EIP_HW_INLINE_RING);;
-		pr_debug("%px: Redirection enable to inline(%u) for encap record\n", tr, EIP_HW_INLINE_RING);
-	}
 
 	tr_words[66] = copy_dscp ? 0 : EIP_TR_IPSEC_DSCP(ipsec->ip_dscp);
 	tr_words[66]|= EIP_TR_IPSEC_TTL(ipsec->ip_ttl);
@@ -874,7 +854,7 @@ int eip_tr_ipsec_enc(struct eip_tr *tr, struct sk_buff *skb)
 	struct eip_dma *dma;
 	int status = 0;
 
-	dma_tx = skb_is_nonlinear(skb) ? eip_dma_hy_tx_nonlinear_skb : eip_dma_hy_tx_linear_skb;
+	dma_tx = skb_is_nonlinear(skb) ? eip_dma_tx_nonlinear_skb : eip_dma_tx_linear_skb;
 
 	/*
 	 * Allocate SW descriptor.
@@ -936,7 +916,7 @@ int eip_tr_ipsec_dec(struct eip_tr *tr, struct sk_buff *skb)
 	struct eip_dma *dma;
 	int status = 0;
 
-	dma_tx = skb_is_nonlinear(skb) ? eip_dma_hy_tx_nonlinear_skb : eip_dma_hy_tx_linear_skb;
+	dma_tx = skb_is_nonlinear(skb) ? eip_dma_tx_nonlinear_skb : eip_dma_tx_linear_skb;
 
 	/*
 	 * Allocate SW descriptor.

@@ -38,7 +38,7 @@
 #define EIP_HW_RST_RES 0xFF
 
 /*
- * EIP197 Internal DMA specific configuration
+ * EIP196 Internal DMA specific configuration
  */
 #define EIP_HW_CLR_CNT (0x1 << 31)
 #define EIP_HW_CLR_DMA (0x1 << 24)
@@ -47,7 +47,7 @@
 /*
  * Data Fetch Engine related Fields
  */
-#define EIP_HW_DFE_RST_DONE 0x4F000
+#define EIP_HW_DFE_RST_DONE 0x0F000
 #define EIP_HW_DFE_RST_CTRL 0x80000000
 #define EIP_HW_DFE_CFG 0xA7150915
 
@@ -69,12 +69,8 @@
 	EIP_HW_DSE_RD_CACHE | EIP_HW_DSE_OUTPUT_BUF_MIN)
 
 /*
- * HIA LA and inline mode control value
+ * HIA LA mode control value
  */
-#define EIP_HW_INLINE_RING 0x9
-#define EIP_HW_ICE_INLINE_BIT 15
-#define EIP_HW_INLINE_CFG 0x387000
-#define EIP_HW_INLINE_INORDER (1 << 31)
 #define EIP_HW_HIA_MST_CFG 0xfe000033
 #define EIP_HW_MST_CFG 0x22
 
@@ -86,12 +82,14 @@
 #define EIP_HW_TOKEN_CTRL_RST 0x4004
 #define EIP_HW_OUT_TRANS_RST 0xfc400847
 #define EIP_HW_RST_PE 0xc001
+#define EIP_HW_TOKEN_CTRL2_RST 0x8
 
 /*
  * Interrupt value
  */
 #define EIP_HW_HIA_IRQ_DISABLE 0x0
 #define EIP_HW_HIA_IRQ_CLEAR 0xFFFFFFFF
+
 #define EIP_HW_RDR_PROC_IRQ_STATUS 0x10 /* proc_cd_thresh_irq */
 #define EIP_HW_CDR_PROC_IRQ_STATUS 0x10 /* proc_cd_thresh_irq */
 #define EIP_HW_RDR_PREP_IRQ_STATUS 0x02 /* prep_cd_thresh_irq */
@@ -108,7 +106,7 @@
  * input to output descriptor. The following macro
  * is used to enable this feature
  */
-#define EIP_HW_ENB_MDATA 0x1
+#define EIP_HW_ENB_MDATA (0x1 << 31)
 
 /*
  * Disable ECN check.
@@ -119,13 +117,6 @@
  * Configure Processing engine token control register
  */
 #define EIP_HW_TOKEN_CFG 0x40424004
-
-/*
- * Configure Input and Output classification's engine
- * - Scractch RAM access bit
- * - Engine internal timer
- */
-#define EIP_HW_ENB_SCRATCH_RAM 0x31F020c
 
 /*
  * Macros used to configure Processing engine:
@@ -147,96 +138,18 @@
 #define EIP_HW_OUTDATA_THR \
 	(EIP_HW_PE_OPBUF_MAX | EIP_HW_PE_OPBUF_MIN)
 
-/*
- * Maximum scratch pad ram words
- */
-#define EIP_HW_MAX_SCRATCH_RAM 0x23
+#define EIP_HW_ENB_SIMPLE_TRANS_REC 0x100
 
 /*
- * Macros used for enabling EIP197 internal engines
+ * Simple Transform Record Cache (STRC) configuration data
  */
-#define EIP_HW_ENB_IPUE 0x1
-#define EIP_HW_ENB_IFPP 0x2
-#define EIP_HW_ENB_OPUE 0x1
-#define EIP_HW_ENB_OFPP 0x2
-
-/*
- * These are debug configuration data as recommended by HW documentation
- * These are useful for reading the scratchpad RAM
- */
-#define EIP_HW_ENB_FW_SZ(sz) (((((sz) >> 2) - 3) & 0x7ff0) << 16)
-#define EIP_HW_ENB_OFPP_DBG(sz) (0x000c008 | EIP_HW_ENB_FW_SZ(sz))
-#define EIP_HW_ENB_OPUE_DBG(sz) (0x000c008 | EIP_HW_ENB_FW_SZ(sz))
-#define EIP_HW_ENB_IFPP_DBG(sz) (0x000c008 | EIP_HW_ENB_FW_SZ(sz))
-#define EIP_HW_ENB_IPUE_DBG(sz) (0x000c008 | EIP_HW_ENB_FW_SZ(sz))
-
-#define EIP_HW_SIGNATURE 0x23235ca
-
-/*
- * Transform Record Cache(TRC) configuration data
- * Flow Record Cache(FRC) configuration data
- */
-#define EIP_HW_MAX_FRC_HASH_BUCKETS 0x3c
-#define EIP_HW_MAX_TRC_HASH_BUCKETS 0x40
-#define EIP_HW_MAX_FLOW_REC 0x1b
-#define EIP_HW_MAX_TRANS_REC 0x1b
-#define EIP_HW_RST_FLOW_REC 0x1
-#define EIP_HW_ENB_FLOW_REC 0x1
-
-#define EIP_HW_RST_HASH_COL 0xfffff000
-#define EIP_HW_EMPTY_REC 0x3FF
-#define EIP_HW_FRC_FREECHAIN_TAIL ((EIP_HW_MAX_FLOW_REC - 1) << 16)
-#define EIP_HW_FRC_FREECHAIN_HEAD 0x0
-#define EIP_HW_FRC_FREECHAIN_CFG \
-	(EIP_HW_FRC_FREECHAIN_TAIL | EIP_HW_FRC_FREECHAIN_HEAD)
-#define EIP_HW_FLOW_REC_END (EIP_HW_MAX_FLOW_REC * 16)
-#define EIP_HW_FRC_PARAMS2_DEFAULT 0x401c00
-#define EIP_HW_FRC_PARAMS2_CFG \
-	(EIP_HW_FRC_PARAMS2_DEFAULT | EIP_HW_MAX_FLOW_REC)
-#define EIP_HW_FRC_PARAMS_DEFAULT 0x400
-#define EIP_HW_FRC_HASH_TABLE_SZ (0x1 << 6)
-#define EIP_HW_FRC_PARAMS_CFG \
-	(EIP_HW_FRC_PARAMS_DEFAULT | EIP_HW_FRC_HASH_TABLE_SZ)
-
-#define EIP_HW_ENB_TRANS_REC 0x10
-#define EIP_HW_RST_TRANS_REC 0x1
-
-#define EIP_HW_TRC_FREECHAIN_TAIL ((EIP_HW_MAX_TRANS_REC - 1) << 16)
-#define EIP_HW_TRC_FREECHAIN_HEAD 0x0
-#define EIP_HW_TRC_FREECHAIN_CFG \
-	(EIP_HW_TRC_FREECHAIN_TAIL | EIP_HW_TRC_FREECHAIN_HEAD)
-#define EIP_HW_TRANS_REC_END	(EIP_HW_MAX_TRANS_REC * 16)
-#define EIP_HW_TRC_PARAMS2_DEFAULT 0x1001c00
-#define EIP_HW_TRC_PARAMS2_CFG \
-	(EIP_HW_TRC_PARAMS2_DEFAULT | EIP_HW_MAX_TRANS_REC)
-#define EIP_HW_TRC_PARAMS_DEFAULT 0x1400400
-#define EIP_HW_TRC_HASH_TABLE_SZ (0x1 << 5)
-#define EIP_HW_TRC_PARAMS_CFG \
-	(EIP_HW_TRC_PARAMS_DEFAULT | EIP_HW_TRC_HASH_TABLE_SZ)
-
-/*
- * Initial Hash seed
- *
- * These values are provided by Inside Secure and is
- * used as an initial hash to compute the hash id.
- */
-#define EIP_HW_FHASH_IV0_CFG 0x28e1d20f
-#define EIP_HW_FHASH_IV1_CFG 0x30507ca5
-#define EIP_HW_FHASH_IV2_CFG 0x84484f1
-#define EIP_HW_FHASH_IV3_CFG 0xb8a5aeab
+#define EIP_HW_STRC_CONFIG_VAL 0x8000352E
 
 /*
  * Flow lookup config
  */
 #define EIP_HW_ENB_FLUE 0xc0000000
 #define EIP_HW_FLUE_OFFSET_CFG 0x400004
-
-/*
- * EIP197 has a classification RAM area, this area is
- * used to write EIP197 FWs and boot up EIP197 internal
- * engines
- */
-#define EIP_HW_CS_RAM_START 0x60000
 
 /*
  * HIA base register
@@ -330,11 +243,6 @@
 #define EIP_HW_HIA_AIC_R2_ACK (EIP_HW_HIA_RA_AIC_BASE + 0xC810)
 #define EIP_HW_HIA_AIC_R3_ACK (EIP_HW_HIA_RA_AIC_BASE + 0xB810)
 
-#define EIP_HW_HIA_LASIDE_BASE_ADDR_LO (EIP_HW_HIA_RA_AIC_BASE + 0xFF00)
-#define EIP_HW_HIA_LASIDE_BASE_ADDR_HI (EIP_HW_HIA_RA_AIC_BASE + 0xFF04)
-#define EIP_HW_HIA_LASIDE_SLAVE_CTRL0 (EIP_HW_HIA_RA_AIC_BASE + 0xFF08)
-#define EIP_HW_HIA_LASIDE_MASTER_CTRL1 (EIP_HW_HIA_RA_AIC_BASE + 0xFF0C)
-#define EIP_HW_HIA_INLINE_CTRL0 (EIP_HW_HIA_RA_AIC_BASE + 0xFF80)
 #define EIP_HW_HIA_MST_TIMEOUT_ERR (EIP_HW_HIA_RA_AIC_BASE + 0xFFD0)
 #define EIP_HW_HIA_OPTIONS2 (EIP_HW_HIA_RA_AIC_BASE + 0xFFF0)
 #define EIP_HW_HIA_MST_CTRL (EIP_HW_HIA_RA_AIC_BASE + 0xFFF4)
@@ -348,33 +256,6 @@
 #define EIP_HW_PE_MID_DBUF_THR (EIP_HW_PE_BASE + 0x400)
 #define EIP_HW_PE_MID_TBUF_THR (EIP_HW_PE_BASE + 0x500)
 
-#define EIP_HW_PE_ICE_SCRATCH_RAM (EIP_HW_PE_BASE + 0x800)
-#define EIP_HW_ICE_IPUE_VERSION_REG (EIP_HW_PE_ICE_SCRATCH_RAM)
-#define EIP_HW_ICE_IFPP_VERSION_REG (EIP_HW_PE_ICE_SCRATCH_RAM + 0x8)
-#define EIP_HW_ICE_IPUE_CTRL_REG (EIP_HW_PE_ICE_SCRATCH_RAM + 0x14)
-#define EIP_HW_ICE_IFPP_CTRL_REG (EIP_HW_PE_ICE_SCRATCH_RAM + 0x18)
-#define EIP_HW_ICE_DISABLE_STATS (EIP_HW_PE_ICE_SCRATCH_RAM + 0x58)
-#define EIP_HW_METADATA_EN_OFFSET (EIP_HW_PE_ICE_SCRATCH_RAM + 0x60)
-#define EIP_HW_ICE_REDIRECT_CFG (EIP_HW_PE_ICE_SCRATCH_RAM + 0x20)
-#define EIP_HW_ICE_REDIRECT_EN(i) ((1 <<(i)) & 0xFFFF)
-
-#define EIP_HW_PE_ICE_ADAPT_CTRL (EIP_HW_PE_BASE + 0xC00)
-#define EIP_HW_PE_ICE_PUE_CTRL (EIP_HW_PE_BASE + 0xC80)
-#define EIP_HW_PE_ICE_PUE_DBG (EIP_HW_PE_BASE + 0xC84)
-#define EIP_HW_PE_ICE_PUE_ECC_TEST (EIP_HW_PE_BASE + 0xC88)
-#define EIP_HW_PE_ICE_PUTF_CTRL (EIP_HW_PE_BASE + 0xD00)
-#define EIP_HW_PE_ICE_SCRATCH_CTRL (EIP_HW_PE_BASE + 0xD04)
-#define EIP_HW_PE_ICE_TIMER_LO (EIP_HW_PE_BASE + 0xD08)
-#define EIP_HW_PE_ICE_TIMER_HI (EIP_HW_PE_BASE + 0xD0c)
-#define EIP_HW_PE_ICE_UENG_STAT (EIP_HW_PE_BASE + 0xD10)
-#define EIP_HW_PE_ICE_FPP_CTRL (EIP_HW_PE_BASE + 0xD80)
-#define EIP_HW_PE_ICE_FPP_DBG (EIP_HW_PE_BASE + 0xD84)
-#define EIP_HW_PE_ICE_FPP_ECC_TEST (EIP_HW_PE_BASE + 0xD88)
-#define EIP_HW_PE_ICE_PPTF_CTRL (EIP_HW_PE_BASE + 0xE00)
-#define EIP_HW_PE_ICE_RAM_CTRL (EIP_HW_PE_BASE + 0xFF0)
-#define EIP_HW_PE_ICE_OPTIONS (EIP_HW_PE_BASE + 0xFF8)
-#define EIP_HW_PE_ICE_VERSION (EIP_HW_PE_BASE + 0xFFC)
-
 /*
  * Context Registers
  */
@@ -384,6 +265,7 @@
 #define EIP_HW_PE_EIP96_CONTEXT_CTRL (EIP_HW_PE_EIP96_BASE + 0x8)
 #define EIP_HW_PE_EIP96_CONTEXT_STAT (EIP_HW_PE_EIP96_BASE + 0xC)
 #define EIP_HW_PE_EIP96_OUT_BUF_CTRL (EIP_HW_PE_EIP96_BASE + 0x1C)
+#define EIP_HW_PE_EIP96_TOKEN_CTRL2 (EIP_HW_PE_EIP96_BASE + 0x2C)
 #define EIP_HW_PE_EIP96_LFSR_LO (EIP_HW_PE_EIP96_BASE + 0x70)
 #define EIP_HW_PE_EIP96_LFSR_HI (EIP_HW_PE_EIP96_BASE + 0x74)
 #define EIP_HW_PE_EIP96_VERSION (EIP_HW_PE_EIP96_BASE + 0x3FC)
@@ -467,26 +349,6 @@
 /*
  * Output classification engine registers
  */
-#define EIP_HW_PE_OCE_SCRATCH_RAM (EIP_HW_PE_EIP96_BASE + 0x400)
-#define EIP_HW_OCE_OFPP_CTRL_REG (EIP_HW_PE_OCE_SCRATCH_RAM + 0x18)
-#define EIP_HW_OCE_OFPP_VERSION_REG (EIP_HW_PE_OCE_SCRATCH_RAM + 0x8)
-#define EIP_HW_OCE_OPUE_CTRL_REG (EIP_HW_PE_OCE_SCRATCH_RAM + 0x14)
-#define EIP_HW_OCE_OPUE_VERSION_REG (EIP_HW_PE_OCE_SCRATCH_RAM)
-
-#define EIP_HW_PE_OCE_ADAPT_CTRL (EIP_HW_PE_EIP96_BASE + 0x800)
-#define EIP_HW_PE_OCE_PUE_CTRL (EIP_HW_PE_EIP96_BASE + 0x880)
-#define EIP_HW_PE_OCE_PUE_DBG (EIP_HW_PE_EIP96_BASE + 0x884)
-#define EIP_HW_PE_OCE_PUTF_CTRL (EIP_HW_PE_EIP96_BASE + 0x900)
-#define EIP_HW_PE_OCE_SCRATCH_CTRL (EIP_HW_PE_EIP96_BASE + 0x904)
-#define EIP_HW_PE_OCE_TIMER_LO (EIP_HW_PE_EIP96_BASE + 0x908)
-#define EIP_HW_PE_OCE_TIMER_HI (EIP_HW_PE_EIP96_BASE + 0x90c)
-#define EIP_HW_PE_OCE_FPP_CTRL (EIP_HW_PE_EIP96_BASE + 0x980)
-#define EIP_HW_PE_OCE_FPP_DBG (EIP_HW_PE_EIP96_BASE + 0x984)
-#define EIP_HW_PE_OCE_PPTF_CTRL (EIP_HW_PE_EIP96_BASE + 0xA00)
-#define EIP_HW_PE_OCE_RAM_CTRL (EIP_HW_PE_EIP96_BASE + 0xBF0)
-#define EIP_HW_PE_OCE_OPTIONS (EIP_HW_PE_EIP96_BASE + 0xBF8)
-#define EIP_HW_PE_OCE_VERSION (EIP_HW_PE_EIP96_BASE + 0xBFC)
-
 #define EIP_HW_PE_OUT_DBUF_THRES (EIP_HW_PE_EIP96_BASE + 0xC00)
 #define EIP_HW_PE_OUT_TBUF_THRES (EIP_HW_PE_EIP96_BASE + 0xD00)
 #define EIP_HW_PE_PSE_TOKEN_CTRL_STAT (EIP_HW_PE_EIP96_BASE + 0xE00)
@@ -504,60 +366,25 @@
 #define EIP_HW_PE_PE_VERSION (EIP_HW_PE_EIP96_BASE + 0xFFC)
 
 /*
- * Scratchpad RAM inline mode related macros
+ * Simple Transform Record Cache registers
  */
-#define EIP_HW_OCE_SCRATCHPAD_RAM (EIP_HW_PE_EIP96_BASE + 0x400)
-#define EIP_HW_OCE_OPUE_PACKET_ID_CFG (EIP_HW_OCE_SCRATCHPAD_RAM + 0x1C)
-#define EIP_HW_OCE_OPUE_PACKET_ID_START (1)
-#define EIP_HW_OCE_OPUE_PACKET_ID_INC (1 << 0x10)
-#define EIP_HW_OCE_OPUE_REDIRECT_CFG (EIP_HW_OCE_SCRATCHPAD_RAM + 0x20)
-#define EIP_HW_OCE_OPUE_REDIRECT_ENABLE (1 << 0x10)
-#define EIP_HW_OCE_OPUE_REDIRECT_RING_ID(x) ((x) & 0xF)
-
-/*
- * Flow record cache registers
- */
-#define EIP_HW_FRC_BASE 0x70000
-#define EIP_HW_FRC_CTRL (EIP_HW_FRC_BASE + 0x0)
-#define EIP_HW_FRC_LASTRES (EIP_HW_FRC_BASE + 0x4)
-#define EIP_HW_FRC_REGINDEX (EIP_HW_FRC_BASE + 0x8)
-#define EIP_HW_FRC_PARAMS (EIP_HW_FRC_BASE + 0x20)
-#define EIP_HW_FRC_FREECHAIN (EIP_HW_FRC_BASE + 0x24)
-#define EIP_HW_FRC_PARAMS2 (EIP_HW_FRC_BASE + 0x28)
-#define EIP_HW_FRC_ECCCTRL (EIP_HW_FRC_BASE + 0x30)
-
-/*
- * Transform record cache registers
- */
-#define EIP_HW_TRC_BASE 0x70800
-#define EIP_HW_TRC_CTRL (EIP_HW_TRC_BASE + 0x0)
-#define EIP_HW_TRC_LASTRES (EIP_HW_TRC_BASE + 0x4)
-#define EIP_HW_TRC_REGINDEX (EIP_HW_TRC_BASE + 0x8)
-#define EIP_HW_TRC_PARAMS (EIP_HW_TRC_BASE + 0x20)
-#define EIP_HW_TRC_FREECHAIN (EIP_HW_TRC_BASE + 0x24)
-#define EIP_HW_TRC_PARAMS2 (EIP_HW_TRC_BASE + 0x28)
-#define EIP_HW_TRC_ECCCTRL (EIP_HW_TRC_BASE + 0x30)
-#define EIP_HW_TRC_ECCSTAT (EIP_HW_TRC_BASE + 0x34)
+#define EIP_HW_STRC_BASE 0x74000
+#define EIP_HW_STRC_RECORD_STATE(i) (EIP_HW_STRC_BASE + (16 * i) + 0x0)
+#define EIP_HW_STRC_RECORD_ADDR_LO(i) (EIP_HW_STRC_BASE + (16 * i) + 0x8)
+#define EIP_HW_STRC_RECORD_ADDR_HI(i) (EIP_HW_STRC_BASE + (16 * i) + 0xC)
+#define EIP_HW_STRC_CONFIG (EIP_HW_STRC_BASE + 0x3F0)
+#define EIP_HW_STRC_ERROR_STATUS (EIP_HW_STRC_BASE + 0x3F4)
+#define EIP_HW_STRC_OPTIONS (EIP_HW_STRC_BASE + 0x3F8)
+#define EIP_HW_STRC_VERSION (EIP_HW_STRC_BASE + 0x3FC)
 
 /*
  * Flow lookup engine registers
  */
 #define EIP_HW_FLUE_BASE 0x76000
-#define EIP_HW_FLUE_CACHEBASE_LO(i) (EIP_HW_FLUE_BASE + (i * 0x20) + 0x0)
-#define EIP_HW_FLUE_CACHEBASE_HI(i) (EIP_HW_FLUE_BASE + (i * 0x20) + 0x4)
-#define EIP_HW_FLUE_HASHBASE_LO(i) (EIP_HW_FLUE_BASE + (i * 0x20) + 0x8)
-#define EIP_HW_FLUE_HASHBASE_HI(i) (EIP_HW_FLUE_BASE + (i * 0x20) + 0xC)
 #define EIP_HW_FLUE_CONFIG(i) (EIP_HW_FLUE_BASE + (i * 0x20) + 0x10)
-#define EIP_HW_FLUE_OFFSET (EIP_HW_FLUE_BASE + 0x808)
 #define EIP_HW_FLUE_IFC_LUT0 (EIP_HW_FLUE_BASE + 0x820)
 #define EIP_HW_FLUE_IFC_LUT1 (EIP_HW_FLUE_BASE + 0x824)
 #define EIP_HW_FLUE_IFC_LUT2 (EIP_HW_FLUE_BASE + 0x828)
-#define EIP_HW_FHASH_IV0 (EIP_HW_FLUE_BASE + 0x8C0)
-#define EIP_HW_FHASH_IV1 (EIP_HW_FLUE_BASE + 0x8C4)
-#define EIP_HW_FHASH_IV2 (EIP_HW_FLUE_BASE + 0x8C8)
-#define EIP_HW_FHASH_IV3 (EIP_HW_FLUE_BASE + 0x8CC)
-
-#define EIP_HW_FLUE_CFG 0xC7000030
 
 /*
  * Classification registers
@@ -807,12 +634,6 @@
 #define EIP_HW_PROC_DESC_SZ(x) (((x) & 0xFFFFFF) >> 2)
 #define EIP_HW_PREP_DESC_SZ(x) (((x) & 0xFFFFFF) >> 2)
 #define EIP_HW_RING_DESC_SZ(x) ((x) << 2)
-
-/*
- * Macros to store table size for hardware flow table
- */
-#define EIP_HW_FLUE_CONFIG_TABLE_SZ 3   /* Max val 1 to 15 */
-#define EIP_HW_FLUE_CONFIG_VAL ((EIP_HW_FLUE_CONFIG_TABLE_SZ << 4) | (3 << 30))
 
 /*
  * error macros.

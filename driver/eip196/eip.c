@@ -77,7 +77,7 @@ static int eip_device_probe(struct platform_device *pdev)
 	}
 
 	/*
-	 * Allocate EIP197 device node.
+	 * Allocate EIP196 device node.
 	 */
 	ep = kzalloc(sizeof(struct eip_pdev), GFP_KERNEL);
 	if (!ep) {
@@ -100,7 +100,7 @@ static int eip_device_probe(struct platform_device *pdev)
 	 * Create debugfs directory
 	 * eip_hw_init() creates per ring file inside this.
 	 */
-	ep->dentry = debugfs_create_dir("eip197", drv->dentry);
+	ep->dentry = debugfs_create_dir("eip196", drv->dentry);
 	if (IS_ERR_OR_NULL(ep->dentry)) {
 		pr_err("%px: Failed to create debugfs directory\n", pdev);
 		err = -EBADF;
@@ -234,7 +234,7 @@ void __exit eip_exit_module(void)
 }
 
 MODULE_LICENSE("Dual BSD/GPL");
-MODULE_DESCRIPTION("EIP197 driver");
+MODULE_DESCRIPTION("EIP196 driver");
 
 module_init(eip_init_module);
 module_exit(eip_exit_module);

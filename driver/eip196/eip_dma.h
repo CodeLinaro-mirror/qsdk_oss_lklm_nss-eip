@@ -132,17 +132,14 @@ extern const char *dma_name[];
 extern struct file_operations dma_stats_ops;
 
 int eip_dma_tx_sg(struct eip_dma *dma, struct eip_sw_desc *sw, struct scatterlist *src, struct scatterlist *dst);
-int eip_dma_hy_tx_linear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct sk_buff *skb);
-int eip_dma_hy_tx_nonlinear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct sk_buff *skb);
+
+int eip_dma_tx_linear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct sk_buff *skb);
+int eip_dma_tx_nonlinear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct sk_buff *skb);
 
 int eip_dma_cmd_init(struct eip_dma *dma, void __iomem *base_addr, bool irq, uint8_t rx_cpu);
 int eip_dma_res_init(struct eip_dma *dma, void __iomem *base_addr, bool irq, uint8_t rx_cpu);
 int eip_dma_la_init(struct eip_dma *dma, struct platform_device *pdev, uint8_t tx_cpu,
 		uint8_t rx_cpu,	uint32_t ring_id, void __iomem *base_addr);
 void eip_dma_la_deinit(struct eip_dma *dma);
-
-int eip_dma_hy_init(struct eip_dma *dma, struct platform_device *pdev, uint8_t tx_cpu,
-		uint8_t rx_cpu,	uint32_t ring_id, void __iomem *base_addr);
-void eip_dma_hy_deinit(struct eip_dma *dma);
 
 #endif /* __EIP_DMA_H */

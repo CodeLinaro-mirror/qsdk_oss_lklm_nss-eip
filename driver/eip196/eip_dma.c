@@ -30,10 +30,8 @@
 
 #include "eip_priv.h"
 
-const char *irq_name[] = {"eip_irq_ring_0", "eip_irq_ring_1", "eip_irq_ring_2", "eip_irq_ring_3",
-	"eip_irq_ring_4", "eip_irq_ring_5", "eip_irq_ring_6", "eip_irq_ring_7"};
-const char *dma_name[] = {"ring_0", "ring_1", "ring_2", "ring_3",
-	"ring_4", "ring_5", "ring_6", "ring_7"};
+const char *irq_name[] = {"eip_irq_ring_0", "eip_irq_ring_1", "eip_irq_ring_2", "eip_irq_ring_3"};
+const char *dma_name[] = {"ring_0", "ring_1", "ring_2", "ring_3"};
 
 /*
  * eip_dma_notify()

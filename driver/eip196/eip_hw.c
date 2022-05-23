@@ -70,17 +70,13 @@ static int eip_hw_reset(void __iomem *base_addr)
 	iowrite32(EIP_HW_HIA_RST, base_addr + EIP_HW_HIA_RA_PE_CTRL);
 	iowrite32(EIP_HW_HIA_RST, base_addr + EIP_HW_HIA_DSE_THR_CTRL);
 	iowrite32(EIP_HW_DSE_CFG_RST, base_addr + EIP_HW_HIA_DSE_CFG);
-	iowrite32(0x0, base_addr + EIP_HW_HIA_LASIDE_BASE_ADDR_LO);
-	iowrite32(0x0, base_addr + EIP_HW_HIA_LASIDE_BASE_ADDR_HI);
-	iowrite32(0x0, base_addr + EIP_HW_HIA_LASIDE_SLAVE_CTRL0);
-	iowrite32(0x0, base_addr + EIP_HW_HIA_LASIDE_MASTER_CTRL1);
-	iowrite32(0x0, base_addr + EIP_HW_HIA_INLINE_CTRL0);
 	iowrite32(0x0, base_addr + EIP_HW_PE_IN_DBUF_THR);
 	iowrite32(0x0, base_addr + EIP_HW_PE_IN_TBUF_THR);
 	iowrite32(0x0, base_addr + EIP_HW_PE_OUT_DBUF_THRES);
-	iowrite32(0x0, base_addr + EIP_HW_PE_OUT_DBUF_THRES);
+	iowrite32(0x0, base_addr + EIP_HW_PE_OUT_TBUF_THRES);
 	iowrite32(EIP_HW_TOKEN_CTRL_RST,
 		base_addr + EIP_HW_PE_EIP96_TOKEN_CTRL);
+	iowrite32(EIP_HW_TOKEN_CTRL2_RST, base_addr + EIP_HW_PE_EIP96_TOKEN_CTRL2);
 
 	/*
 	 * wait for 10ms before polling the status
@@ -92,7 +88,7 @@ static int eip_hw_reset(void __iomem *base_addr)
 
 /*
  * eip_hw_setup_core()
- *	setup eip197 core
+ *	setup eip196 core
  */
 static void eip_hw_setup_core(void __iomem *base_addr)
 {
@@ -130,20 +126,8 @@ static void eip_hw_setup_core(void __iomem *base_addr)
 	iowrite32(0x0, base_addr + EIP_HW_PE_EIP96_OUT_BUF_CTRL);
 
 	/*
-	 * Write LA FIFO BASE ADDR LOW WRITE
-	 */
-	iowrite32(0x0, base_addr + EIP_HW_HIA_LASIDE_BASE_ADDR_LO);
-
-	/*
-	 * This bit is set for a command descriptor error, write 1 to clear the error
-	 */
-	iowrite32(EIP_HW_HIA_RST, base_addr + EIP_HW_HIA_LASIDE_SLAVE_CTRL0);
-
-	/*
 	 * LA master control write
 	 */
-	iowrite32(EIP_HW_HIA_RST, base_addr + EIP_HW_HIA_LASIDE_MASTER_CTRL1);
-	iowrite32(EIP_HW_INLINE_CFG, base_addr + EIP_HW_HIA_INLINE_CTRL0);
 	iowrite32(EIP_HW_ENB_ALL_RINGS, base_addr + EIP_HW_HIA_RA_PE_CTRL);
 
 	/*
@@ -213,141 +197,24 @@ static void eip_hw_setup_core(void __iomem *base_addr)
 
 /*
  * eip_hw_setup_cache()
- *	setup EIP197 flow and transform cache
+ *	setup EIP196 simple transform record cache
  */
 static void eip_hw_setup_cache(void __iomem *base_addr)
 {
-	void __iomem *addr;
-	uint32_t val;
-	int i;
+	/*
+	 * Enable simple transform record cache
+	 */
+	iowrite32(EIP_HW_ENB_SIMPLE_TRANS_REC, base_addr + EIP_HW_CS_RAM_CTRL);
 
 	/*
-	 * Enable Flow record cache 0
+	 * Initialise the simple transform record cache
 	 */
-	iowrite32(EIP_HW_ENB_FLOW_REC, base_addr + EIP_HW_CS_RAM_CTRL);
-	iowrite32(0x0, base_addr + EIP_HW_FRC_ECCCTRL);
-
-	/*
-	 * Put Flow record cache into SW reset
-	 */
-	iowrite32(EIP_HW_RST_FLOW_REC, base_addr + EIP_HW_FRC_PARAMS);
-
-	/*
-	 * Initialise FLow record Cache
-	 * Set Record administrative words
-	 *	- Set Hash collision Head and Next pointers
-	 *	- Set Previous and Next free list pointers
-	 * Hash table words
-	 *	- Set Hash collision head
-	 */
-	for (i = 0 ; i < EIP_HW_MAX_FLOW_REC; i++) {
-		addr = base_addr + EIP_HW_CS_RAM_START + (i * 16);
-
-		/*
-		 * if its the first record then, then free_list_prev is loaded
-		 * with 0x3ff, while all other records are loaded with record_index - 1
-		 *
-		 * if its the last record the, then free_list_next is loaded
-		 * with 0x3ff, while all other records are loaded with record_index + 1
-		 */
-		if (i == 0)
-			val = (EIP_HW_EMPTY_REC << 10) | 0x1;
-		else if (i == (EIP_HW_MAX_FLOW_REC - 1))
-			val = ((i - 1) << 10) | EIP_HW_EMPTY_REC;
-		else
-			val =  ((i - 1) << 10) | (i + 1);
-
-		iowrite32(EIP_HW_RST_HASH_COL, addr);
-		iowrite32(val, addr + 0x4);
-		iowrite32(0, addr + 0x8);
-		iowrite32(0, addr + 0xC);
-	}
-
-	/*
-	 * reset hash collision bucket
-	 */
-	addr = base_addr + EIP_HW_CS_RAM_START + EIP_HW_FLOW_REC_END;
-	for (i = 0; i < EIP_HW_MAX_FRC_HASH_BUCKETS; i++)
-		iowrite32(U32_MAX, addr + (0x4 * i));
-
-	/*
-	 * configure FRC control registers
-	 */
-	iowrite32(0x0, base_addr + EIP_HW_CS_RAM_CTRL);
-	iowrite32(EIP_HW_FRC_FREECHAIN_CFG, base_addr + EIP_HW_FRC_FREECHAIN);
-	iowrite32(EIP_HW_FRC_PARAMS2_CFG, base_addr + EIP_HW_FRC_PARAMS2);
-	iowrite32(EIP_HW_FRC_PARAMS_CFG, base_addr + EIP_HW_FRC_PARAMS);
-
-	/*
-	 * Enable Transform record cache 0
-	 */
-	iowrite32(EIP_HW_ENB_TRANS_REC, base_addr + EIP_HW_CS_RAM_CTRL);
-
-	/*
-	 * Put Transform record cache into SW reset
-	 */
-	iowrite32(0x1, base_addr + EIP_HW_TRC_PARAMS);
-
-	/*
-	 * Initialise Transform record Cache
-	 * Set Record administrative words
-	 *	- Set Hash collision Head and Next pointers
-	 *	- Set Previous and Next free list pointers
-	 * Hash table words
-	 *	- Set Hash collision head
-	 */
-	for (i = 0 ; i < EIP_HW_MAX_TRANS_REC; i++) {
-		addr = base_addr + EIP_HW_CS_RAM_START + (i * 16);
-
-		/*
-		 * if its the first record them, then free_list_prev is loaded
-		 * with 0x3ff, while all other records are loaded with record_index - 1
-		 *
-		 * if its the last record the, then free_list_next is loaded
-		 * with 0x3ff, while all other records are loaded with record_index + 1
-		 */
-		if (i == 0)
-			val = ((EIP_HW_EMPTY_REC << 10) | 0x1);
-		else if (i == (EIP_HW_MAX_TRANS_REC - 1))
-			val = (((i - 1) << 10) | EIP_HW_EMPTY_REC);
-		else
-			val =  (((i - 1) << 10) | (i + 1));
-
-		iowrite32(EIP_HW_RST_HASH_COL, addr);
-		iowrite32(val, addr + 0x4);
-		iowrite32(0, addr + 0x8);
-		iowrite32(0, addr + 0xC);
-	}
-
-	/*
-	 * reset hash collision bucket
-	 */
-	addr = base_addr + EIP_HW_CS_RAM_START + EIP_HW_TRANS_REC_END;
-	for (i = 0; i < EIP_HW_MAX_TRC_HASH_BUCKETS; i++)
-		iowrite32(U32_MAX, addr + (0x4 * i));
-
-	/*
-	 * configure TRC configuration parameters
-	 */
-	iowrite32(0x0, base_addr + EIP_HW_CS_RAM_CTRL);
-	iowrite32(EIP_HW_TRC_FREECHAIN_CFG, base_addr + EIP_HW_TRC_FREECHAIN);
-	iowrite32(EIP_HW_TRC_PARAMS2_CFG, base_addr + EIP_HW_TRC_PARAMS2);
-	iowrite32(EIP_HW_TRC_PARAMS_CFG, base_addr + EIP_HW_TRC_PARAMS);
-
-	/*
-	 * Configure FLUE engine initial Hash value, This initial hash
-	 * will be used by the engine to  compute flow hash id
-	 */
-	iowrite32(EIP_HW_FHASH_IV0_CFG, base_addr + EIP_HW_FHASH_IV0);
-	iowrite32(EIP_HW_FHASH_IV1_CFG, base_addr + EIP_HW_FHASH_IV1);
-	iowrite32(EIP_HW_FHASH_IV2_CFG, base_addr + EIP_HW_FHASH_IV2);
-	iowrite32(EIP_HW_FHASH_IV3_CFG, base_addr + EIP_HW_FHASH_IV3);
+	iowrite32(EIP_HW_STRC_CONFIG_VAL, base_addr + EIP_HW_STRC_CONFIG);
 
 	/*
 	 * Configure FLUE_CONFIG register
 	 */
 	iowrite32(EIP_HW_ENB_FLUE, base_addr + EIP_HW_FLUE_CONFIG(0));
-	iowrite32(EIP_HW_FLUE_OFFSET_CFG, base_addr + EIP_HW_FLUE_OFFSET);
 
 	iowrite32(0x0, base_addr + EIP_HW_FLUE_IFC_LUT0);
 	iowrite32(0x0, base_addr + EIP_HW_FLUE_IFC_LUT1);
@@ -355,215 +222,8 @@ static void eip_hw_setup_cache(void __iomem *base_addr)
  }
 
 /*
- * eip_hw_setup_fw()
- *	setup EIP197 firmware resets and initializes
- */
-static void eip_hw_setup_fw(void __iomem *base_addr)
-{
-	int i;
-
-	/*
-	 * Disable ICE SCRATCHRAM PAD statistics update
-	 */
-	iowrite32(0x1, base_addr + EIP_HW_ICE_DISABLE_STATS);
-
-	/*
-	 * Init ICE scratch control register
-	 * Reset ICE scratch RAM area
-	 */
-	iowrite32(EIP_HW_ENB_SCRATCH_RAM, base_addr + EIP_HW_PE_ICE_SCRATCH_CTRL);
-	for (i = 0; i < EIP_HW_MAX_SCRATCH_RAM; i++)
-		iowrite32(0x0, base_addr + EIP_HW_PE_ICE_SCRATCH_RAM + (i * 0x4));
-
-	/*
-	 * Init OCE scratch control register
-	 * Reset OCE scratch RAM area
-	 */
-	iowrite32(EIP_HW_ENB_SCRATCH_RAM, base_addr + EIP_HW_PE_OCE_SCRATCH_CTRL);
-	for (i = 0; i < EIP_HW_MAX_SCRATCH_RAM; i++)
-		iowrite32(0x0, base_addr + EIP_HW_PE_OCE_SCRATCH_RAM + (i * 0x4));
-
-}
-
-/*
- * eip_hw_boot_ofpp()
- *	load output flow post processor (OFPP) firmware
- */
-static void eip_hw_boot_ofpp(struct device *dev, void __iomem *base_addr, const char *fw_name)
-{
-	const struct firmware *fw = NULL;
-	uint32_t *data;
-	int i;
-
-	/*
-	 * pulling engine out of reset
-	 */
-	iowrite32(EIP_HW_RST_PE, base_addr + EIP_HW_PE_OCE_FPP_CTRL);
-	iowrite32(EIP_HW_ENB_OFPP, base_addr + EIP_HW_PE_OCE_RAM_CTRL);
-
-	/*
-	 * load the firmware to the engine
-	 */
-	if (request_firmware(&fw, fw_name, dev)) {
-		pr_warn("%px: FW(%s) load failed\n", dev, fw_name);
-		return;
-	}
-
-	for (i = 0, data = (uint32_t *)fw->data; i < fw->size; i += 4, data++)
-		iowrite32(*data, base_addr + EIP_HW_CS_RAM_START + i);
-
-	/*
-	 * put OCE RAM into reset so that the next engine can load
-	 */
-	iowrite32(0x0, base_addr + EIP_HW_PE_OCE_RAM_CTRL);
-	iowrite32(EIP_HW_ENB_OFPP_DBG(fw->size), base_addr + EIP_HW_PE_OCE_FPP_CTRL);
-
-	release_firmware(fw);
-
-	/*
-	 * put a delay of 100ms before accessing the FW specific registers
-	 */
-	mdelay(100);
-
-	pr_info("%px: %s version(0x%x)\n", dev, fw_name,
-			ioread32(base_addr + EIP_HW_OCE_OFPP_VERSION_REG));
-}
-
-/*
- * eip_hw_boot_opue()
- *	load output pull-up engine (OPUE) firmware
- */
-static void eip_hw_boot_opue(struct device *dev, void __iomem *base_addr, const char *fw_name)
-{
-	const struct firmware *fw = NULL;
-	uint32_t *data;
-	int i;
-
-	/*
-	 * pulling engine out of reset
-	 */
-	iowrite32(EIP_HW_RST_PE, base_addr + EIP_HW_PE_OCE_PUE_CTRL);
-	iowrite32(EIP_HW_ENB_OPUE, base_addr + EIP_HW_PE_OCE_RAM_CTRL);
-
-	/*
-	 * load the firmware to the engine
-	 */
-	if (request_firmware(&fw, fw_name, dev)) {
-		pr_warn("%px: FW(%s) load failed\n", dev, fw_name);
-		return;
-	}
-
-	for (i = 0, data = (uint32_t *)fw->data; i < fw->size; i += 4, data++)
-		iowrite32(*data, base_addr + EIP_HW_CS_RAM_START + i);
-
-	/*
-	 * put OCE RAM into reset
-	 */
-	iowrite32(0x0, base_addr + EIP_HW_PE_OCE_RAM_CTRL);
-	iowrite32(EIP_HW_ENB_OPUE_DBG(fw->size), base_addr + EIP_HW_PE_OCE_PUE_CTRL);
-
-	release_firmware(fw);
-
-	/*
-	 * put a delay of 100ms before accessing the FW specific registers
-	 */
-	mdelay(100);
-
-	pr_info("%px: %s version(0x%x)\n", dev, fw_name,
-			ioread32(base_addr + EIP_HW_OCE_OPUE_VERSION_REG));
-}
-
-/*
- * eip_hw_boot_ifpp()
- *	load input flow post processor (IFPP) firmware
- */
-static void eip_hw_boot_ifpp(struct device *dev, void __iomem *base_addr, const char *fw_name)
-{
-	const struct firmware *fw = NULL;
-	uint32_t *data;
-	int i;
-
-	/*
-	 * pulling engine out of reset
-	 */
-	iowrite32(EIP_HW_RST_PE, base_addr + EIP_HW_PE_ICE_FPP_CTRL);
-	iowrite32(EIP_HW_ENB_IFPP, base_addr + EIP_HW_PE_ICE_RAM_CTRL);
-
-	/*
-	 * load the firmware to the engine
-	 */
-	if (request_firmware(&fw, fw_name, dev)) {
-		pr_warn("%px: FW(%s) load failed\n", dev, fw_name);
-		return;
-	}
-
-	for (i = 0, data = (uint32_t *)fw->data; i < fw->size; i += 4, data++)
-		iowrite32(*data, base_addr + EIP_HW_CS_RAM_START + i);
-
-	/*
-	 * put ICE (input classification engine) RAM into reset
-	 */
-	iowrite32(0x0, base_addr + EIP_HW_PE_ICE_RAM_CTRL);
-	iowrite32(EIP_HW_ENB_IFPP_DBG(fw->size), base_addr + EIP_HW_PE_ICE_FPP_CTRL);
-
-	release_firmware(fw);
-
-	/*
-	 * put a delay of 100ms before accessing the FW specific registers
-	 */
-	mdelay(100);
-
-	pr_info("%px: %s version(0x%x)\n", dev, fw_name,
-			ioread32(base_addr + EIP_HW_ICE_IFPP_VERSION_REG));
-}
-
-/*
- * eip_hw_boot_ipue()
- *	load input pull-up engine (IPUE) firmware
- */
-static void eip_hw_boot_ipue(struct device *dev, void __iomem *base_addr, const char *fw_name)
-{
-	const struct firmware *fw = NULL;
-	uint32_t *data;
-	int i;
-
-	/*
-	 * pulling engine out of reset
-	 */
-	iowrite32(EIP_HW_RST_PE, base_addr + EIP_HW_PE_ICE_PUE_CTRL);
-	iowrite32(EIP_HW_ENB_IPUE, base_addr + EIP_HW_PE_ICE_RAM_CTRL);
-
-	/*
-	 * load the firmware to the engine
-	 */
-	if (request_firmware(&fw, fw_name, dev)) {
-		pr_warn("%px: FW(%s) load failed\n", dev, fw_name);
-		return;
-	}
-
-	for (i = 0, data = (uint32_t *)fw->data; i < fw->size; i += 4, data++)
-		iowrite32(*data, base_addr + EIP_HW_CS_RAM_START + i);
-
-	/*
-	 * put ICE (input classification engine) RAM into reset
-	 */
-	iowrite32(0x0, base_addr + EIP_HW_PE_ICE_RAM_CTRL);
-	iowrite32(EIP_HW_ENB_IPUE_DBG(fw->size), base_addr + EIP_HW_PE_ICE_PUE_CTRL);
-
-	release_firmware(fw);
-
-	/*
-	 * put a delay of 100ms before accessing the FW specific registers
-	 */
-	mdelay(100);
-
-	pr_info("%px: %s version(0x%x)\n", dev, fw_name,
-		ioread32(base_addr + EIP_HW_ICE_IPUE_VERSION_REG));
-}
-
-/*
  * eip_hw_setup()
- *	Pre initialization function for eip197
+ *	Pre initialization function for eip196
  */
 static void eip_hw_setup(void __iomem *base_addr)
 {
@@ -575,8 +235,9 @@ static void eip_hw_setup(void __iomem *base_addr)
 		 * If reset is not complete yet, wait for reset to
 		 * complete before doing any other initialization
 		 */
-		while (!eip_hw_reset_status(base_addr))
+		while (!eip_hw_reset_status(base_addr)){
 			mdelay(100);
+		}
 	}
 
 	/*
@@ -585,18 +246,15 @@ static void eip_hw_setup(void __iomem *base_addr)
 	 * - Data Store Engine (DSE) init
 	 * - Ring Arbiter (HIA_RA) init
 	 * - DRBG init
-	 * - Flow record cache init
-	 * - Transform record cache init
-	 * - ICE/OCE firmware init
+	 * - Simple transform record cache init
 	 */
 	eip_hw_setup_core(base_addr);
 	eip_hw_setup_cache(base_addr);
-	eip_hw_setup_fw(base_addr);
 }
 
 /*
  * eip_hw_clock_init()
- *	Initialise EIP197 clock
+ *	Initialise EIP196 clock
  */
 static int eip_hw_clock_init(struct device *dev, struct device_node *np)
 {
@@ -671,7 +329,7 @@ free:
 
 /*
  * eip_hw_deinit()
- *	De-initialize the EIP197 HW
+ *	De-initialize the EIP196 HW
  */
 void eip_hw_deinit(struct platform_device *pdev)
 {
@@ -684,24 +342,11 @@ void eip_hw_deinit(struct platform_device *pdev)
 	for (i = 0; i < NR_CPUS; i++) {
 		eip_dma_la_deinit(&ep->la[i]);
 	}
-
-	if (!ep->redirect_en) {
-		return;
-	}
-
-	for (i = 0; i < NR_CPUS; i++) {
-		eip_dma_hy_deinit(&ep->hy[i]);
-	}
-
-	/*
-	 * Deinitialize the flow table
-	 */
-	eip_flow_table_deinit(pdev);
 }
 
 /*
  * eip_hw_init()
- *	initialize the EIP197 HW
+ *	initialize the EIP196 HW
  */
 int eip_hw_init(struct platform_device *pdev)
 {
@@ -709,8 +354,8 @@ int eip_hw_init(struct platform_device *pdev)
 	struct eip_pdev *ep = platform_get_drvdata(pdev);
 	void __iomem *base_addr = ep->dev_vaddr;
 	struct device_node *child = NULL;
-	uint32_t redirect_en = 0;
 	uint8_t ring_id = 0;
+	uint32_t data;
 	int status;
 
 	/*
@@ -725,39 +370,11 @@ int eip_hw_init(struct platform_device *pdev)
 	eip_hw_setup(base_addr);
 
 	/*
-	 * load engine firmware;
-	 */
-	eip_hw_boot_ifpp(&pdev->dev, base_addr, "ifpp.bin");
-	eip_hw_boot_ipue(&pdev->dev, base_addr, "ipue.bin");
-	eip_hw_boot_ofpp(&pdev->dev, base_addr, "ofpp.bin");
-	eip_hw_boot_opue(&pdev->dev, base_addr, "opue.bin");
-
-	/*
 	 * Allow passing 16 bytes of metadata information from
 	 * input to output.
 	 */
-	iowrite32(EIP_HW_ENB_MDATA, base_addr + EIP_HW_METADATA_EN_OFFSET);
-
-	/*
-	 * Force CDR clock enable to workaround PROC Counter update.
-	 */
-	iowrite32(EIP_HW_CDR_CLK_ON, base_addr + EIP_HW_FORCE_CLOCK_ON);
-
-	/*
-	 * Disable ECN check.
-	 */
-	iowrite32(EIP_HW_PE_EIP96_ECN_DISABLE, base_addr + EIP_HW_PE_EIP96_ECN_TABLE(0));
-	iowrite32(EIP_HW_PE_EIP96_ECN_DISABLE, base_addr + EIP_HW_PE_EIP96_ECN_TABLE(1));
-	iowrite32(EIP_HW_PE_EIP96_ECN_DISABLE, base_addr + EIP_HW_PE_EIP96_ECN_TABLE(2));
-	iowrite32(EIP_HW_PE_EIP96_ECN_DISABLE, base_addr + EIP_HW_PE_EIP96_ECN_TABLE(3));
-
-	/*
-	 * Enabled Packet ID increment for IPv4.
-	 * TODO: ICE also has same config. Do we need that as well?
-	 */
-	iowrite32(EIP_HW_OCE_OPUE_PACKET_ID_START | EIP_HW_OCE_OPUE_PACKET_ID_INC,
-			base_addr + EIP_HW_OCE_OPUE_PACKET_ID_CFG);
-
+	data = ioread32(base_addr + EIP_HW_PE_PE_DEBUG);
+	iowrite32( (data | EIP_HW_ENB_MDATA), base_addr + EIP_HW_PE_PE_DEBUG);
 
 	/*
 	 * Initialize all lookaside DMA.
@@ -807,96 +424,6 @@ int eip_hw_init(struct platform_device *pdev)
 			goto fail_init;
 		}
 	}
-
-	/*
-	 * Initialize all hybrid DMA.
-	 */
-	for_each_available_child_of_node(np, child) {
-		struct eip_dma *dma;
-		uint8_t tx_cpu = 0;
-		uint8_t rx_cpu = 0;
-
-		status = of_property_match_string(child, "ring-name", "hybrid");
-		if (status < 0) {
-			continue;
-		}
-
-		status = of_property_read_u8(child, "tx_cpu", &tx_cpu);
-		if (status < 0) {
-			pr_err("%px: Failed to read tx_cpu\n", pdev);
-			goto fail_init;
-		}
-
-		if (tx_cpu >= NR_CPUS) {
-			pr_err("%px: Invalid tx_cpu number(%u)\n", pdev, tx_cpu);
-			goto fail_init;
-		}
-
-		status = of_property_read_u8(child, "rx_cpu", &rx_cpu);
-		if (status < 0) {
-			pr_err("%px: Failed to read rx_cpu\n", pdev);
-			goto fail_init;
-		}
-
-		if (rx_cpu >= NR_CPUS) {
-			pr_err("%px: Invalid rx_cpu number(%u)\n", pdev, rx_cpu);
-			goto fail_init;
-		}
-
-		status = of_property_read_u8(child, "ring-id", &ring_id);
-		if (status < 0) {
-			pr_err("%px: Failed to read ring_id\n", pdev);
-			goto fail_init;
-		}
-
-		dma = &ep->hy[tx_cpu];
-		status = eip_dma_hy_init(dma, pdev, tx_cpu, rx_cpu, ring_id, base_addr);
-		if (status < 0) {
-			pr_err("%px: LA DMA initialization failed for cpu(%u)\n", pdev, tx_cpu);
-			goto fail_init;
-		}
-
-		redirect_en |= EIP_HW_ICE_REDIRECT_EN(ring_id);
-	}
-
-	/*
-	 * Configure HW for Redirection.
-	 */
-	if (redirect_en) {
-		uint8_t err_redir_ring = __builtin_ffs(redirect_en) - 1;
-		uint32_t cfg;
-
-		ep->redirect_en = !!redirect_en;
-
-		/*
-		 * Enable inorder bit when redirection is used.
-		 */
-		cfg = EIP_HW_INLINE_CFG | EIP_HW_INLINE_INORDER;
-		iowrite32(cfg, base_addr + EIP_HW_HIA_INLINE_CTRL0);
-
-		/*
-		 * Allow redirection from those interface.
-		 */
-		redirect_en |= EIP_HW_ICE_REDIRECT_EN(EIP_HW_ICE_INLINE_BIT);
-		iowrite32(redirect_en, base_addr + EIP_HW_ICE_REDIRECT_CFG);
-
-		/*
-		 * Redirect all error packet to hybrid ring with lowest ring index (4).
-		 */
-		cfg = EIP_HW_OCE_OPUE_REDIRECT_ENABLE | EIP_HW_OCE_OPUE_REDIRECT_RING_ID(err_redir_ring);
-		iowrite32(cfg, base_addr + EIP_HW_OCE_OPUE_REDIRECT_CFG);
-
-		/*
-		 * Initialize hardware flow lookup table.
-		 */
-		if(!(eip_flow_table_init(pdev))) {
-			pr_err("%px: Failed to initializ flow table\n",pdev);
-			goto fail_init;
-		}
-
-		pr_info("%px: Redirection enabled, map(%x) error ring(%u)\n", pdev, redirect_en, err_redir_ring);
-	}
-
 
 	of_node_put(np);
 	return 0;

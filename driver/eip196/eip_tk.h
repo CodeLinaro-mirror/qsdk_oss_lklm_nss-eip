@@ -66,8 +66,8 @@ enum eip_tk_inst {
 	EIP_TK_INST_OPAD_GEN = 0x20E60000,	/* Generate outer digest */
 	EIP_TK_INST_IPAD_ADD = 0xE0EE0800,	/* Write inner digest to context at offset */
 	EIP_TK_INST_OPAD_ADD = 0xE0E60800,	/* Write outer digest to context at offset */
-	EIP_TK_INST_DEL_DATA = 0xa0800000,	/* Used for Insert data */
-	EIP_TK_INST_ADD_DATA = 0x25000000,	/* Used for Removing data */
+	EIP_TK_INST_DEL_DATA = 0xa0800000,	/* Used for removing data */
+	EIP_TK_INST_ADD_DATA = 0x25000000,	/* Used for inserting data */
 	EIP_TK_INST_HMAC_ADD = 0x21E60000,	/* Insert generated hash */
 	EIP_TK_INST_HMAC_GET = 0x41E60000,	/* Retrieve hash */
 	EIP_TK_INST_HMAC_CHK = 0xD0070000,	/* Disable pad verification */

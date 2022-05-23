@@ -30,7 +30,6 @@ static const char *svcname[EIP_SVC_MAX] = {
 	[EIP_SVC_AHASH] = "eip_ahash",
 	[EIP_SVC_AEAD] = "eip_aead",
 	[EIP_SVC_IPSEC] = "eip_ipsec",
-	[EIP_SVC_HYBRID_IPSEC] = "eip_hy_ipsec",
 };
 
 /*
@@ -40,7 +39,6 @@ static const char *svcname[EIP_SVC_MAX] = {
 static ssize_t eip_ctx_read_tr_stats(struct file *filep, char __user *ubuf, size_t count, loff_t *ppos)
 {
 	struct eip_ctx *ctx = filep->private_data;
-	struct eip_flow_tbl *tbl;
 	struct eip_tr *tr;
 	ssize_t max_buf_len;
 	uint32_t i = 0;
@@ -54,13 +52,10 @@ static ssize_t eip_ctx_read_tr_stats(struct file *filep, char __user *ubuf, size
 	max_buf_len = (sizeof(struct eip_tr_stats)/sizeof(uint64_t)) * EIP_DEBUGFS_MAX_NAME;
 	max_buf_len = ctx->tr.count * max_buf_len;
 	max_buf_len += (sizeof(ctx->tr.stats)/sizeof(uint64_t)) * EIP_DEBUGFS_MAX_NAME;
-	max_buf_len += sizeof(struct eip_flow_tuple) * EIP_DEBUGFS_MAX_NAME + sizeof(uint32_t);
-	max_buf_len += (sizeof(struct eip_flow_tbl_stats)/sizeof(uint64_t)) * EIP_DEBUGFS_MAX_NAME;
 
 	buf = vzalloc(max_buf_len);
 	if (!buf)
 		return 0;
-	tbl = &ctx->ep->flow_table;
 
 	/*
 	 * Context Statistics.
@@ -90,31 +85,9 @@ static ssize_t eip_ctx_read_tr_stats(struct file *filep, char __user *ubuf, size
 		len += snprintf(buf + len, max_buf_len - len, "\tRx Packets - %llu\n", stats.rx_pkts);
 		len += snprintf(buf + len, max_buf_len - len, "\tRx bytes - %llu\n", stats.rx_bytes);
 		len += snprintf(buf + len, max_buf_len - len, "\tError - %llu\n", stats.rx_error);
-
-		if(tr->flow) {
-			struct eip_flow_tuple *tuple = &tr->flow->tuple;
-			uint32_t idx;
-			idx = EIP_FLOW_HASH_IDX(tr->flow->hash);
-
-			if (tuple->ip_ver == 6) {
-				len += snprintf(buf + len, max_buf_len - len, "Flow Src:%pI6n Dst:%pI6n spi:0x%X sport:%u dport:%u proto:%u index %u\n", tuple->src_ip, tuple->dst_ip, tuple->spi, ntohs(tuple->src_port), ntohs(tuple->dst_port), tuple->ip_proto, idx);
-			}
-			else {
-				len += snprintf(buf + len, max_buf_len - len, "Flow Src:%pI4n Dst:%pI4n spi:0x%X sport:%u dport:%u proto:%u index %u \n", tuple->src_ip, tuple->dst_ip, tuple->spi, ntohs(tuple->src_port), ntohs(tuple->dst_port), tuple->ip_proto, idx);
-
-			}
-
-		}
 	}
 
 	read_unlock_bh(&ctx->tr.lock);
-
-	spin_lock_bh(&tbl->lock);
-        len += snprintf(buf + len, max_buf_len - len, "Flows allocated - %llu \n", tbl->stats.alloc);
-        len += snprintf(buf + len, max_buf_len - len, "Flows deallocated - %llu \n", tbl->stats.free);
-        len += snprintf(buf + len, max_buf_len - len, "Total collisions - %llu \n", tbl->stats.collision);
-        len += snprintf(buf + len, max_buf_len - len, "Active collisions - %llu \n", tbl->stats.active_collision);
-	spin_unlock_bh(&tbl->lock);
 
 	ret = simple_read_from_buffer(ubuf, count, ppos, buf, len);
 	vfree(buf);
@@ -245,10 +218,10 @@ struct eip_ctx *eip_ctx_alloc(enum eip_svc svc, struct dentry **dentry)
 		ctx->db_size = eip_tr_aead_get_svc_len();
 		ctx->dma = ep->la;
 		break;
-	case EIP_SVC_HYBRID_IPSEC:
+	case EIP_SVC_IPSEC:
 		ctx->svc_db = eip_tr_ipsec_get_svc();
 		ctx->db_size = eip_tr_ipsec_get_svc_len();
-		ctx->dma = ep->hy;
+		ctx->dma = ep->la;
 		break;
 	default:
 		pr_err("%px: Service database not found\n", ep);

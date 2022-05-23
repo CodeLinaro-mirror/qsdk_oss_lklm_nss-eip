@@ -25,7 +25,6 @@
 #include "eip_ctx.h"
 #include "eip_tk.h"
 #include "eip_tr.h"
-#include "eip_flow.h"
 
 #define EIP_MAX_STR_LEN 25		/* Maximum string length */
 #define EIP_DEBUGFS_MAX_NAME 128	/* Maximum string length for debugfs */
@@ -113,16 +112,10 @@ struct eip_drv {
 struct eip_pdev {
 	struct platform_device *pdev;		/* Device associated with the driver */
 	struct eip_dma la[NR_CPUS];		/* Lookaside DMA object per CPU */
-	struct eip_dma hy[NR_CPUS];		/* Hybrid DMA object per CPU */
 	struct kmem_cache *tr_cache;		/* Transform Record cache */
-	struct kmem_cache *flow_swcache;	/* Flow Record cache */
-	struct eip_flow_hw *flow_hwcache;       /* DMA memory for HW flow */
 	struct dentry *dentry;			/* Driver debugfs dentry */
 	void __iomem *dev_vaddr;		/* starting virtual address of device */
 	dma_addr_t dev_paddr;			/* starting physical address of device */
-	dma_addr_t hwcache_paddr;		/* Physical address for HW flow */
-	bool redirect_en;			/* Redirection / Hybrid mode is configured */
-	struct eip_flow_tbl flow_table;		/* Flow table */
 };
 
 extern struct eip_drv eip_drv_g;	/* Global Driver object */
