@@ -58,9 +58,9 @@ static inline void eip_dma_hy_tx_res(struct eip_dma *dma, struct sk_buff *skb, s
 
 	/*
 	 * Invalidate the all cache line associated with output data to avoid any corruption due to cache eviction.
-	 * We are performing clean as we may be sharing the cache line with others.
+	 * This is new SKB so we dont care about the stored data.
 	 */
-	dmac_clean_range_no_dsb(frag->data, frag->data + frag->len);
+	dmac_inv_range_no_dsb(frag->data, frag->data + frag->len);
 
 	/*
 	 * Fill result descriptor for single buffer.
@@ -93,7 +93,7 @@ static inline void eip_dma_hy_tx_cmd(struct eip_dma *dma, struct eip_sw_desc *sw
 	/*
 	 * Flush all the data to be read by hardware.
 	 */
-	dmac_clean_range_no_dsb(frag->data, frag->data + frag->len);
+	dmac_flush_range_no_dsb(frag->data, frag->data + frag->len);
 
 	/*
 	 * Fill command descriptor for single buffer.
@@ -127,16 +127,13 @@ static inline void eip_dma_hy_tx_cmd(struct eip_dma *dma, struct eip_sw_desc *sw
 		cmd->bypass[1] = tr->bypass[1];
 		cmd->bypass[2] = tr->bypass[2];
 		cmd->bypass[3] = tr->bypass[3];
-
-		dma->in.meta[frag->idx] = (uintptr_t)sw;
 	} else {
 		cmd->token[0] = cmd->token[1] = cmd->token[2] = cmd->token[3] = 0;
 		cmd->token[4] = cmd->token[5] = cmd->token[6] = cmd->token[7] = 0;
 		cmd->bypass[0] = cmd->bypass[1] = cmd->bypass[2] = cmd->bypass[3] = 0;
-
-		dma->in.meta[frag->idx] = (uintptr_t)0;
 	}
 
+	dma->in.meta[frag->idx] = (frag->flag & EIP_HW_CMD_FLAGS_LAST) ? (uintptr_t)sw : 0;
 	dmac_clean_range_no_dsb(cmd, cmd + 1);
 }
 
@@ -176,7 +173,7 @@ static void eip_dma_hy_refill(struct eip_dma *dma)
 
 		frag.data = skb->data;
 		frag.len = skb->len;
-		frag.flag = EIP_HW_RES_FLAGS(1, 1);
+		frag.flag = EIP_HW_RES_FLAGS(1, 0);
 
 		eip_dma_hy_tx_res(dma, skb, &frag);
 		frag.idx = EIP_DMA_IDX_INC(frag.idx);
@@ -184,29 +181,6 @@ static void eip_dma_hy_refill(struct eip_dma *dma)
 	}
 
 	eip_dma_hy_notify(&dma->out, processed - count, frag.idx);
-}
-
-/*
- * eip_dma_hy_append_frag()
- */
-static inline void eip_dma_hy_append_frag(struct sk_buff *skb, struct sk_buff **tail_frag, struct sk_buff *new_frag)
-{
-	/*
-	 * Updated frag_list pointer for first fragment append.
-	 */
-	if (!skb_has_frag_list(skb)) {
-		skb_shinfo(skb)->frag_list = new_frag;
-		*tail_frag = skb;
-	}
-
-	new_frag->next = NULL;
-
-	(*tail_frag)->next = new_frag;
-	*tail_frag = new_frag;
-
-	skb->len += new_frag->len;
-	skb->data_len += new_frag->len;
-	skb->truesize += new_frag->truesize;
 }
 
 /*
@@ -286,13 +260,15 @@ static inline void eip_dma_hy_tr_deliver_err(struct eip_tr *tr, struct sk_buff *
  */
 int eip_dma_hy_rx(struct eip_dma *dma, int budget)
 {
-	struct sk_buff *head_skb = dma->head_skb;
-	struct sk_buff *tail_skb = dma->tail_skb;
-	uint8_t nsegs = dma->nsegs;
-
 	uint32_t hw_pidx, out_cidx;
 	uint32_t avail, processed;
+	struct sk_buff_head list;
+	uint32_t true_len = 0;
+	uint32_t list_len = 0;
 	uint32_t prod_words;
+
+
+	__skb_queue_head_init(&list);
 
 	/*
 	 * Calculate Descriptor produced by HW.
@@ -321,12 +297,14 @@ int eip_dma_hy_rx(struct eip_dma *dma, int budget)
 	}
 
 	while (avail--) {
+		struct eip_dma_stats *dma_stats = &dma->stats;
 		uint16_t cle_err, tr_err;
+		struct sk_buff *head_skb;
 		struct eip_hw_desc *res;
 		struct sk_buff *skb;
 		struct eip_tr *tr;
 		uint16_t frag_len;
-		uint16_t data_len;
+		uint8_t nsegs;
 		void *data;
 		bool err;
 
@@ -351,7 +329,7 @@ int eip_dma_hy_rx(struct eip_dma *dma, int budget)
 		/*
 		 * Linear data. Both First & Last flags are set.
 		 */
-		if ((EIP_HW_RES_FLAGS_MASK & res->frag[0]) == EIP_HW_RES_FLAGS_LINEAR) {
+		if (likely((EIP_HW_RES_FLAGS_MASK & res->frag[0]) == EIP_HW_RES_FLAGS_LINEAR)) {
 			head_skb = skb;
 			nsegs = 1;
 			goto deliver;
@@ -359,26 +337,49 @@ int eip_dma_hy_rx(struct eip_dma *dma, int budget)
 
 		/*
 		 * Non-linear data. Set our head to descriptor with first flag.
+		 * Initialize list for chained fragments.
 		 */
 		if (EIP_HW_RES_FLAGS_FIRST & res->frag[0]) {
 			head_skb = skb;
-			nsegs = 1;
 			continue;
 		}
 
 		/*
 		 * Append SKB to head SKB frag list.
 		 */
-		eip_dma_hy_append_frag(head_skb, &tail_skb, skb);
-		nsegs++;
+		list_len += skb->len;
+		true_len += skb->truesize;
+		__skb_queue_tail(&list, skb);
 		skb = NULL;
 
 		/*
 		 * Continue to next descriptor if not last.
+		 * We dont update consumer index if full chain is not received.
+		 * So, will read the descriptor again if last is not received
+		 * during this execution.
 		 */
 		if (!(EIP_HW_RES_FLAGS_LAST & res->frag[0])) {
 			continue;
 		}
+
+		/*
+		 * All fragments are received;
+		 * Link the Head SKB with the list.
+		 */
+		skb_shinfo(head_skb)->frag_list = __skb_peek(&list);
+		skb_shinfo(head_skb)->frag_list->prev = NULL;
+		skb_peek_tail(&list)->next = NULL;
+		head_skb->len += list_len;
+		head_skb->data_len = list_len;
+		head_skb->truesize += true_len;
+		nsegs = skb_queue_len(&list) + 1;
+
+		/*
+		 * Reset the list.
+		 */
+		list_len = 0;
+		true_len = 0;
+		__skb_queue_head_init(&list);
 
 deliver:
 		/*
@@ -387,27 +388,24 @@ deliver:
 		tr_err = EIP_HW_RES_ERROR(res->token[0]);
 		cle_err = EIP_HW_RES_ERROR_CLE(res->token[1]);
 		err = cle_err || tr_err;
-		data_len = EIP_HW_RES_DATA_LEN(res->token[0]);
+		WARN_ON(head_skb->len != EIP_HW_RES_DATA_LEN(res->token[0]));
 
 		/*
 		 * Update DMA Rx stats.
 		 * We have not used atomic operation as there is no write contention for stats.
 		 */
-		dma->stats.rx_frags += nsegs;
-		dma->stats.rx_pkts++;
-		dma->stats.rx_bytes += data_len;
+		dma_stats->rx_frags += nsegs;
+		dma_stats->rx_pkts++;
+		dma_stats->rx_bytes += head_skb->len;
 
 		tr = eip_dma_hy_get_tr(res);
 		if (unlikely(!tr)) {
-			dma->stats.rx_dropped++;
-			dma->stats.rx_error ++;
-			dma->stats.rx_err_code[tr_err]++;
+			dma_stats->rx_dropped++;
+			dma_stats->rx_error++;
+			dma_stats->rx_err_code[tr_err]++;
 
 			consume_skb(head_skb);
-			head_skb = NULL;
-			tail_skb = NULL;
-			nsegs = 0;
-			continue;
+			goto next;
 		}
 
 		/*
@@ -419,35 +417,25 @@ deliver:
 		 * Send packet to the client's handler.
 		 */
 		if (err) {
-			dma->stats.rx_error ++;
-			dma->stats.rx_err_code[tr_err]++;
+			dma_stats->rx_error ++;
+			dma_stats->rx_err_code[tr_err]++;
 
 			eip_dma_hy_tr_deliver_err(tr, head_skb, nsegs, tr_err);
-			head_skb = NULL;
-			tail_skb = NULL;
-			nsegs = 0;
-			continue;
+			goto next;
 		}
 
 		eip_dma_hy_tr_deliver(tr, head_skb, nsegs);
-		head_skb = NULL;
-		tail_skb = NULL;
-		nsegs = 0;
+next:
+		/*
+		 * Update output consumer indexes in dma object.
+		 */
+		atomic_set(&dma->out.cons_idx, out_cidx);
 	}
 
 	/*
 	 * Acknowledge HW for result descriptor.
 	 */
 	iowrite32(EIP_HW_PROC_CNT_DESC_SZ(EIP_HW_DESC_WORDS * processed), dma->out.proc_cnt);
-
-	/*
-	 * Update output consumer indexes in dma object.
-	 * Save any in-progress SG state in DMA.
-	 */
-	atomic_set(&dma->out.cons_idx, out_cidx);
-	dma->head_skb = head_skb;
-	dma->tail_skb = tail_skb;
-	dma->nsegs = nsegs;
 
 	return processed;
 }
@@ -585,12 +573,52 @@ static void eip_dma_hy_free_skb(struct eip_dma *dma)
 }
 
 /*
+ * eip_dma_hy_tx_skb_paged()
+ *	Send SKB which may be paged.
+ */
+static uint32_t eip_dma_hy_tx_skb_paged(struct eip_dma *dma, struct eip_sw_desc *sw, struct sk_buff *skb,
+		uint32_t cmd_idx, bool last)
+{
+	uint8_t nr_frags = skb_shinfo(skb)->nr_frags;
+	skb_frag_t *skb_frag;
+	struct eip_frag src;
+
+	/*
+	 * Set fragment specific information for head SKB.
+	 */
+	src.data = skb->data;
+	src.len = skb_headlen(skb);
+	src.flag = EIP_HW_CMD_FLAGS(!sw->src_nsegs, (last && !nr_frags));
+	src.idx = cmd_idx;
+	eip_dma_hy_tx_cmd(dma, sw, &src);
+	cmd_idx = EIP_DMA_IDX_INC(cmd_idx);
+
+	/*
+	 * Handle nr_frags.
+	 */
+	skb_frag = &skb_shinfo(skb)->frags[0];
+	while(nr_frags--) {
+		src.data = skb_frag_address(skb_frag);
+		src.len = skb_frag_size(skb_frag);
+		src.flag = EIP_HW_CMD_FLAGS(0, (last && !nr_frags));
+		src.idx = cmd_idx;
+		eip_dma_hy_tx_cmd(dma, sw, &src);
+		cmd_idx = EIP_DMA_IDX_INC(cmd_idx);
+
+		skb_frag++;
+	}
+
+	return cmd_idx;
+}
+
+/*
  * eip_dma_hy_tx_linear_skb()
  *	Schedule linear SKB for transformation. The function must be called with prempt disabled.
  */
 int eip_dma_hy_tx_linear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct sk_buff *skb)
 {
 	struct eip_tr_stats *tr_stats = this_cpu_ptr(sw->tr->stats_pcpu);
+	struct eip_dma_stats *dma_stats = &dma->stats;
 	struct eip_frag src;
 	uint32_t in_count;
 
@@ -615,10 +643,9 @@ int eip_dma_hy_tx_linear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct
 	tr_stats->tx_frags += 1;
 	tr_stats->tx_pkts++;
 	tr_stats->tx_bytes += src.len;
-	dma->stats.tx_frags += 1;
-	dma->stats.tx_pkts++;
-	dma->stats.tx_bytes += src.len;
-
+	dma_stats->tx_frags += 1;
+	dma_stats->tx_pkts++;
+	dma_stats->tx_bytes += src.len;
 
 	eip_dma_hy_notify(&dma->in, 1, EIP_DMA_IDX_INC(src.idx));
 	return 0;
@@ -630,10 +657,61 @@ int eip_dma_hy_tx_linear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct
  */
 int eip_dma_hy_tx_nonlinear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct sk_buff *skb)
 {
+	struct eip_tr_stats *tr_stats = this_cpu_ptr(sw->tr->stats_pcpu);
+	struct eip_dma_stats *dma_stats = &dma->stats;
+	struct sk_buff *iter_skb = NULL;
+	unsigned int len = skb->len;
+	uint32_t in_count;
+	uint32_t cmd_idx;
+	uint8_t desc_req;
+	bool last_frag;
+
+	BUG_ON(!skb_is_nonlinear(skb));
+
+	in_count = eip_dma_avail_idx_and_count(&dma->in, &cmd_idx);
+	sw->src_nsegs = 0;
+
 	/*
-	 * TODO: Add support.
+	 * Send Head SKB which may be paged.
+	 * Descriptor required is head SKB + nr_frags in it.
 	 */
-	return -EINVAL;
+	desc_req = skb_shinfo(skb)->nr_frags + 1;
+	if (in_count < desc_req) {
+		return -EBUSY;
+	}
+
+	last_frag = !skb_has_frag_list(skb);
+	cmd_idx = eip_dma_hy_tx_skb_paged(dma, sw, skb, cmd_idx, last_frag);
+	in_count -= desc_req;
+	sw->src_nsegs += desc_req;
+
+	/*
+	 * Walk through all fraglist skbs.
+	 */
+	skb_walk_frags(skb, iter_skb) {
+		desc_req = skb_shinfo(iter_skb)->nr_frags + 1;
+		if (in_count < desc_req) {
+			return -EBUSY;
+		}
+
+		last_frag = !iter_skb->next;
+		cmd_idx = eip_dma_hy_tx_skb_paged(dma, sw, iter_skb, cmd_idx, last_frag);
+		in_count -= desc_req;
+		sw->src_nsegs += desc_req;
+	}
+
+	/*
+	 * Increament Tx statistics.
+	 */
+	tr_stats->tx_frags += sw->src_nsegs;
+	tr_stats->tx_pkts++;
+	tr_stats->tx_bytes += len;
+	dma_stats->tx_frags += sw->src_nsegs;
+	dma_stats->tx_pkts++;
+	dma_stats->tx_bytes += len;
+
+	eip_dma_hy_notify(&dma->in, sw->src_nsegs, cmd_idx);
+	return 0;
 }
 
 /*

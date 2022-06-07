@@ -108,10 +108,6 @@ struct eip_dma {
 	uint32_t irq_mask;		/* IRQ mask for this ring */
 	void __iomem *irq_status;	/* HW status register */
 
-	struct sk_buff *head_skb;	/* Head SKB in in-progress SG chain */
-	struct sk_buff *tail_skb;	/* Tail SKB in in-progress SG chain */
-	uint8_t nsegs;			/* Segments in SG chain */
-
 	struct eip_dma_stats stats;	/* Stats */
 	struct dentry *dentry;		/* debugfs dentry */
 };
