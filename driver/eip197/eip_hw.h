@@ -784,7 +784,10 @@
 #define EIP_HW_RES_ERROR_CLE(res) (((res) >> 16) & EIP_HW_RES_ERROR_CLE_MASK)
 #define EIP_HW_RES_NEXT_HDR(res) ((res) & 0xFF)
 #define EIP_HW_RES_TR_ADDR(res) ((res) & 0xFFFFFFFC)
+#define EIP_HW_RES_ERR_NAT_T 163
+#define EIP_HW_RES_ERR_IKE 164
 #define EIP_HW_RES_ERR_FLOW_FAIL 188
+#define EIP_HW_RES_BYPASS_SRC_PORT(by) ((by) & 0xFFFF)
 
 /*
  * HW specific service number.

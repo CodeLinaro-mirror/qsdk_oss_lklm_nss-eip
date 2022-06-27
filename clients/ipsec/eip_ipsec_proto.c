@@ -27,6 +27,7 @@
 #include <net/esp.h>
 #include <net/protocol.h>
 #include <net/xfrm.h>
+#include <net/udp.h>
 
 #include "eip_ipsec_priv.h"
 
@@ -184,7 +185,7 @@ static inline int eip_ipsec_proto_esp_rx(struct eip_ipsec_sa *sa, struct sk_buff
 	}
 
 	/*
-	 * skb->data points to ESP header. So, We need to push ip header.
+	 * skb->data points to ESP or UDP header. So, We need to push ip header.
 	 */
 	skb_push(skb, skb->data - skb_network_header(skb));
 
@@ -262,6 +263,69 @@ static int eip_ipsec_proto_esp6_rx(struct sk_buff *skb)
 }
 
 /*
+ * eip_ipsec_proto_udp_rx()
+ *	Handle UDP encapsulated IPsec packets.
+ *
+ * Shell returns the following value:
+ * =0 if SKB is consumed.
+ * >0 if skb should be passed on to UDP socket.
+ * <0 if skb should be resubmitted.
+ */
+static int eip_ipsec_proto_udp_rx(struct sock *sk, struct sk_buff *skb)
+{
+	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
+	size_t hdr_len = sizeof(struct udphdr) +  sizeof(struct ip_esp_hdr);
+	struct ip_esp_hdr *esph;
+
+	/*
+	 * Socket has to be of type UDP_ENCAP_ESPINUDP .
+	 */
+	BUG_ON(udp_sk(sk)->encap_type != UDP_ENCAP_ESPINUDP);
+
+	/*
+	 * NAT-keepalive packet has udphdr & one byte payload (rfc3948).
+	 */
+	if (skb->len < hdr_len) {
+		goto non_esp_pkt;
+	}
+
+	/*
+	 * In case of non-linear SKB we would like to ensure that
+	 * all the required headers are present in the first segment
+	 */
+	if (skb_is_nonlinear(skb) && (skb_headlen(skb) < hdr_len)) {
+		if (skb_linearize(skb)) {
+			dev_kfree_skb_any(skb);
+			return 0;
+		}
+
+		/*
+		 * skb_linearize may change header. So, reload all required pointer.
+		 */
+		skb_reset_transport_header(skb);
+		skb_set_network_header(skb, -(int)sizeof(struct iphdr));
+	}
+
+	/*
+	 * Check if packet has non-ESP marker (rfc3948)
+	 */
+	esph = (struct ip_esp_hdr *)(skb_transport_header(skb) + sizeof(struct udphdr));
+	if (ntohl(esph->spi) == EIP_IPSEC_PROTO_NON_ESP_MARKER) {
+		goto non_esp_pkt;
+	}
+
+	/*
+	 * ESPinUDP, Make transport header to point ESP.
+	 */
+	skb_set_transport_header(skb, sizeof(struct udphdr));
+	return eip_ipsec_proto_esp4_rx(skb);
+
+non_esp_pkt:
+	BUG_ON(!drv->sk_encap_rcv);
+	return drv->sk_encap_rcv(sk, skb);
+}
+
+/*
  * IPv4 ESP handler
  */
 static struct net_protocol esp_protocol = {
@@ -303,6 +367,65 @@ bool eip_ipsec_proto_esp_init(void)
 	}
 
 	return true;
+}
+
+/*
+ * eip_ipsec_proto_udp_sock_override()
+ */
+bool eip_ipsec_proto_udp_sock_override(struct eip_ipsec_tuple *sa_tuple)
+{
+	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
+	struct udp_sock *up;
+	struct sock *sk;
+
+	rcu_read_lock();
+
+	sk = __udp4_lib_lookup(&init_net, htonl(sa_tuple->src_ip[0]),  htons(sa_tuple->sport),
+			htonl(sa_tuple->dest_ip[0]), htons(sa_tuple->dport), 0, 0, &udp_table, NULL);
+	if (!sk) {
+		rcu_read_unlock();
+		pr_err("%px: Failed to lookup UDP socket dst(%pI4h) dport(0x%X)\n", drv, sa_tuple->dest_ip, sa_tuple->dport);
+		return false;
+	}
+
+	up = udp_sk(sk);
+	if (up->encap_type != UDP_ENCAP_ESPINUDP) {
+		rcu_read_unlock();
+		pr_err("%px: Socket type is not UDP_ENCAP_ESPINUDP (%u)\n", up, up->encap_type);
+		return false;
+	}
+
+	if (!drv->sk) {
+		sock_hold(sk);
+		drv->sk_encap_rcv = xchg(&up->encap_rcv, eip_ipsec_proto_udp_rx);
+		drv->sk = sk;
+		pr_debug("%px: Overriden socket encap handler\n", up);
+	}
+
+	rcu_read_unlock();
+
+	/*
+	 * TODO: Add support for multiple Socket handling.
+	 */
+	WARN_ON(drv->sk != sk);
+	return true;
+}
+
+/*
+ * eip_ipsec_proto_udp_sock_restore()
+ */
+void eip_ipsec_proto_udp_sock_restore(void)
+{
+	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
+
+	if (drv->sk) {
+		struct udp_sock *up = udp_sk(drv->sk);
+		xchg(&up->encap_rcv, drv->sk_encap_rcv);
+		sock_put(drv->sk);
+		drv->sk_encap_rcv = NULL;
+		drv->sk = NULL;
+		pr_debug("%px: Released socket encap handler\n", up);
+	}
 }
 
 /*

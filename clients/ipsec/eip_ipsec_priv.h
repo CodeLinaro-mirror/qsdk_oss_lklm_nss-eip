@@ -58,6 +58,8 @@ struct eip_ipsec_drv {
 	spinlock_t lock;		/* Common lock for list manipulation */
 	struct hlist_head __rcu sa_hlist[EIP_IPSEC_HASH_SIZE];
 					/* SA hash list based on IP & SPI */
+	struct sock *sk;						/* Stores UDP sock information */
+	int (*sk_encap_rcv)(struct sock *sk, struct sk_buff *skb);	/* Orginal SK encap handler */
 
 	struct list_head dev_head;	/* Device database */
 	struct kmem_cache *sa_cache;	/* Kmem cache for SA memory */

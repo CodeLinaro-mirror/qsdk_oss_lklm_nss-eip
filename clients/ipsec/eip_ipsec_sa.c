@@ -516,10 +516,12 @@ int eip_ipsec_sa_add(struct net_device *ndev, struct eip_ipsec_data *data, struc
 	struct eip_ipsec_dev *eid = netdev_priv(ndev);
 	struct eip_tr_info tr_info;
 	struct eip_ipsec_sa *sa;
+	bool udp_encap;
 	bool encap;
 	int err;
 
 	encap = (data->base.flags & EIP_IPSEC_FLAG_ENC);
+	udp_encap = (data->base.flags & EIP_IPSEC_FLAG_UDP);
 
 	/*
 	 * Sanity checks:
@@ -620,6 +622,10 @@ int eip_ipsec_sa_add(struct net_device *ndev, struct eip_ipsec_data *data, struc
 #if defined(EIP_IPSEC_XFRM)
 	sa->xs = data->xs;
 #endif
+
+	if (!encap && udp_encap) {
+		eip_ipsec_proto_udp_sock_override(t);
+	}
 
 	/*
 	 * TODO: Do we need to handle multiple sa_add() on multiple core.

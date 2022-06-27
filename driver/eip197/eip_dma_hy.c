@@ -27,7 +27,9 @@
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
 #include <asm/cacheflush.h>
+#include <net/ip.h>
 
+#include <ppe_drv_port.h>
 #include "eip_priv.h"
 
 /*
@@ -192,13 +194,6 @@ static inline struct eip_tr *eip_dma_hy_get_tr(struct eip_hw_desc *res)
 	uint32_t tr_hw_addr = EIP_HW_RES_TR_ADDR(res->token[4]);
 
 	/*
-	 * TR address is invalid when there is a CLE error.
-	 */
-	if (unlikely(EIP_HW_RES_ERROR_CLE(res->token[1]))) {
-		return NULL;
-	}
-
-	/*
 	 * higher 32bit must be zero as we use only 32bit bus address.
 	 */
 	if (unlikely(!tr_hw_addr || res->token[5] == 0xffffffff)) {
@@ -252,6 +247,79 @@ static inline void eip_dma_hy_tr_deliver_err(struct eip_tr *tr, struct sk_buff *
 	 * Call completion callback.
 	 */
 	tr->ipsec.op.err_cb(tr->ipsec.app_data, skb, -EBADE);
+}
+
+/*
+ * eip_dma_hy_deliver_linux()
+ *	Send SKB to Linux stack.
+ */
+static inline bool eip_dma_hy_deliver_linux(struct sk_buff *skb, struct eip_hw_desc *res)
+{
+	uint16_t src_port = EIP_HW_RES_BYPASS_SRC_PORT(res->bypass[0]);
+	struct net_device *dev = ppe_drv_port_num_to_dev(src_port);
+
+	if (!dev) {
+		return false;
+	}
+
+	skb_reset_mac_header(skb);
+	skb_reset_network_header(skb);
+	skb->dev = dev;
+	skb->ip_summed = CHECKSUM_NONE;
+	skb->protocol = htons(ETH_P_IP);
+	skb_set_transport_header(skb, sizeof(struct iphdr));
+	netif_receive_skb(skb);
+	return true;
+}
+
+/*
+ * eip_dma_hy_classify_tr_err()
+ *	Process packet with TR error.
+ */
+static inline bool eip_dma_hy_classify_err(struct eip_dma *dma, struct sk_buff *skb, struct eip_hw_desc *res)
+{
+	struct eip_dma_stats *dma_stats = &dma->stats;
+	uint16_t cle_err, tr_err;
+
+	tr_err = EIP_HW_RES_ERROR(res->token[0]);
+	cle_err = EIP_HW_RES_ERROR_CLE(res->token[1]);
+
+	/*
+	 * Increase error counter only for non-bypass errors.
+	 */
+	dma_stats->rx_error++;
+	dma_stats->rx_err_code[tr_err]++;
+
+	/*
+	 * Packet require to resubmit into Linux stack.
+	 * For NATT we can receive control packet with specific error code.
+	 */
+	if ((tr_err == EIP_HW_RES_ERR_NAT_T) || (tr_err == EIP_HW_RES_ERR_IKE)) {
+		/*
+		 * Pull the fake mac added by PPE.
+		 */
+		skb_pull(skb, sizeof(struct ethhdr));
+		if (!eip_dma_hy_deliver_linux(skb, res)) {
+			consume_skb(skb);
+			dma_stats->rx_dropped++;
+		}
+
+		return true;
+	}
+
+	/*
+	 * Packet must be dropped when there is CLE error.
+	 */
+	if (cle_err) {
+		dma_stats->rx_dropped++;
+		consume_skb(skb);
+		return true;
+	}
+
+	/*
+	 * Other TR error should be processed by clients.
+	 */
+	return false;
 }
 
 /*
@@ -398,12 +466,13 @@ deliver:
 		dma_stats->rx_pkts++;
 		dma_stats->rx_bytes += head_skb->len;
 
+		if (err && eip_dma_hy_classify_err(dma, skb, res)) {
+			goto next;
+		}
+
 		tr = eip_dma_hy_get_tr(res);
 		if (unlikely(!tr)) {
 			dma_stats->rx_dropped++;
-			dma_stats->rx_error++;
-			dma_stats->rx_err_code[tr_err]++;
-
 			consume_skb(head_skb);
 			goto next;
 		}
@@ -417,9 +486,6 @@ deliver:
 		 * Send packet to the client's handler.
 		 */
 		if (err) {
-			dma_stats->rx_error ++;
-			dma_stats->rx_err_code[tr_err]++;
-
 			eip_dma_hy_tr_deliver_err(tr, head_skb, nsegs, tr_err);
 			goto next;
 		}

@@ -17,6 +17,10 @@
 #ifndef __EIP_IPSEC_PROTO_H
 #define __EIP_IPSEC_PROTO_H
 
+#define EIP_IPSEC_PROTO_NON_ESP_MARKER 0x0000
+
+void eip_ipsec_proto_udp_sock_restore(void);
+bool eip_ipsec_proto_udp_sock_override(struct eip_ipsec_tuple *sa_tuple);
 bool eip_ipsec_proto_esp_init(void);
 void eip_ipsec_proto_esp_deinit(void);
 void eip_ipsec_proto_dec_done(void *app_data, eip_req_t req);

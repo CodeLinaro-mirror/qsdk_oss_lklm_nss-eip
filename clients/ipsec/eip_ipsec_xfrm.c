@@ -431,6 +431,10 @@ static int eip_ipsec_xfrm_sa_data_init(struct xfrm_state *xs, struct eip_ipsec_d
 		sa_data->base.flags |= EIP_IPSEC_FLAG_TUNNEL;
 	}
 
+	if (xs->encap) {
+		sa_data->base.flags |= EIP_IPSEC_FLAG_UDP;
+	}
+
 	ret = eip_ipsec_xfrm_crypto_init(xs, sa_data);
 	if (ret < 0) {
 		pr_warn("Crypto Initialisation failed\n");
