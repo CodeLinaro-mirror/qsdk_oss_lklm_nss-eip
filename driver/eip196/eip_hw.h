@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -462,9 +462,9 @@
 
 #define EIP_HW_CTX_TYPE_SMALL 0x2
 #define EIP_HW_CTX_TYPE_LARGE 0x3
-#define EIP_HW_CTX_SIZE_LARGE_WORDS (80)
+#define EIP_HW_CTX_SIZE_LARGE_WORDS (62)
 #define EIP_HW_CTX_SIZE_LARGE_BYTES (EIP_HW_CTX_SIZE_LARGE_WORDS * sizeof(uint32_t))
-#define EIP_HW_CTX_SIZE_SMALL_WORDS (64)
+#define EIP_HW_CTX_SIZE_SMALL_WORDS (46)
 #define EIP_HW_CTX_SIZE_SMALL_BYTES (EIP_HW_CTX_SIZE_SMALL_WORDS * sizeof(uint32_t))
 
 /*
@@ -534,6 +534,7 @@
 #define EIP_HW_TOKEN_HDR_CTX_CTRL 0x02000000 	/* context control present in token. */
 #define EIP_HW_TOKEN_HDR_IV8 0x18000000 		/* 8 bytes of IV. */
 #define EIP_HW_TOKEN_HDR_IV16 0x1C000000 		/* 16 bytes of IV. */
+#define EIP_HW_TOKEN_HDR_IV_PRNG 0x04000000 		/* IV source from PRNG */
 
 #define EIP_HW_TOKEN_HDR_CMN (EIP_HW_TOKEN_HDR_BASIC | EIP_HW_TOKEN_HDR_CTX_PTR | EIP_HW_TOKEN_HDR_APP_ID)
 #define EIP_HW_TOKEN_HDR_DIGEST (EIP_HW_TOKEN_HDR_CMN | EIP_HW_TOKEN_HDR_CTX_CTRL)
@@ -543,6 +544,10 @@
 				| EIP_HW_TOKEN_HDR_BASIC)
 #define EIP_HW_TOKEN_HDR_CRYPTO_IV8 (EIP_HW_TOKEN_HDR_CRYPTO_CMN | EIP_HW_TOKEN_HDR_IV8)
 #define EIP_HW_TOKEN_HDR_CRYPTO_IV16 (EIP_HW_TOKEN_HDR_CRYPTO_CMN | EIP_HW_TOKEN_HDR_IV16)
+
+#define EIP_HW_TOKEN_HDR_IPSEC_CMN (EIP_HW_TOKEN_HDR_APP_ID | EIP_HW_TOKEN_HDR_CTX_PTR \
+				| EIP_HW_TOKEN_HDR_REUSE_CTX | EIP_HW_TOKEN_HDR_BASIC)
+#define EIP_HW_TOKEN_HDR_IPSEC_IV16 (EIP_HW_TOKEN_HDR_IPSEC_CMN | EIP_HW_TOKEN_HDR_IV16)
 
 /*
  * Command descriptor ring related macros

@@ -50,6 +50,7 @@ struct eip_ctx {
 
 	struct eip_pdev *ep;			/* EIP platform data */
 	struct dentry *dentry;			/* debugfs file node */
+	uint16_t ip_id;				/* IP indentifier for IPsec service */
 };
 
 void eip_ctx_final(struct kref *kref);

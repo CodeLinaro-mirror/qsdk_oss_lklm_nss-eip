@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -17,11 +17,13 @@
 #ifndef __EIP_TK_H
 #define __EIP_TK_H
 
-#include "../exports/eip.h"
+#include "eip.h"
 
 struct eip_tr;
 
 #define EIP_TK_INST_CONTEXT_ACCESS_LEN(words) (((words) & 0xF) << 24)
+#define EIP_TR_IPSEC_ESP_TRAILER_LEN    (2)
+#define EIP_TR_IPSEC_ESP_NXT_HDR(proto) (proto << 9)
 
 /*
  * eip_tk_ctrl_op
@@ -71,6 +73,20 @@ enum eip_tk_inst {
 	EIP_TK_INST_HMAC_ADD = 0x21E60000,	/* Insert generated hash */
 	EIP_TK_INST_HMAC_GET = 0x41E60000,	/* Retrieve hash */
 	EIP_TK_INST_HMAC_CHK = 0xD0070000,	/* Disable pad verification */
+
+	/*
+	 * Ipsec specific instuctions
+	 */
+	EIP_TK_INST_ESP_HDR_HMAC = 0x23900000,		/* Only hash ESP header */
+	EIP_TK_INST_ENC_HMAC_IPSEC = 0x07000000,	/* Encrypt then hash intermediate block */
+	EIP_TK_INST_PAD_ENC_HMAC = 0x2F220000,		/* Pad before encryption then hash */
+	EIP_TK_INST_CHK_SEQ_NO_ROLLOVER = 0xD0060000,	/* Verify sequence no rollover */
+	EIP_TK_INST_SEQ_NO_UPDT = 0xE1561800,		/* Update sequence no in context record */
+
+	EIP_TK_INST_ESP_HDR_CHK = 0x42900000,		/* ESP header authentication */
+	EIP_TK_INST_HMAC_GET_IPSEC = 0x40E60000,	/* Retrieve hash */
+	EIP_TK_INST_ICV_SPI_SEQ_NO_CHK = 0xDD070000,	/* Verify hash, SPI, Seq no */
+	EIP_TK_INST_SEQ_NO_AND_MASK_UPDT = 0xE32E1800,	/* Update sequence no & mask in context record */
 };
 
 /*
@@ -80,8 +96,7 @@ struct eip_tk {
 	uint32_t words[16];                 /* Maximum Space for Control, IV and instruction */
 } __attribute__((aligned(L1_CACHE_BYTES)));
 
-typedef uint8_t (*eip_tk_fill_t)(struct eip_tk *tk, struct eip_tr *tr,
-		eip_req_t req, uint32_t *cmd_tk_hdr);
+typedef uint8_t (*eip_tk_proc_t)(struct eip_tk *tk, struct eip_tr *tr, eip_req_t req, uint32_t *tk_hdr);
 
 /*
  * Fill token APIs.
@@ -99,5 +114,8 @@ uint8_t eip_tk_enc_3des(struct eip_tk *tk, struct eip_tr *tr, eip_req_t req, uin
 uint8_t eip_tk_dec_3des(struct eip_tk *tk, struct eip_tr *tr, eip_req_t req, uint32_t *tk_hdr);
 uint8_t eip_tk_enc_ctr_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t req, uint32_t *tk_hdr);
 uint8_t eip_tk_dec_ctr_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t req, uint32_t *tk_hdr);
+
+uint8_t eip_tk_ipsec_encauth_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *cmd_tk_hdr);
+uint8_t eip_tk_ipsec_authdec_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *cmd_tk_hdr);
 
 #endif /* __EIP_TK_H */
