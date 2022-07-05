@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -28,6 +28,7 @@
 
 struct eip_svc_entry;
 typedef bool (*eip_tr_init_t) (struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo);
+typedef void (*eip_tr_proc_t)(struct eip_tr *tr, struct sk_buff *skb);
 
 /*
  * IPsec specific Transform Record Field
@@ -111,6 +112,10 @@ typedef bool (*eip_tr_init_t) (struct eip_tr *tr, struct eip_tr_info *info, cons
 #define EIP_TR_IPSEC_PROTO_IN_GCM 11
 #define EIP_TR_IPSEC_PROTO_IN_GMAC 12
 
+#define EIP_TR_ERR_SHIFT 16
+
+#define EIP_TR_IPSEC_SKB_CB(__skb) ((struct eip_tr_ipsec_skb_cb *)&((__skb)->cb[0]))
+
 /*
  * eip_tr_stats
  *	Statistics for each transform record.
@@ -126,11 +131,14 @@ struct eip_tr_stats {
 };
 
 /*
- * eip_tr_template
+ * eip_tr_ops
  *	Template to hold callbacks.
  */
-struct eip_tr_template {
-	eip_tk_fill_t tk_fill;		/* cached Token fill method */
+struct eip_tr_ops {
+	eip_tk_proc_t tk_fill;		/* cached Token fill method */
+	eip_tr_proc_t pre, post;	/* Pre & Post processing methods */
+
+	void *app_data;			/* App data passed for callback */
 	eip_tr_callback_t cb;		/* completion callback to client */
 	eip_tr_err_callback_t err_cb;	/* completion with error callback to client */
 };
@@ -140,10 +148,9 @@ struct eip_tr_template {
  *	Crypto specific information.
  */
 struct eip_tr_crypto {
-	struct eip_tr_template enc;		/* Encode operation */
-	struct eip_tr_template dec;		/* Decode operation */
-	struct eip_tr_template auth;		/* Auth operation */
-	void *app_data;			/* Opaque to pass with callback */
+	struct eip_tr_ops enc;		/* Encode operation */
+	struct eip_tr_ops dec;		/* Decode operation */
+	struct eip_tr_ops auth;		/* Auth operation */
 };
 
 /*
@@ -151,8 +158,32 @@ struct eip_tr_crypto {
  *	IPsec specific information.
  */
 struct eip_tr_ipsec {
-	struct eip_tr_template op;	/* Transformation operation callback */
-	void *app_data;			/* Opaque to pass with callback */
+	struct eip_tr_ops ops;  		/* Transformation operation callback */
+	__be32 spi_idx;				/* SPI index */
+	__be32 src_ip[4];			/* Source IP address */
+	__be32 dst_ip[4];			/* Destination IP address */
+	__be16 src_port;			/* Source UDP port */
+	__be16 dst_port;			/* Destination UDP port */
+	uint8_t ip_version;			/* v4 or v6 */
+	uint8_t protocol;			/* ESP or UDP */
+	uint8_t df;				/* Don't fragment configuration */
+	uint8_t tos;				/* DSCP for transform record */
+	uint8_t ttl;				/* Time-to-live */
+	uint8_t seq_offset;			/* Sequence no offset in context record */
+	uint8_t hdr_len;			/* Outer header length */
+	uint8_t ip_len;				/* IP header length */
+	uint8_t bypass_len; 			/* Length of header to be bypassed (IP/IP+UDP) */
+	uint8_t fixed_len; 			/* Per packet fixed length */
+};
+
+/*
+ * eip_tr_ipsec_skb_cb
+ * 	IPsec sepcific information in skb control block
+ */
+struct eip_tr_ipsec_skb_cb {
+	uint8_t protocol;	/* Protocol for IPv4, NH for IPv6. */
+	uint8_t pad_len;	/* Padding length required for encryption */
+	uint8_t tos; 		/* IPv4 TOS or IPv6 TC value from inner */
 };
 
 /*
@@ -171,11 +202,11 @@ struct eip_tr {
 
 	uint32_t tr_addr_type;			/* TR address with lower 2-bit representing type */
 	uint32_t ctrl_words[2];			/* Initial HW control word */
-	uint32_t bypass[4];			/* Hybrid DMA bypass data */
 	uint32_t nonce;				/* nonce passed during allocation */
 	uint32_t tr_flags;			/* Flags for TR */
 	uint16_t iv_len;			/* IV length for configured algo */
 	uint16_t digest_len;			/* HMAC length for configured algo */
+	uint16_t blk_len;			/* Cipher block length for configured algo */
 
 	struct eip_tr_stats __percpu *stats_pcpu;	/* Statistisc */
 	struct kref ref;			/* Reference incremented per packet */
@@ -231,6 +262,34 @@ static inline struct eip_tr *eip_tr_ref_unless_zero(struct eip_tr *tr)
 static inline void eip_tr_deref(struct eip_tr *tr)
 {
 	kref_put(&tr->ref, eip_tr_final);
+}
+
+/*
+ * eip_tr_pre_process()
+ *	Calls pre-processing function associated with the operation (encap/decap)
+ */
+static inline void eip_tr_pre_process(struct eip_tr *tr, struct eip_tr_ops *ops, struct sk_buff *skb)
+{
+	ops->pre(tr, skb);
+}
+
+/*
+ * eip_tr_process_post()
+ *	Calls post-processing function associated with the operation (encap/decap)
+ */
+static inline void eip_tr_process_post(struct eip_tr *tr, struct eip_tr_ops *ops, struct sk_buff *skb)
+{
+	ops->post(tr, skb);
+}
+
+/*
+ * eip_tr_fill_token()
+ *	Calls token fill function associated with the operation (encap/decap)
+ */
+static inline uint16_t eip_tr_fill_token(struct eip_tr *tr, struct eip_tr_ops *ops, struct eip_tk *tk, eip_req_t req,
+					uint32_t *tk_hdr)
+{
+	return ops->tk_fill(tk, tr, req, tk_hdr);
 }
 
 #endif /* __EIP_TR_H */

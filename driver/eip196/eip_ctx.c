@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -222,9 +222,10 @@ struct eip_ctx *eip_ctx_alloc(enum eip_svc svc, struct dentry **dentry)
 		ctx->svc_db = eip_tr_ipsec_get_svc();
 		ctx->db_size = eip_tr_ipsec_get_svc_len();
 		ctx->dma = ep->la;
+		ctx->ip_id = 1;
 		break;
 	default:
-		pr_err("%px: Service database not found\n", ep);
+		pr_err("%px: Service database not found <%u>\n", ep, svc);
 		goto fail;
 	}
 
