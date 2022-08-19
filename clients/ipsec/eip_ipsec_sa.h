@@ -56,9 +56,7 @@ struct eip_ipsec_sa {
 	uint16_t tail_room;		/* Tailroom required for encapsulation */
 	struct eip_tr *tr;		/* Transform record allocated by HW */
 	struct eip_ipsec_sa_stats __percpu *stats_pcpu;	/* SA statistics */
-#if defined(EIP_IPSEC_XFRM)
 	struct xfrm_state *xs;          /* offloaded xfrm sate to use in SKB after decap. */
-#endif
 
 #if defined(EIP_IPSEC_HYBRID)
 	eip_tr_callback_t cb;		/* Callback for VP exception */

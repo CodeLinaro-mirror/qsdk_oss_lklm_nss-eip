@@ -279,10 +279,8 @@ void eip_ipsec_dev_enc_done_v6(void *app_data, eip_req_t req)
 	skb->skb_iif = sa->ndev->ifindex;
 	skb->ip_summed = CHECKSUM_COMPLETE;
 
-#if defined(EIP_IPSEC_XFRM)
 	memset(IP6CB(skb), 0, sizeof(*IP6CB(skb)));
 	IP6CB(skb)->flags |= IP6SKB_XFRM_TRANSFORMED;
-#endif
 
 	/*
 	 * Update device statistics.
@@ -360,10 +358,8 @@ void eip_ipsec_dev_enc_done_v4(void *app_data, eip_req_t req)
 	skb->skb_iif = sa->ndev->ifindex;
 	skb->ip_summed = CHECKSUM_COMPLETE;
 
-#if defined(EIP_IPSEC_XFRM)
 	memset(IPCB(skb), 0, sizeof(*IPCB(skb)));
 	IPCB(skb)->flags |= IPSKB_XFRM_TRANSFORMED;
-#endif
 
 	/*
 	 * Update device statistics.

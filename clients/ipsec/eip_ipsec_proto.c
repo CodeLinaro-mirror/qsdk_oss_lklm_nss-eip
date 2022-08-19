@@ -100,7 +100,6 @@ void eip_ipsec_proto_dec_done(void *app_data, eip_req_t req)
 	sa_stats->rx_pkts++;
 	sa_stats->rx_bytes += skb->len;
 
-#if defined(EIP_IPSEC_XFRM)
 	/*
 	 * Linux requires sp in SKB when xfrm is enabled.
 	 */
@@ -118,7 +117,6 @@ void eip_ipsec_proto_dec_done(void *app_data, eip_req_t req)
 		xfrm_state_hold(sa->xs);
 		sp->xvec[sp->len++] = sa->xs;
 	}
-#endif
 
 	/*
 	 * Reset General SKB fields for further processing.

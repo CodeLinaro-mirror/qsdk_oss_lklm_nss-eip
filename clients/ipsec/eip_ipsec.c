@@ -171,7 +171,6 @@ int __init eip_ipsec_init_module(void)
 		goto fail_ppe;
 	}
 
-#if defined(EIP_IPSEC_XFRM)
 	/*
 	 * XFRM offload initialization.
 	 */
@@ -180,16 +179,13 @@ int __init eip_ipsec_init_module(void)
 		pr_err("%px: Failed to initialize xfrm offload, error(%d)\n", drv, err);
 		goto fail_xfrm;
 	}
-#endif
 
 	kref_init(&drv->ref);
 	pr_info("eip ipsec module loaded\n");
 	return 0;
 
-#if defined(EIP_IPSEC_XFRM)
 fail_xfrm:
 	eip_ipsec_ppe_deinit();
-#endif
 fail_ppe:
 	eip_ipsec_proto_esp_deinit();
 esp_init:
@@ -217,10 +213,7 @@ void __exit eip_ipsec_exit_module(void)
 	 */
 	wait_for_completion(&drv->completion);
 
-#if defined(EIP_IPSEC_XFRM)
 	eip_ipsec_xfrm_exit();
-#endif
-
 	eip_ipsec_ppe_deinit();
 
 	/*

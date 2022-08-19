@@ -13,11 +13,7 @@ $(EIP_IPSEC_MOD_NAME)-objs += eip_ipsec.o
 $(EIP_IPSEC_MOD_NAME)-objs += eip_ipsec_dev.o
 $(EIP_IPSEC_MOD_NAME)-objs += eip_ipsec_sa.o
 $(EIP_IPSEC_MOD_NAME)-objs += eip_ipsec_proto.o
-
-ifeq ($(strip ${EIP_IPSEC_XFRM}),1)
-ccflags-y+=-DEIP_IPSEC_XFRM
 $(EIP_IPSEC_MOD_NAME)-objs += eip_ipsec_xfrm.o
-endif
 
 obj ?= .
 EIP_IPSEC_INCLUDE = -I$(obj)/../../driver/exports

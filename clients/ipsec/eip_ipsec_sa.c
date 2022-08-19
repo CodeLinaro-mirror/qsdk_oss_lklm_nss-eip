@@ -619,9 +619,7 @@ int eip_ipsec_sa_add(struct net_device *ndev, struct eip_ipsec_data *data, struc
 		goto fail_tr;
 	}
 
-#if defined(EIP_IPSEC_XFRM)
 	sa->xs = data->xs;
-#endif
 
 	if (!encap && udp_encap) {
 		eip_ipsec_proto_udp_sock_override(t);
@@ -672,11 +670,7 @@ void eip_ipsec_sa_del(struct net_device *ndev, struct eip_ipsec_tuple *t)
 	 * Wait for all outstanding SA operation.
 	 */
 	wait_for_completion(&sa->completion);
-
-#if defined(EIP_IPSEC_XFRM)
 	sa->xs = NULL;
-#endif
-
 	dev_put(sa->ndev);
 	dst_cache_destroy(&sa->dst_cache);
 	free_percpu(sa->stats_pcpu);

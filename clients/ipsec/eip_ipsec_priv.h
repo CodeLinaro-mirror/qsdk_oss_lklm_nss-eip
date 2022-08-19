@@ -32,10 +32,7 @@
 #include "eip_ipsec_sa.h"
 #include "eip_ipsec_dev.h"
 #include "eip_ipsec_proto.h"
-
-#if defined(EIP_IPSEC_XFRM)
-	#include "eip_ipsec_xfrm.h"
-#endif
+#include "eip_ipsec_xfrm.h"
 
 #if defined(EIP_IPSEC_HYBRID)
 	#define EIP_IPSEC_DEFAULT_SVC EIP_SVC_HYBRID_IPSEC
