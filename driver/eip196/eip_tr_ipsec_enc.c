@@ -33,9 +33,8 @@
  * SPI, seq no, IV & ICV will be inserted by EIP196 hardware
  * Return value is the aligned length
  */
-static inline uint16_t eip_tr_ipsec_enc_len(struct eip_tr *tr, struct sk_buff *skb)
+static inline uint16_t eip_tr_ipsec_enc_len(struct eip_tr *tr, struct sk_buff *skb, uint16_t payload_len)
 {
-	uint16_t payload_len = skb->len;
 	uint16_t total_len;
 	uint16_t pad_len;
 
@@ -64,7 +63,7 @@ static void eip_tr_ipsec_enc_tun4(struct eip_tr *tr, struct sk_buff *skb)
 	 * Calculate the required pad length and update post encap payload length
 	 */
 	skb_reset_inner_network_header(skb);
-	payload_len = eip_tr_ipsec_enc_len(tr, skb) + ipsec->fixed_len;
+	payload_len = eip_tr_ipsec_enc_len(tr, skb, skb->len) + ipsec->fixed_len;
 
 	switch(ip_hdr(skb)->version) {
 	case IPVERSION:
@@ -77,13 +76,13 @@ static void eip_tr_ipsec_enc_tun4(struct eip_tr *tr, struct sk_buff *skb)
 		 */
 		df = (tr->tr_flags & EIP_TR_IPSEC_FLAG_CP_DF) ? iph->frag_off & htons(IP_DF) : htons(ipsec->df);
 		df = !skb->ignore_df ? df : 0;
-		EIP_TR_IPSEC_SKB_CB(skb)->protocol = IPPROTO_IPIP;
+		EIP_TR_IPSEC_SKB_CB(skb)->ip_proto = IPPROTO_IPIP;
 		break;
 
 	default:
 		tos = (tr->tr_flags & EIP_TR_IPSEC_FLAG_CP_TOS) ? ipv6_get_dsfield(ipv6_hdr(skb)) : ipsec->tos;
 		df = !skb->ignore_df ? htons(IP_DF) : 0;
-		EIP_TR_IPSEC_SKB_CB(skb)->protocol = IPPROTO_IPV6;
+		EIP_TR_IPSEC_SKB_CB(skb)->ip_proto = IPPROTO_IPV6;
 		break;
 	}
 
@@ -109,6 +108,7 @@ static void eip_tr_ipsec_enc_tun4(struct eip_tr *tr, struct sk_buff *skb)
 	 */
 	iph = (struct iphdr *)skb_push(skb, sizeof(struct iphdr));
 	skb_reset_network_header(skb);
+	skb_set_transport_header(skb, sizeof(struct iphdr));
 
 	iph->version = IPVERSION;
 	iph->ihl = sizeof(struct iphdr) >> 2;
@@ -143,18 +143,18 @@ static void eip_tr_ipsec_enc_tun6(struct eip_tr *tr, struct sk_buff *skb)
 	/*
 	 * Calculate the required pad length and update post encap payload length
 	 */
-	payload_len = eip_tr_ipsec_enc_len(tr, skb) + ipsec->fixed_len;
+	payload_len = eip_tr_ipsec_enc_len(tr, skb, skb->len) + ipsec->fixed_len;
 
 	switch(ipv6_hdr(skb)->version) {
 	case IPVERSION:
 		tos = (tr->tr_flags & EIP_TR_IPSEC_FLAG_CP_TOS) ? ip_hdr(skb)->tos : ipsec->tos;
-		EIP_TR_IPSEC_SKB_CB(skb)->protocol = IPPROTO_IPIP;
+		EIP_TR_IPSEC_SKB_CB(skb)->ip_proto = IPPROTO_IPIP;
 		break;
 
 	default:
 		ip6h = ipv6_hdr(skb);
 		tos = (tr->tr_flags & EIP_TR_IPSEC_FLAG_CP_TOS) ? ipv6_get_dsfield(ip6h) : ipsec->tos;
-		EIP_TR_IPSEC_SKB_CB(skb)->protocol = IPPROTO_IPV6;
+		EIP_TR_IPSEC_SKB_CB(skb)->ip_proto = IPPROTO_IPV6;
 		break;
 	}
 
@@ -165,6 +165,7 @@ static void eip_tr_ipsec_enc_tun6(struct eip_tr *tr, struct sk_buff *skb)
 	 */
 	ip6h = skb_push(skb, sizeof(struct ipv6hdr));
 	skb_reset_network_header(skb);
+	skb_set_transport_header(skb, sizeof(struct ipv6hdr));
 
 	ip6_flow_hdr(ip6h, tos, 0);
 
@@ -174,6 +175,62 @@ static void eip_tr_ipsec_enc_tun6(struct eip_tr *tr, struct sk_buff *skb)
 
 	memcpy(ip6h->saddr.s6_addr32, ipsec->src_ip, sizeof(ip6h->saddr.s6_addr32));
 	memcpy(ip6h->daddr.s6_addr32, ipsec->dst_ip, sizeof(ip6h->daddr.s6_addr32));
+}
+
+/*
+ * eip_tr_ipsec_enc_trans4()
+ * 	Header update for transport mode before encapsulation
+ */
+static void eip_tr_ipsec_enc_trans4(struct eip_tr *tr, struct sk_buff *skb)
+{
+	struct eip_tr_ipsec *ipsec = &tr->ipsec;
+	struct iphdr *iph = ip_hdr(skb);
+	uint16_t payload_len;
+
+	/*
+	 * Calculate the required pad length and update post encap payload length
+	 */
+	payload_len = eip_tr_ipsec_enc_len(tr, skb, skb->len - sizeof(struct iphdr)) + ipsec->fixed_len;
+	EIP_TR_IPSEC_SKB_CB(skb)->ip_proto = iph->protocol;
+
+	/*
+	 * Update total length post encap, protocol & checksum in IPv4 header
+	 */
+	iph->tot_len = htons(payload_len);
+	iph->protocol = IPPROTO_ESP;
+
+	/*
+	 * TODO: Update checksum with modified fields only
+	 */
+	iph->check = 0;
+	iph->check = ip_fast_csum((unsigned char *)iph, iph->ihl);
+
+	/*
+	 * TODO: handle NATT case
+	 */
+}
+
+/*
+ * eip_tr_ipsec_enc_trans6()
+ *	Header update for transport mode before encapsulation
+ */
+static void eip_tr_ipsec_enc_trans6(struct eip_tr *tr, struct sk_buff *skb)
+{
+	struct eip_tr_ipsec *ipsec = &tr->ipsec;
+	struct ipv6hdr *ip6h = ipv6_hdr(skb);
+	uint16_t payload_len;
+
+	/*
+	 * Calculate the required pad length and update post encap payload length
+	 */
+	payload_len = eip_tr_ipsec_enc_len(tr, skb, skb->len - sizeof(struct ipv6hdr)) + ipsec->fixed_len ;
+	EIP_TR_IPSEC_SKB_CB(skb)->ip_proto = ip6h->nexthdr;
+
+	/*
+	 * update total length post encap and next header in IPv6 header
+	 */
+	ip6h->payload_len = htons(payload_len);
+	ip6h->nexthdr = IPPROTO_ESP;
 }
 
 /*
@@ -213,8 +270,6 @@ void eip_tr_ipsec_enc_done(struct eip_tr *tr, struct eip_hw_desc *hw, struct eip
 	 */
 	skb = eip_req2skb(sw->req);
 	skb_put(skb, out_len - skb->len);
-	skb_reset_network_header(skb);
-	skb_set_transport_header(skb, ipsec->ip_len);
 
 	/*
 	 * Call the client callback.
@@ -320,11 +375,12 @@ void eip_tr_ipsec_enc_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
 	uint8_t bypass_len = 0;
         uint8_t seq_offset;
 	uint8_t addr_len;
+	bool esn, natt;
         uint32_t size;
 	uint32_t mode;
 
-        uint8_t esn = !!(ipsec->sa_flags & EIP_TR_IPSEC_FLAG_ESN);
-        uint8_t natt = !!(ipsec->sa_flags & EIP_TR_IPSEC_FLAG_UDP);
+        esn = ipsec->sa_flags & EIP_TR_IPSEC_FLAG_ESN;
+        natt = ipsec->sa_flags & EIP_TR_IPSEC_FLAG_UDP;
 
 	tr->ipsec.ops.tk_fill = algo->enc_tk_fill;
 
@@ -427,21 +483,37 @@ void eip_tr_ipsec_enc_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
 		tr_ipsec->bypass_len = bypass_len;
 		tr_ipsec->fixed_len = bypass_len + tr->iv_len + sizeof(struct ip_esp_hdr) + tr->digest_len;
 		tr_ipsec->ops.pre = eip_tr_ipsec_enc_tun4;
-		tr_ipsec->ip_len = sizeof(struct iphdr);
 		addr_len = sizeof(uint32_t);
 		break;
+
 	case (EIP_TR_IPSEC_FLAG_TUNNEL | EIP_TR_IPSEC_FLAG_IPV6):
 		tr_ipsec->bypass_len = sizeof(struct ipv6hdr);
 		tr_ipsec->fixed_len = tr->iv_len + sizeof(struct ip_esp_hdr) + tr->digest_len;
 		tr_ipsec->ops.pre = eip_tr_ipsec_enc_tun6;
-		tr_ipsec->ip_len = sizeof(struct ipv6hdr);
 		addr_len = sizeof(struct in6_addr);
 		break;
 	/*
-	 * TODO: add support for transport mode
+	 * Transport mode
 	 */
-	default:
+	case EIP_TR_IPSEC_FLAG_IPV6:
+		tr_ipsec->bypass_len = sizeof(struct ipv6hdr);
+		tr_ipsec->fixed_len = tr->iv_len + sizeof(struct ip_esp_hdr) + tr->digest_len;
+		tr_ipsec->ops.pre = eip_tr_ipsec_enc_trans6;
+		addr_len = sizeof(struct in6_addr);
+		break;
+
+	case EIP_TR_IPSEC_FLAG_UDP:
+		/*
+		 * TODO: Add support
+		 */
 		BUG_ON(1);
+		break;
+	default:
+		bypass_len += sizeof(struct iphdr);
+		tr_ipsec->bypass_len = bypass_len;
+		tr_ipsec->fixed_len = bypass_len + tr->iv_len + sizeof(struct ip_esp_hdr) + tr->digest_len;
+		tr_ipsec->ops.pre = eip_tr_ipsec_enc_trans4;
+		addr_len = sizeof(uint32_t);
 		break;
 	}
 

@@ -33,7 +33,7 @@ uint8_t eip_tk_ipsec_encauth_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t
         uint16_t auth_len = sizeof(struct ip_esp_hdr) + tr->iv_len;
 	uint16_t data_len = skb->len;
         uint8_t pad_len = EIP_TR_IPSEC_SKB_CB(skb)->pad_len;
-	uint8_t proto = EIP_TR_IPSEC_SKB_CB(skb)->protocol;
+	uint8_t proto = EIP_TR_IPSEC_SKB_CB(skb)->ip_proto;
         uint8_t digest_len = tr->digest_len;
 
         /*

@@ -170,9 +170,8 @@ struct eip_tr_ipsec {
 	uint8_t tos;				/* DSCP for transform record */
 	uint8_t ttl;				/* Time-to-live */
 	uint8_t seq_offset;			/* Sequence no offset in context record */
-	uint8_t hdr_len;			/* Outer header length */
-	uint8_t ip_len;				/* IP header length */
-	uint8_t bypass_len; 			/* Length of header to be bypassed (IP/IP+UDP) */
+	uint8_t remove_len;			/* Length of headers to be removed */
+	uint8_t bypass_len; 			/* Length of headers to be bypassed (IP/IP+UDP) */
 	uint8_t fixed_len; 			/* Per packet fixed length */
 };
 
@@ -181,7 +180,7 @@ struct eip_tr_ipsec {
  * 	IPsec sepcific information in skb control block
  */
 struct eip_tr_ipsec_skb_cb {
-	uint8_t protocol;	/* Protocol for IPv4, NH for IPv6. */
+	uint8_t ip_proto;	/* Protocol for IPv4, NH for IPv6. */
 	uint8_t pad_len;	/* Padding length required for encryption */
 };
 
