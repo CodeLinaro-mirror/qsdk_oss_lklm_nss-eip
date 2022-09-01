@@ -523,6 +523,18 @@ int eip_ipsec_sa_add(struct net_device *ndev, struct eip_ipsec_data *data, struc
 	encap = (data->base.flags & EIP_IPSEC_FLAG_ENC);
 	udp_encap = (data->base.flags & EIP_IPSEC_FLAG_UDP);
 
+	pr_debug("%p: algo_name %s, icv_len %u, flags %u replay_win %u df %u dscp %u hop_limit %u\n",
+		ndev, data->base.algo_name, data->base.icv_len, data->base.flags, data->replay_win, data->df,
+		data->dscp, data->hop_limit);
+
+	if (t->ip_version == IPVERSION) {
+		pr_debug("%p: src:%pI4h dst:%pI4h spi:0x%X sport:%u dport:%u proto:%u\n",
+				ndev, t->src_ip, t->dest_ip, t->esp_spi, t->sport, t->dport, t->protocol);
+	} else {
+		pr_debug("%p: src:%pI6 dst:%pI6 spi:0x%X sport:%u dport:%u proto:%u\n",
+				ndev, t->src_ip, t->dest_ip, t->esp_spi, t->sport, t->dport, t->protocol);
+	}
+
 	/*
 	 * Sanity checks:
 	 * 	Algorithm is supported by hardware.

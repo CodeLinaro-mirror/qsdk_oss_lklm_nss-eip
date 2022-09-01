@@ -373,7 +373,6 @@ static int eip_ipsec_xfrm_sa_data_init(struct xfrm_state *xs, struct eip_ipsec_d
 	uint8_t ttl_hop_limit;
 	struct dst_entry *dst;
 	struct rt6_info *rt6;
-	uint32_t replay_win;
 	struct rtable *rt;
 	int ret;
 
@@ -454,9 +453,10 @@ static int eip_ipsec_xfrm_sa_data_init(struct xfrm_state *xs, struct eip_ipsec_d
 
 	/*
 	 * TODO: what is the correct value to be set for df, dscp, icv_len fields ?
+	 * TODO: XFRM only support 32bit. Check if there is any seperate option.
+	 * replay_win is in bits.
 	 */
-	replay_win = xs->props.replay_window / BITS_PER_BYTE;
-	sa_data->replay_win = replay_win & (IPSEC_XFRM_SA_MAX_REPLAY_WIN_SZ - 1);
+	sa_data->replay_win = xs->props.replay_window;
 	return 0;
 }
 
