@@ -871,7 +871,7 @@ int eip_tr_ipsec_enc(struct eip_tr *tr, struct sk_buff *skb)
 	/*
 	 * Allocate SW descriptor.
 	 */
-	sw = kmem_cache_alloc(ctx->sw_cache, GFP_KERNEL);
+	sw = kmem_cache_alloc(ctx->sw_cache, GFP_NOWAIT | __GFP_NOWARN);
 	if (!sw) {
 		pr_err("%px: Failed to allocate SW descriptor.\n", tr);
 		return -ENOMEM;
@@ -933,7 +933,7 @@ int eip_tr_ipsec_dec(struct eip_tr *tr, struct sk_buff *skb)
 	/*
 	 * Allocate SW descriptor.
 	 */
-	sw = kmem_cache_alloc(ctx->sw_cache, GFP_KERNEL);
+	sw = kmem_cache_alloc(ctx->sw_cache, GFP_NOWAIT | __GFP_NOWARN);
 	if (!sw) {
 		pr_err("%px: Failed to allocate SW descriptor.\n", tr);
 		return -ENOMEM;

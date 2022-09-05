@@ -142,7 +142,7 @@ static void eip_tr_inval(struct work_struct *work)
 	/*
 	 * Allocate SW descriptor.
 	 */
-	sw = kmem_cache_alloc(ctx->sw_cache, GFP_KERNEL);
+	sw = kmem_cache_alloc(ctx->sw_cache, GFP_NOWAIT | __GFP_NOWARN);
 	if (!sw) {
 		pr_warn("%px: Failed to allocate SW descriptor; Rescheduling..\n", tr);
 		schedule_delayed_work(&tr->inval_work, EIP_TR_INVAL_TIMEOUT);

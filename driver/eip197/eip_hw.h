@@ -576,6 +576,7 @@
 #define EIP_HW_MST_CTRL (EIP_HW_DEBUG_BASE + 0XFF4)
 #define EIP_HW_OPTION (EIP_HW_DEBUG_BASE + 0xFF8)
 #define EIP_HW_VERSION (EIP_HW_DEBUG_BASE + 0xFFC)
+#define EIP_HW_CDR_CLK_ON (1 << 3)
 
 /*
  * Reset

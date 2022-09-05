@@ -538,7 +538,7 @@ int eip_ipsec_sa_add(struct net_device *ndev, struct eip_ipsec_data *data, struc
 		return -EEXIST;
 	}
 
-	sa = kzalloc(sizeof(*sa), GFP_ATOMIC);
+	sa = kzalloc(sizeof(*sa), GFP_KERNEL);
 	if (!sa) {
 		pr_warn("%px: Failed to allocate SA\n", ndev);
 		return -ENOMEM;

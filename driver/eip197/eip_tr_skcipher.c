@@ -332,7 +332,7 @@ int eip_tr_skcipher_enc(struct eip_tr *tr, struct skcipher_request *req)
 	/*
 	 * Allocate HW token.
 	 */
-	tk = kmem_cache_alloc(ctx->tk_cache, GFP_KERNEL);
+	tk = kmem_cache_alloc(ctx->tk_cache, GFP_NOWAIT | __GFP_NOWARN);
 	if (!tk) {
 		pr_err("%px: Failed to allocate token.\n", tr);
 		return -ENOMEM;
@@ -348,7 +348,7 @@ int eip_tr_skcipher_enc(struct eip_tr *tr, struct skcipher_request *req)
 	/*
 	 * Allocate SW descriptor.
 	 */
-	sw = kmem_cache_alloc(ctx->sw_cache, GFP_KERNEL);
+	sw = kmem_cache_alloc(ctx->sw_cache, GFP_NOWAIT | __GFP_NOWARN);
 	if (!sw) {
 		pr_err("%px: Failed to allocate SW descriptor.\n", tr);
 		status = -ENOMEM;
@@ -409,7 +409,7 @@ int eip_tr_skcipher_dec(struct eip_tr *tr, struct skcipher_request *req)
 	/*
 	 * Allocate HW token.
 	 */
-	tk = kmem_cache_alloc(ctx->tk_cache, GFP_KERNEL);
+	tk = kmem_cache_alloc(ctx->tk_cache, GFP_NOWAIT | __GFP_NOWARN);
 	if (!tk) {
 		pr_err("%px: Failed to allocate token.\n", tr);
 		return -ENOMEM;
@@ -425,7 +425,7 @@ int eip_tr_skcipher_dec(struct eip_tr *tr, struct skcipher_request *req)
 	/*
 	 * Allocate SW descriptor.
 	 */
-	sw = kmem_cache_alloc(ctx->sw_cache, GFP_KERNEL);
+	sw = kmem_cache_alloc(ctx->sw_cache, GFP_NOWAIT | __GFP_NOWARN);
 	if (!sw) {
 		pr_err("%px: Failed to allocate SW descriptor.\n", tr);
 		status = -ENOMEM;
