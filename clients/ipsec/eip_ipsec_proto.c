@@ -104,18 +104,24 @@ void eip_ipsec_proto_dec_done(void *app_data, eip_req_t req)
 	 * Linux requires sp in SKB when xfrm is enabled.
 	 */
 	if (sa->xs) {
+		struct xfrm_state *x = sa->xs;
 		struct sec_path *sp;
+
 		sp = secpath_set(skb);
 		if(!sp) {
 			sa_stats->fail_sp_alloc++;
-			dev_stats->rx_fail++;
-			eip_ipsec_sa_deref(sa);
-			consume_skb(skb);
-			return;
+			goto drop;
 		}
 
-		xfrm_state_hold(sa->xs);
-		sp->xvec[sp->len++] = sa->xs;
+		/*
+		 * TODO: Add API in linux xfrm_state_try_hold() ?
+		 * This is needed to solve race condition with final ref_put() by Linux.
+		 */
+		if (unlikely(!refcount_inc_not_zero(&x->refcnt))) {
+			goto drop;
+		}
+
+		sp->xvec[sp->len++] = x;
 	}
 
 	/*
@@ -144,6 +150,12 @@ void eip_ipsec_proto_dec_done(void *app_data, eip_req_t req)
 	netif_receive_skb(skb);
 	eip_ipsec_sa_deref(sa);
 	return;
+
+drop:
+	dev_stats->rx_fail++;
+	eip_ipsec_sa_deref(sa);
+	consume_skb(skb);
+	return;
 }
 
 /*
@@ -156,31 +168,12 @@ static inline int eip_ipsec_proto_esp_rx(struct eip_ipsec_sa *sa, struct sk_buff
 	struct eip_ipsec_dev_stats *dev_stats;
 	struct eip_ipsec_sa_stats *sa_stats;
 	unsigned int len;
-	bool expand_skb;
 	int error;
 
 	sa_stats = this_cpu_ptr(sa->stats_pcpu);
 	dev_stats = this_cpu_ptr(eid->stats_pcpu);
 	dev_stats->rx_host++;
 	len = skb->len;
-
-	/*
-	 * Unshare the SKB as we will be modifying it.
-	 */
-	if (unlikely(skb_shared(skb))) {
-		skb = skb_unshare(skb, in_atomic() ? GFP_ATOMIC : GFP_KERNEL);
-		if (!skb)
-			return 0;
-	}
-
-
-	expand_skb = (skb_cloned(skb) || (skb_headroom(skb) < sa->head_room) || (skb_tailroom(skb) < sa->tail_room));
-	if (expand_skb && pskb_expand_head(skb, sa->head_room, sa->tail_room, GFP_KERNEL)) {
-		pr_debug("%px: Failed to expand SKB with headroom(%u) tailroom(%u)\n",
-				sa, skb_headroom(skb), skb_tailroom(skb));
-		sa_stats->fail_expand++;
-		goto fail;
-	}
 
 	/*
 	 * skb->data points to ESP or UDP header. So, We need to push ip header.

@@ -87,7 +87,7 @@ static ssize_t eip_ipsec_dev_read(struct file *fp, char __user *ubuf, size_t sz,
 
 	buf = vzalloc(max_len);
 	if (!buf) {
-		pr_warn("%px: failed to allocate print buffer (%lu)", eid, max_len);
+		pr_warn("%px: failed to allocate print buffer (%zu)", eid, max_len);
 		return 0;
 	}
 
@@ -485,7 +485,7 @@ static netdev_tx_t eip_ipsec_dev_tx(struct sk_buff *skb, struct net_device *ndev
 	 * Unshare the SKB as we will be modifying it.
 	 */
 	if (unlikely(skb_shared(skb))) {
-		skb = skb_unshare(skb, in_atomic() ? GFP_ATOMIC : GFP_KERNEL);
+		skb = skb_unshare(skb, GFP_NOWAIT | __GFP_NOWARN);
 		if (!skb) {
 			dev_stats->tx_fail++;
 			return NETDEV_TX_OK;
@@ -505,7 +505,7 @@ static netdev_tx_t eip_ipsec_dev_tx(struct sk_buff *skb, struct net_device *ndev
 	sa_stats = this_cpu_ptr(sa->stats_pcpu);
 
 	expand_skb = (skb_cloned(skb) || (skb_headroom(skb) < sa->head_room) || (skb_tailroom(skb) < sa->tail_room));
-	if (expand_skb && pskb_expand_head(skb, sa->head_room, sa->tail_room, GFP_KERNEL)) {
+	if (expand_skb && pskb_expand_head(skb, sa->head_room, sa->tail_room, GFP_NOWAIT | __GFP_NOWARN)) {
 		pr_debug("%px: Failed to expand SKB with headroom(%u) tailroom(%u)\n",
 				ndev, skb_headroom(skb), skb_tailroom(skb));
 		sa_stats->fail_expand++;

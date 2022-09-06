@@ -34,7 +34,7 @@
 struct eip_crypto_ahash_req_ctx {
 	uint32_t buf_count;			/* Buffer input count to limit 1 update per req */
 	uint32_t diglen;			/* Digest length */
-	size_t flags;			/* Update the result in final completion function */
+	unsigned long flags;			/* Update the result in final completion function */
 	uint8_t digest[SHA512_DIGEST_SIZE];	/* Storage for resultant digest */
 	struct scatterlist res;			/* Resultant scatterlist */
 };

@@ -738,6 +738,11 @@ int eip_hw_init(struct platform_device *pdev)
 	iowrite32(EIP_HW_ENB_MDATA, base_addr + EIP_HW_METADATA_EN_OFFSET);
 
 	/*
+	 * Force CDR clock enable to workaround PROC Counter update.
+	 */
+	iowrite32(EIP_HW_CDR_CLK_ON, base_addr + EIP_HW_FORCE_CLOCK_ON);
+
+	/*
 	 * Disable ECN check.
 	 */
 	iowrite32(EIP_HW_PE_EIP96_ECN_DISABLE, base_addr + EIP_HW_PE_EIP96_ECN_TABLE(0));
