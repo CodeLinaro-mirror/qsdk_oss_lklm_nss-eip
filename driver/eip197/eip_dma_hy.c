@@ -405,7 +405,7 @@ int eip_dma_hy_rx(struct eip_dma *dma, int budget)
 
 		/*
 		 * Non-linear data. Set our head to descriptor with first flag.
-		 * Initialize list for chained fragments.
+		 * This condition will be always true for first descritor in chain. Hence, head_skb will be always assigned.
 		 */
 		if (EIP_HW_RES_FLAGS_FIRST & res->frag[0]) {
 			head_skb = skb;
@@ -466,7 +466,7 @@ deliver:
 		dma_stats->rx_pkts++;
 		dma_stats->rx_bytes += head_skb->len;
 
-		if (err && eip_dma_hy_classify_err(dma, skb, res)) {
+		if (err && eip_dma_hy_classify_err(dma, head_skb, res)) {
 			goto next;
 		}
 
