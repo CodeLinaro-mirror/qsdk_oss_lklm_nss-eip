@@ -536,8 +536,13 @@ static int eip_ipsec_xfrm_state_add(struct xfrm_state *xs)
 	 */
 	dev = eip_ipsec_dev_get_by_id(xs->props.reqid);
 	if (!dev) {
-		pr_debug("%p: Netdevice not created for this id; Add device %d\n", xs, xs->props.reqid);
+		pr_debug("%p: Netdevice not created for reqid(%d); Add device\n", xs, xs->props.reqid);
 		dev = eip_ipsec_dev_add();
+		if (!dev) {
+			pr_err("%p: Netdevice creation failed for reqid(%d)\n", xs, xs->props.reqid);
+			return -ENODEV;
+		}
+
 		eip_ipsec_dev_link_id(dev, xs->props.reqid);
 	}
 
