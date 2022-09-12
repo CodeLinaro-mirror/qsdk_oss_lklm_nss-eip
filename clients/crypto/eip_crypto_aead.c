@@ -382,6 +382,11 @@ static int eip_crypto_aead_tfm_init(struct crypto_aead *aead_tfm)
 	INIT_LIST_HEAD(&tfm_ctx->entry);
 
 	/*
+	 * Decrement: eip_crypto_aead_tfm_exit()
+	 */
+	atomic_inc(&tfm_ctx->usage_count);
+
+	/*
 	 * Allocate memory for per cpu stats.
 	 */
 	tfm_ctx->stats = alloc_percpu_gfp(struct eip_crypto_tfm_stats, GFP_KERNEL | __GFP_ZERO);

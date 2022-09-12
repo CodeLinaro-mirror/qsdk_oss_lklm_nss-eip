@@ -160,6 +160,11 @@ static int eip_crypto_skcipher_tfm_init(struct crypto_skcipher *sk_tfm)
 	INIT_LIST_HEAD(&tfm_ctx->entry);
 
 	/*
+	 * Decrement:eip_crypto_skcipher_tfm_exit()
+	 */
+	atomic_inc(&tfm_ctx->usage_count);
+
+	/*
 	 * Allocate memory for per cpu stats.
 	 */
 	tfm_ctx->stats = alloc_percpu_gfp(struct eip_crypto_tfm_stats, GFP_KERNEL | __GFP_ZERO);
@@ -677,6 +682,7 @@ static int eip_crypto_skcipher_decrypt(struct skcipher_request *req)
 	ret = eip_tr_skcipher_dec(tr, req);
 	if (ret) {
 		rcu_read_unlock();
+		atomic_dec(&tfm_ctx->usage_count);
 		pr_debug("%px: Decryption error: %d.\n", tfm_ctx, ret);
 		tfm_stats->tx_failures++;
 		sk_stats->tx_failures++;
