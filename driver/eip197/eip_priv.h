@@ -18,13 +18,14 @@
 #define __EIP_PRIV_H
 
 #include <linux/platform_device.h>
-
+#include <linux/ip.h>
 #include "../exports/eip.h"
 #include "eip_dma.h"
 #include "eip_hw.h"
 #include "eip_ctx.h"
 #include "eip_tk.h"
 #include "eip_tr.h"
+#include "eip_flow.h"
 
 #define EIP_MAX_STR_LEN 25		/* Maximum string length */
 #define EIP_DEBUGFS_MAX_NAME 128	/* Maximum string length for debugfs */
@@ -37,6 +38,8 @@
 #define EIP_RX_BUFFER_DATA_LEN 1500
 #define EIP_RX_BUFFER_SIZE ((EIP_RX_BUFFER_HEADROOM) + (EIP_RX_BUFFER_TAILROOM) + (EIP_RX_BUFFER_DATA_LEN))
 
+#define ASSERT(x) \
+do { if (unlikely(!(x))) { panic("ASSERT FAILED at (%s:%d): %s\n", __FILE__, __LINE__, #x); } } while (0)
 
 /*
  * eip_svc_entry
@@ -112,10 +115,14 @@ struct eip_pdev {
 	struct eip_dma la[NR_CPUS];		/* Lookaside DMA object per CPU */
 	struct eip_dma hy[NR_CPUS];		/* Hybrid DMA object per CPU */
 	struct kmem_cache *tr_cache;		/* Transform Record cache */
+	struct kmem_cache *flow_swcache;	/* Flow Record cache */
+	struct eip_flow_hw *flow_hwcache;       /* DMA memory for HW flow */
 	struct dentry *dentry;			/* Driver debugfs dentry */
 	void __iomem *dev_vaddr;		/* starting virtual address of device */
 	dma_addr_t dev_paddr;			/* starting physical address of device */
+	dma_addr_t hwcache_paddr;		/* Physical address for HW flow */
 	bool redirect_en;			/* Redirection / Hybrid mode is configured */
+	struct eip_flow_tbl flow_table;		/* Flow table */
 };
 
 extern struct eip_drv eip_drv_g;	/* Global Driver object */
