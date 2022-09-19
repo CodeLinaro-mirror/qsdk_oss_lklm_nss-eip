@@ -63,7 +63,7 @@ static int eip_ipsec_ppe_init(void)
 	drv->iface = iface;
 	return 0;
 #else
-	pr_debug("%px: PPE is not enabled", eip_ipsec_drv_g);
+	pr_debug("%px: PPE is not enabled", &eip_ipsec_drv_g);
 	return 0;
 #endif
 }
@@ -89,7 +89,7 @@ static void eip_ipsec_ppe_deinit(void)
 	ppe_drv_iface_deref(drv->iface);
 	drv->iface = NULL;
 #else
-	pr_debug("%px: PPE is not enabled", eip_ipsec_drv_g);
+	pr_debug("%px: PPE is not enabled", &eip_ipsec_drv_g);
 #endif
 }
 /*
