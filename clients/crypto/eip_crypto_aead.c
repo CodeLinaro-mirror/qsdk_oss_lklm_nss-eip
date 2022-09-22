@@ -47,7 +47,7 @@ static int eip_crypto_aead_decrypt(struct aead_request *req);
 static struct aead_alg eip_crypto_aead_algs[] = {
 	{
 		/*
-		 * aes-cbc, sha1
+		 * aes-cbc, MD5
 		 */
 		.base = {
 			.cra_name 	= "echainiv(authenc(hmac(md5),cbc(aes)))",
@@ -63,7 +63,7 @@ static struct aead_alg eip_crypto_aead_algs[] = {
 		.init 		= eip_crypto_aead_tfm_init,
 		.exit 		= eip_crypto_aead_tfm_exit,
 		.ivsize 	= AES_BLOCK_SIZE,
-		.maxauthsize 	= SHA1_DIGEST_SIZE,
+		.maxauthsize 	= MD5_DIGEST_SIZE,
 		.setkey 	= eip_crypto_aead_setkey,
 		.encrypt 	= eip_crypto_aead_encrypt,
 		.decrypt 	= eip_crypto_aead_decrypt,
