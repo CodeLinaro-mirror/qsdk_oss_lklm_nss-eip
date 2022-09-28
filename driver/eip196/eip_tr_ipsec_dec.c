@@ -81,10 +81,9 @@ void eip_tr_ipsec_dec_done(struct eip_tr *tr, struct eip_hw_desc *hw, struct eip
 
 	/*
 	 * After successful Transformation SKB data length needs to be decreased.
-	 * TODO: Fix for nonlinear skb
 	 */
 	skb = eip_req2skb(sw->req);
-	skb_trim(skb, out_len);
+	pskb_trim(skb, out_len);
 	skb_reset_network_header(skb);
 
 	/*
