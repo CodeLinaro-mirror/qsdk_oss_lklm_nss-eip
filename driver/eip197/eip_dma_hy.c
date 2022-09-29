@@ -334,6 +334,7 @@ int eip_dma_hy_rx(struct eip_dma *dma, int budget)
 	uint32_t true_len = 0;
 	uint32_t list_len = 0;
 	uint32_t prod_words;
+	uint32_t old_cidx;
 
 
 	__skb_queue_head_init(&list);
@@ -351,7 +352,7 @@ int eip_dma_hy_rx(struct eip_dma *dma, int budget)
 	}
 
 	avail = avail > budget ? budget : avail;
-	processed = avail;
+	old_cidx = out_cidx;
 
 	/*
 	 * Invalidate the descriptor we are going to read.
@@ -500,7 +501,10 @@ next:
 
 	/*
 	 * Acknowledge HW for result descriptor.
+	 * We may have not processed last few descriptor due to incomplete SG.
+	 * Hence, find actual processed count using diff of old consumer index and new consumer index.
 	 */
+	processed = EIP_DMA_AVAIL_COUNT(atomic_read(&dma->out.cons_idx), old_cidx);
 	iowrite32(EIP_HW_PROC_CNT_DESC_SZ(EIP_HW_DESC_WORDS * processed), dma->out.proc_cnt);
 
 	return processed;
