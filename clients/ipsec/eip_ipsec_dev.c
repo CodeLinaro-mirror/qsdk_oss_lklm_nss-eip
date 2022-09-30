@@ -750,8 +750,8 @@ struct net_device *eip_ipsec_dev_add(void)
 {
 	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
 	struct eip_ipsec_dev *eid;
-	bool rlock;
 	struct net_device *ndev;
+	bool rlock = false;
 	int status;
 
 	/*

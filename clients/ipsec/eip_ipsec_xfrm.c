@@ -46,12 +46,12 @@ struct eip_ipsec_xfrm_algo {
 
 static struct eip_ipsec_xfrm_algo xfrm_algo[] = {
 	{.algo_name = "echainiv(authenc(hmac(sha1),cbc(aes)))", .driver_name = "eip-aes-cbc-sha1-hmac"},
-	{.algo_name = "echainiv(authenc(hmac(sha1),cbc(des3_ede)))", .driver_name = "eip-des3_ede-cbc-sha1-hmac"},
+	{.algo_name = "echainiv(authenc(hmac(sha1),cbc(des3_ede)))", .driver_name = "eip-3des-cbc-sha1-hmac"},
 	{.algo_name = "echainiv(authenc(hmac(md5),cbc(aes)))", .driver_name = "eip-aes-cbc-md5-hmac"},
-	{.algo_name = "echainiv(authenc(hmac(md5),cbc(des3_ede)))", .driver_name = "eip-des3_ede-cbc-md5-hmac"},
+	{.algo_name = "echainiv(authenc(hmac(md5),cbc(des3_ede)))", .driver_name = "eip-3des-cbc-md5-hmac"},
 	{.algo_name = "echainiv(authenc(hmac(sha1),ecb(cipher_null)))", .driver_name = "eip-cipher_null-ecb-sha1-hmac"},
 	{.algo_name = "echainiv(authenc(hmac(sha256),cbc(aes)))", .driver_name = "eip-aes-cbc-sha256-hmac"},
-	{.algo_name = "echainiv(authenc(hmac(sha256),cbc(des3_ede)))", .driver_name = "eip-des3_ede-cbc-sha256-hmac"},
+	{.algo_name = "echainiv(authenc(hmac(sha256),cbc(des3_ede)))", .driver_name = "eip-3des-cbc-sha256-hmac"},
 	{.algo_name = "echainiv(authenc(hmac(sha256),ecb(cipher_null)))", .driver_name = "eip-cipher_null-ecb-sha256-hmac"},
 };
 
@@ -536,8 +536,13 @@ static int eip_ipsec_xfrm_state_add(struct xfrm_state *xs)
 	 */
 	dev = eip_ipsec_dev_get_by_id(xs->props.reqid);
 	if (!dev) {
-		pr_debug("%p: Netdevice not created for this id; Add device %d\n", xs, xs->props.reqid);
+		pr_debug("%p: Netdevice not created for reqid(%d); Add device\n", xs, xs->props.reqid);
 		dev = eip_ipsec_dev_add();
+		if (!dev) {
+			pr_err("%p: Netdevice creation failed for reqid(%d)\n", xs, xs->props.reqid);
+			return -ENODEV;
+		}
+
 		eip_ipsec_dev_link_id(dev, xs->props.reqid);
 	}
 
