@@ -91,52 +91,6 @@ static struct aead_alg eip_crypto_aead_algs[] = {
 		.encrypt 	= eip_crypto_aead_encrypt,
 		.decrypt 	= eip_crypto_aead_decrypt,
 	},
-	{
-		/*
-		 * aes-ctr-rfc3686, md5
-		 */
-		.base = {
-			.cra_name       = "seqiv(authenc(hmac(md5),rfc3686(ctr(aes))))",
-			.cra_driver_name = "eip-aes-ctr-rfc3686-md5-hmac",
-			.cra_priority   = 10000,
-			.cra_flags      = CRYPTO_ALG_ASYNC,
-			.cra_blocksize  = AES_BLOCK_SIZE,
-			.cra_ctxsize    = sizeof(struct eip_crypto_tfm_ctx),
-			.cra_alignmask  = 0,
-			.cra_module     = THIS_MODULE,
-		},
-
-		.init 		= eip_crypto_aead_tfm_init,
-		.exit 		= eip_crypto_aead_tfm_exit,
-		.ivsize 	= CTR_RFC3686_IV_SIZE,
-		.maxauthsize 	= MD5_DIGEST_SIZE,
-		.setkey 	= eip_crypto_aead_setkey,
-		.encrypt 	= eip_crypto_aead_encrypt,
-		.decrypt 	= eip_crypto_aead_decrypt,
-	},
-	{
-		/*
-		 * aes-ctr-rfc3686, sha1
-		 */
-		.base = {
-			.cra_name       = "seqiv(authenc(hmac(sha1),rfc3686(ctr(aes))))",
-			.cra_driver_name = "eip-aes-ctr-rfc3686-sha1-hmac",
-			.cra_priority   = 10000,
-			.cra_flags      = CRYPTO_ALG_ASYNC,
-			.cra_blocksize  = AES_BLOCK_SIZE,
-			.cra_ctxsize    = sizeof(struct eip_crypto_tfm_ctx),
-			.cra_alignmask  = 0,
-			.cra_module     = THIS_MODULE,
-		},
-
-		.init 		= eip_crypto_aead_tfm_init,
-		.exit 		= eip_crypto_aead_tfm_exit,
-		.ivsize 	= CTR_RFC3686_IV_SIZE,
-		.maxauthsize 	= SHA1_DIGEST_SIZE,
-		.setkey 	= eip_crypto_aead_setkey,
-		.encrypt 	= eip_crypto_aead_encrypt,
-		.decrypt 	= eip_crypto_aead_decrypt,
-	},
 	{	/*
 		 * aes-cbc, sha256
 		 */
@@ -155,74 +109,6 @@ static struct aead_alg eip_crypto_aead_algs[] = {
 		.exit 		= eip_crypto_aead_tfm_exit,
 		.ivsize 	= AES_BLOCK_SIZE,
 		.maxauthsize 	= SHA256_DIGEST_SIZE,
-		.setkey 	= eip_crypto_aead_setkey,
-		.encrypt 	= eip_crypto_aead_encrypt,
-		.decrypt 	= eip_crypto_aead_decrypt,
-	},
-	{	/*
-		 * aes-ctr-rfc3686, sha256
-		 */
-		.base = {
-			.cra_name       = "seqiv(authenc(hmac(sha256),rfc3686(ctr(aes))))",
-			.cra_driver_name = "eip-aes-ctr-rfc3686-sha256-hmac",
-			.cra_priority   = 10000,
-			.cra_flags      = CRYPTO_ALG_ASYNC,
-			.cra_blocksize  = AES_BLOCK_SIZE,
-			.cra_ctxsize    = sizeof(struct eip_crypto_tfm_ctx),
-			.cra_alignmask  = 0,
-			.cra_module     = THIS_MODULE,
-		},
-
-		.init 		= eip_crypto_aead_tfm_init,
-		.exit 		= eip_crypto_aead_tfm_exit,
-		.ivsize 	= CTR_RFC3686_IV_SIZE,
-		.maxauthsize 	= SHA256_DIGEST_SIZE,
-		.setkey 	= eip_crypto_aead_setkey,
-		.encrypt 	= eip_crypto_aead_encrypt,
-		.decrypt 	= eip_crypto_aead_decrypt,
-	},
-	{
-		/*
-		 * aes-ctr-rfc3686, sha384
-		 */
-		.base = {
-			.cra_name       = "seqiv(authenc(hmac(sha384),rfc3686(ctr(aes))))",
-			.cra_driver_name = "eip-aes-ctr-rfc3686-sha384-hmac",
-			.cra_priority   = 10000,
-			.cra_flags      = CRYPTO_ALG_ASYNC,
-			.cra_blocksize  = AES_BLOCK_SIZE,
-			.cra_ctxsize    = sizeof(struct eip_crypto_tfm_ctx),
-			.cra_alignmask  = 0,
-			.cra_module     = THIS_MODULE,
-		},
-
-		.init 		= eip_crypto_aead_tfm_init,
-		.exit 		= eip_crypto_aead_tfm_exit,
-		.ivsize 	= CTR_RFC3686_IV_SIZE,
-		.maxauthsize 	= SHA384_DIGEST_SIZE,
-		.setkey 	= eip_crypto_aead_setkey,
-		.encrypt 	= eip_crypto_aead_encrypt,
-		.decrypt 	= eip_crypto_aead_decrypt,
-	},
-	{
-		/*
-		 * aes-ctr-rfc3686, sha512
-		 */
-		.base = {
-			.cra_name       = "seqiv(authenc(hmac(sha512),rfc3686(ctr(aes))))",
-			.cra_driver_name = "eip-aes-ctr-rfc3686-sha512-hmac",
-			.cra_priority   = 10000,
-			.cra_flags      = CRYPTO_ALG_ASYNC,
-			.cra_blocksize  = AES_BLOCK_SIZE,
-			.cra_ctxsize    = sizeof(struct eip_crypto_tfm_ctx),
-			.cra_alignmask  = 0,
-			.cra_module     = THIS_MODULE,
-		},
-
-		.init 		= eip_crypto_aead_tfm_init,
-		.exit 		= eip_crypto_aead_tfm_exit,
-		.ivsize 	= CTR_RFC3686_IV_SIZE,
-		.maxauthsize 	= SHA512_DIGEST_SIZE,
 		.setkey 	= eip_crypto_aead_setkey,
 		.encrypt 	= eip_crypto_aead_encrypt,
 		.decrypt 	= eip_crypto_aead_decrypt,
