@@ -52,6 +52,7 @@ static struct eip_ipsec_xfrm_algo xfrm_algo[] = {
 	{.algo_name = "echainiv(authenc(hmac(sha1),ecb(cipher_null)))", .driver_name = "eip-cipher_null-ecb-sha1-hmac"},
 	{.algo_name = "echainiv(authenc(hmac(sha256),cbc(aes)))", .driver_name = "eip-aes-cbc-sha256-hmac"},
 	{.algo_name = "echainiv(authenc(hmac(sha256),cbc(des3_ede)))", .driver_name = "eip-3des-cbc-sha256-hmac"},
+	{.algo_name = "seqiv(rfc4106(gcm(aes)))", .driver_name = "eip-aes-gcm-rfc4106"},
 	{.algo_name = "echainiv(authenc(hmac(sha256),ecb(cipher_null)))", .driver_name = "eip-cipher_null-ecb-sha256-hmac"},
 };
 
@@ -278,7 +279,7 @@ const char *eip_ipsec_xfrm_get_algo(const char *algo_name)
 		return xalg->driver_name;
 	}
 
-	pr_warn("Db entry not found for the given algorithm\n");
+	pr_warn("Db entry not found for the given algorithm <%s>\n", algo_name);
 	return NULL;
 }
 
@@ -505,8 +506,8 @@ static void eip_ipsec_xfrm_sa_tuple_init(struct xfrm_state *xs, struct eip_ipsec
  */
 static int eip_ipsec_xfrm_state_add(struct xfrm_state *xs)
 {
-	struct eip_ipsec_tuple sa_tuple;
-	struct eip_ipsec_data sa_data;
+	struct eip_ipsec_tuple sa_tuple = {0};
+	struct eip_ipsec_data sa_data = {0};
 	struct net_device *dev;
 	int ret;
 
