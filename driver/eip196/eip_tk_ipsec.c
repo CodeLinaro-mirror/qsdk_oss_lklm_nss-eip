@@ -24,7 +24,7 @@
  * eip_tk_ipsec_encauth_cbc()
  *      Fill tokens for ipsec outbound traffic.
  */
-uint8_t eip_tk_ipsec_encauth_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *cmd_tk_hdr)
+uint8_t eip_tk_ipsec_encauth_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr)
 {
         struct sk_buff *skb = eip_req2skb(eip_req);
 	struct eip_tr_ipsec *ipsec = &tr->ipsec;
@@ -54,8 +54,8 @@ uint8_t eip_tk_ipsec_encauth_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t
         /*
          * Fill token header
          */
-        *cmd_tk_hdr |= EIP_HW_TOKEN_HDR_IPSEC_CMN | EIP_HW_TOKEN_HDR_IV_PRNG;
-        *cmd_tk_hdr |= EIP_HW_TOKEN_HDR_OUTBOUND | data_len;
+        *tk_hdr |= EIP_HW_TOKEN_HDR_IPSEC_CMN | EIP_HW_TOKEN_HDR_IV_PRNG;
+        *tk_hdr |= EIP_HW_TOKEN_HDR_OUTBOUND | data_len;
 
         /*
          * Total token words.
@@ -68,7 +68,7 @@ EXPORT_SYMBOL(eip_tk_ipsec_encauth_cbc);
  * eip_tk_ipsec_authdec_cbc()
  *      Fill tokens for ipsec inbound traffic.
  */
-uint8_t eip_tk_ipsec_authdec_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *cmd_tk_hdr)
+uint8_t eip_tk_ipsec_authdec_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr)
 {
         struct sk_buff *skb = eip_req2skb(eip_req);
 	struct eip_tr_ipsec *ipsec = &tr->ipsec;
@@ -103,8 +103,8 @@ uint8_t eip_tk_ipsec_authdec_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t
         /*
          * Fill token header
          */
-        *cmd_tk_hdr |= EIP_HW_TOKEN_HDR_IPSEC_IV16;
-        *cmd_tk_hdr |= EIP_HW_TOKEN_HDR_INBOUND | data_len;
+        *tk_hdr |= EIP_HW_TOKEN_HDR_IPSEC_IV16;
+        *tk_hdr |= EIP_HW_TOKEN_HDR_INBOUND | data_len;
 
         /*
          * Total token words.
