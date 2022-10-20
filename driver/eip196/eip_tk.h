@@ -114,8 +114,12 @@ uint8_t eip_tk_enc_3des(struct eip_tk *tk, struct eip_tr *tr, eip_req_t req, uin
 uint8_t eip_tk_dec_3des(struct eip_tk *tk, struct eip_tr *tr, eip_req_t req, uint32_t *tk_hdr);
 uint8_t eip_tk_enc_ctr_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t req, uint32_t *tk_hdr);
 uint8_t eip_tk_dec_ctr_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t req, uint32_t *tk_hdr);
+uint8_t eip_tk_encauth_gcm(struct eip_tk *tk, struct eip_tr *tr, eip_req_t req, uint32_t *tk_hdr);
+uint8_t eip_tk_authdec_gcm(struct eip_tk *tk, struct eip_tr *tr, eip_req_t req, uint32_t *tk_hdr);
+uint8_t eip_tk_encauth_gcm_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t req, uint32_t *tk_hdr);
+uint8_t eip_tk_authdec_gcm_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t req, uint32_t *tk_hdr);
 
-uint8_t eip_tk_ipsec_encauth_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *cmd_tk_hdr);
-uint8_t eip_tk_ipsec_authdec_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *cmd_tk_hdr);
+uint8_t eip_tk_ipsec_encauth_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr);
+uint8_t eip_tk_ipsec_authdec_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr);
 
 #endif /* __EIP_TK_H */
