@@ -576,6 +576,7 @@
 #define EIP_HW_MST_CTRL (EIP_HW_DEBUG_BASE + 0XFF4)
 #define EIP_HW_OPTION (EIP_HW_DEBUG_BASE + 0xFF8)
 #define EIP_HW_VERSION (EIP_HW_DEBUG_BASE + 0xFFC)
+#define EIP_HW_CDR_CLK_ON (1 << 3)
 
 /*
  * Reset
@@ -806,6 +807,12 @@
 #define EIP_HW_PROC_DESC_SZ(x) (((x) & 0xFFFFFF) >> 2)
 #define EIP_HW_PREP_DESC_SZ(x) (((x) & 0xFFFFFF) >> 2)
 #define EIP_HW_RING_DESC_SZ(x) ((x) << 2)
+
+/*
+ * Macros to store table size for hardware flow table
+ */
+#define EIP_HW_FLUE_CONFIG_TABLE_SZ 3   /* Max val 1 to 15 */
+#define EIP_HW_FLUE_CONFIG_VAL ((EIP_HW_FLUE_CONFIG_TABLE_SZ << 4) | (3 << 30))
 
 /*
  * error macros.

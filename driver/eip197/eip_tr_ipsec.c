@@ -251,6 +251,7 @@ static void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *inf
 	uint32_t *crypt_words = tr->hw_words;
 	uint32_t *tr_words = tr->hw_words;
 	uint8_t seq_num_offst;
+	uint8_t mask_sz;
 	uint32_t size;
 
 	uint8_t esn = !!(ipsec->sa_flags & EIP_TR_IPSEC_FLAG_ESN);
@@ -301,12 +302,19 @@ static void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *inf
 	 * - Sequence mask to support window size.
 	 */
 	*crypt_words++ = ntohl(ipsec->spi_idx);
-	*crypt_words++ = 0x1;
+	*crypt_words++ = 0x0;
 	seq_num_offst = crypt_words - tr_words - 1;
 	if (esn)
 		*crypt_words++ = 0;
 
-	crypt_words += eip_tr_ipsec_get_replay_words(ipsec->replay);
+	/*
+	 * Set all bits to '1' in mask. For 32bit we need to set extra word to '1'.
+	 */
+	mask_sz = eip_tr_ipsec_get_replay_words(ipsec->replay);
+	mask_sz += ipsec->replay == EIP_IPSEC_REPLAY_32 ? 1 : 0;
+	while (mask_sz--) {
+		*crypt_words++ = 0xFFFFFFFF;
+	}
 
 	/*
 	 * Done with EIP crypto context words.
@@ -871,7 +879,7 @@ int eip_tr_ipsec_enc(struct eip_tr *tr, struct sk_buff *skb)
 	/*
 	 * Allocate SW descriptor.
 	 */
-	sw = kmem_cache_alloc(ctx->sw_cache, GFP_KERNEL);
+	sw = kmem_cache_alloc(ctx->sw_cache, GFP_NOWAIT | __GFP_NOWARN);
 	if (!sw) {
 		pr_err("%px: Failed to allocate SW descriptor.\n", tr);
 		return -ENOMEM;
@@ -933,7 +941,7 @@ int eip_tr_ipsec_dec(struct eip_tr *tr, struct sk_buff *skb)
 	/*
 	 * Allocate SW descriptor.
 	 */
-	sw = kmem_cache_alloc(ctx->sw_cache, GFP_KERNEL);
+	sw = kmem_cache_alloc(ctx->sw_cache, GFP_NOWAIT | __GFP_NOWARN);
 	if (!sw) {
 		pr_err("%px: Failed to allocate SW descriptor.\n", tr);
 		return -ENOMEM;

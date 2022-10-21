@@ -34,7 +34,7 @@
 struct eip_crypto_ahash_req_ctx {
 	uint32_t buf_count;			/* Buffer input count to limit 1 update per req */
 	uint32_t diglen;			/* Digest length */
-	size_t flags;			/* Update the result in final completion function */
+	unsigned long flags;			/* Update the result in final completion function */
 	uint8_t digest[SHA512_DIGEST_SIZE];	/* Storage for resultant digest */
 	struct scatterlist res;			/* Resultant scatterlist */
 };
@@ -402,6 +402,11 @@ int eip_crypto_ahash_cra_init(struct crypto_tfm *base)
 	INIT_LIST_HEAD(&tfm_ctx->entry);
 
 	/*
+	 * eip_crypto_ahash_cra_exit()
+	 */
+	atomic_inc(&tfm_ctx->usage_count);
+
+	/*
 	 * Allocate memory for per cpu stats.
 	 */
 	tfm_ctx->stats = alloc_percpu_gfp(struct eip_crypto_tfm_stats, GFP_KERNEL | __GFP_ZERO);
@@ -443,7 +448,7 @@ void eip_crypto_ahash_cra_exit(struct crypto_tfm *tfm)
 	 * Once the last packet get processed, reference count will become
 	 * 0 this ctx. We will wait for the reference to go down to 0.
 	 */
-	if (!atomic_read(&tfm_ctx->usage_count)) {
+	if (!atomic_sub_and_test(1, &tfm_ctx->usage_count)) {
 		pr_debug("%px: AHASH waiting for usage count(%d) to become 0.\n", tfm_ctx,
 				atomic_read(&tfm_ctx->usage_count));
 		wait_for_completion(&tfm_ctx->complete);

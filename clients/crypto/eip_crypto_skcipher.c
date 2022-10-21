@@ -84,7 +84,7 @@ static struct skcipher_alg eip_crypto_skcipher_algo[] = {
 
 		.init 		= eip_crypto_skcipher_tfm_init,
 		.exit 		= eip_crypto_skcipher_tfm_exit,
-		.ivsize 	= AES_BLOCK_SIZE,
+		.ivsize 	= CTR_RFC3686_IV_SIZE,
 		.min_keysize 	= AES_MIN_KEY_SIZE + CTR_RFC3686_NONCE_SIZE,
 		.max_keysize 	= AES_MAX_KEY_SIZE + CTR_RFC3686_NONCE_SIZE,
 		.setkey 	= eip_crypto_skcipher_setkey,
@@ -158,6 +158,11 @@ static int eip_crypto_skcipher_tfm_init(struct crypto_skcipher *sk_tfm)
 	memset(tfm_ctx, 0, sizeof(*tfm_ctx));
 	init_completion(&tfm_ctx->complete);
 	INIT_LIST_HEAD(&tfm_ctx->entry);
+
+	/*
+	 * Decrement:eip_crypto_skcipher_tfm_exit()
+	 */
+	atomic_inc(&tfm_ctx->usage_count);
 
 	/*
 	 * Allocate memory for per cpu stats.
@@ -677,6 +682,7 @@ static int eip_crypto_skcipher_decrypt(struct skcipher_request *req)
 	ret = eip_tr_skcipher_dec(tr, req);
 	if (ret) {
 		rcu_read_unlock();
+		atomic_dec(&tfm_ctx->usage_count);
 		pr_debug("%px: Decryption error: %d.\n", tfm_ctx, ret);
 		tfm_stats->tx_failures++;
 		sk_stats->tx_failures++;

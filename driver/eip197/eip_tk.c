@@ -324,8 +324,9 @@ EXPORT_SYMBOL(eip_tk_auth);
 uint8_t eip_tk_encauth_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *cmd_tk_hdr)
 {
 	struct aead_request *req = eip_req2aead_request(eip_req);
+	struct crypto_aead *tfm = crypto_aead_reqtfm(req);
 	uint16_t data_len = req->cryptlen + req->assoclen;
-	uint16_t auth_digest_len = tr->digest_len;
+	uint16_t digest_len = crypto_aead_authsize(tfm);
 	uint32_t *iv_word = (uint32_t *)req->iv;
 	uint16_t auth_len = req->assoclen;
 	uint32_t *tk_word = tk->words;
@@ -350,7 +351,7 @@ uint8_t eip_tk_encauth_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_r
 	*tk_word++ = EIP_TK_INST_HMAC | auth_len;			/* Pure hash. */
 	*tk_word++ = EIP_TK_INST_ENC_HMAC | (data_len - auth_len);	/* Encryption + Hash. */
 	*tk_word++ = EIP_TK_INST_NOPAD_ENC_HMAC;			/* Don't pad before enc + hash.*/
-	*tk_word++ = EIP_TK_INST_HMAC_ADD | auth_digest_len;		/* Insert generated hash.*/
+	*tk_word++ = EIP_TK_INST_HMAC_ADD | digest_len;			/* Insert generated hash.*/
 
 	/*
 	 * Fill token header.
@@ -372,8 +373,9 @@ EXPORT_SYMBOL(eip_tk_encauth_cbc);
 uint8_t eip_tk_authdec_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *cmd_tk_hdr)
 {
 	struct aead_request *req = eip_req2aead_request(eip_req);
+	struct crypto_aead *tfm = crypto_aead_reqtfm(req);
 	uint16_t data_len = req->cryptlen + req->assoclen;
-	uint16_t auth_digest_len = tr->digest_len;
+	uint16_t digest_len = crypto_aead_authsize(tfm);
 	uint32_t *iv_word = (uint32_t *)req->iv;
 	uint16_t auth_len = req->assoclen;
 	uint32_t *tk_word = tk->words;
@@ -396,9 +398,9 @@ uint8_t eip_tk_authdec_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_r
 	 * Fill instructions.
 	 */
 	*tk_word++ = EIP_TK_INST_HMAC | auth_len;					/* Pure hash */
-	*tk_word++ = EIP_TK_INST_HMAC_DEC | (data_len - auth_len - auth_digest_len);	/* Perform hash before decryption. */
-	*tk_word++ = EIP_TK_INST_HMAC_GET | auth_digest_len;				/* Fetch hash/pad */
-	*tk_word++ = EIP_TK_INST_HMAC_CHK | auth_digest_len;				/* Verify hash */
+	*tk_word++ = EIP_TK_INST_HMAC_DEC | (data_len - auth_len - digest_len);		/* Perform hash before decryption. */
+	*tk_word++ = EIP_TK_INST_HMAC_GET | digest_len;					/* Fetch hash/pad */
+	*tk_word++ = EIP_TK_INST_HMAC_CHK | digest_len;					/* Verify hash */
 
 	/*
 	 * Fill token control data.
@@ -420,8 +422,9 @@ EXPORT_SYMBOL(eip_tk_authdec_cbc);
 uint8_t eip_tk_encauth_ctr_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *cmd_tk_hdr)
 {
 	struct aead_request *req = eip_req2aead_request(eip_req);
+	struct crypto_aead *tfm = crypto_aead_reqtfm(req);
 	uint16_t data_len = req->cryptlen + req->assoclen;
-	uint16_t auth_digest_len = tr->digest_len;
+	uint16_t digest_len = crypto_aead_authsize(tfm);
 	uint32_t *iv_word = (uint32_t *)req->iv;
 	uint16_t auth_len = req->assoclen;
 	uint32_t *tk_word = tk->words;
@@ -450,7 +453,7 @@ uint8_t eip_tk_encauth_ctr_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t e
 	*tk_word++ = EIP_TK_INST_HMAC | auth_len;			/* Pure hash */
 	*tk_word++ = EIP_TK_INST_ENC_HMAC | (data_len - auth_len);	/* Encryption + Hash */
 	*tk_word++ = EIP_TK_INST_NOPAD_ENC_HMAC;			/* Don't do padding */
-	*tk_word++ = EIP_TK_INST_HMAC_ADD | auth_digest_len;		/* Insert hash */
+	*tk_word++ = EIP_TK_INST_HMAC_ADD | digest_len;			/* Insert hash */
 
 	/*
 	 * Fill token header.
@@ -472,8 +475,9 @@ EXPORT_SYMBOL(eip_tk_encauth_ctr_rfc);
 uint8_t eip_tk_authdec_ctr_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *cmd_tk_hdr)
 {
 	struct aead_request *req = eip_req2aead_request(eip_req);
+	struct crypto_aead *tfm = crypto_aead_reqtfm(req);
 	uint16_t data_len = req->cryptlen + req->assoclen;
-	uint16_t auth_digest_len = tr->digest_len;
+	uint16_t digest_len = crypto_aead_authsize(tfm);
 	uint32_t *iv_word = (uint32_t *)req->iv;
 	uint16_t auth_len = req->assoclen;
 	uint32_t *tk_word = tk->words;
@@ -500,9 +504,9 @@ uint8_t eip_tk_authdec_ctr_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t e
 	 * Fill instructions.
 	 */
 	*tk_word++ = EIP_TK_INST_HMAC | auth_len;					/* Pure hash */
-	*tk_word++ = EIP_TK_INST_HMAC_DEC | (data_len - auth_len - auth_digest_len);	/* Encryption + Hash */
-	*tk_word++ = EIP_TK_INST_HMAC_GET | auth_digest_len;				/* Fetch hash/pad */
-	*tk_word++ = EIP_TK_INST_HMAC_CHK | auth_digest_len;				/* Verify hash */
+	*tk_word++ = EIP_TK_INST_HMAC_DEC | (data_len - auth_len - digest_len);		/* Encryption + Hash */
+	*tk_word++ = EIP_TK_INST_HMAC_GET | digest_len;					/* Fetch hash/pad */
+	*tk_word++ = EIP_TK_INST_HMAC_CHK | digest_len;					/* Verify hash */
 
 	/*
 	 * Fill control header.

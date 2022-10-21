@@ -694,8 +694,9 @@ void eip_hw_deinit(struct platform_device *pdev)
 	}
 
 	/*
-	 * TODO: Deinitialize the flow lookup table.
+	 * Deinitialize the flow table
 	 */
+	eip_flow_table_deinit(pdev);
 }
 
 /*
@@ -736,6 +737,11 @@ int eip_hw_init(struct platform_device *pdev)
 	 * input to output.
 	 */
 	iowrite32(EIP_HW_ENB_MDATA, base_addr + EIP_HW_METADATA_EN_OFFSET);
+
+	/*
+	 * Force CDR clock enable to workaround PROC Counter update.
+	 */
+	iowrite32(EIP_HW_CDR_CLK_ON, base_addr + EIP_HW_FORCE_CLOCK_ON);
 
 	/*
 	 * Disable ECN check.
@@ -881,8 +887,13 @@ int eip_hw_init(struct platform_device *pdev)
 		iowrite32(cfg, base_addr + EIP_HW_OCE_OPUE_REDIRECT_CFG);
 
 		/*
-		 * TODO: Initialize hardware flow lookup table.
+		 * Initialize hardware flow lookup table.
 		 */
+		if(!(eip_flow_table_init(pdev))) {
+			pr_err("%px: Failed to initializ flow table\n",pdev);
+			goto fail_init;
+		}
+
 		pr_info("%px: Redirection enabled, map(%x) error ring(%u)\n", pdev, redirect_en, err_redir_ring);
 	}
 
