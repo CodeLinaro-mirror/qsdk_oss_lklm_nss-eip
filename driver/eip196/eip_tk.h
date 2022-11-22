@@ -81,12 +81,18 @@ enum eip_tk_inst {
 	EIP_TK_INST_ENC_HMAC_IPSEC = 0x07000000,	/* Encrypt then hash intermediate block */
 	EIP_TK_INST_PAD_ENC_HMAC = 0x2F220000,		/* Pad before encryption then hash */
 	EIP_TK_INST_CHK_SEQ_NO_ROLLOVER = 0xD0060000,	/* Verify sequence no rollover */
-	EIP_TK_INST_SEQ_NO_UPDT = 0xE0561800,		/* Update sequence no in context record */
+	EIP_TK_INST_SEQ_NO_AND_MASK_UPDT = 0xE02E1800,	/* Update sequence no /and mask in context record */
 
 	EIP_TK_INST_ESP_HDR_CHK = 0x42900000,		/* ESP header authentication */
 	EIP_TK_INST_HMAC_GET_IPSEC = 0x40E60000,	/* Retrieve hash */
 	EIP_TK_INST_ICV_SPI_SEQ_NO_CHK = 0xDD070000,	/* Verify hash, SPI, Seq no */
-	EIP_TK_INST_SEQ_NO_AND_MASK_UPDT = 0xE02E1800,	/* Update sequence no & mask in context record */
+
+	EIP_TK_INST_ESP_HDR_GCM = 0x2B900000,		/* Only hash ESP header for GCM */
+	EIP_TK_INST_INS_IV_GCM = 0x21A80000,		/* Insert IV without authentication */
+	EIP_TK_INST_SCH_RM_Y0_OUT = 0xA0800000,		/* Schedule removal of Y0 */
+
+	EIP_TK_INST_ESP_HDR_CHK_GCM = 0x4A900000,	/* ESP header authentication */
+	EIP_TK_INST_REM_IV_GCM = 0x40A80000,		/* Remove IV without authentication */
 };
 
 /*
@@ -121,5 +127,8 @@ uint8_t eip_tk_authdec_gcm_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t r
 
 uint8_t eip_tk_ipsec_encauth_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr);
 uint8_t eip_tk_ipsec_authdec_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr);
+uint8_t eip_tk_ipsec_encauth_gcm_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr);
+uint8_t eip_tk_ipsec_authdec_gcm_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr);
+
 
 #endif /* __EIP_TK_H */

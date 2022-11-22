@@ -266,7 +266,7 @@ static uint32_t eip_tr_ipsec_get_replay_seq_mask(enum eip_ipsec_replay replay)
  * eip_tr_ipsec_dec_cmn_init()
  *      Initialize the transform record for ipsec Decapsulation.
  */
-void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo, bool nonce_en)
+void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo)
 {
         struct eip_tr_info_ipsec *ipsec = &info->ipsec;
 	struct eip_tr_ipsec *tr_ipsec = &tr->ipsec;
@@ -311,12 +311,13 @@ void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
         crypt_words += (crypto->cipher.key_len /  sizeof(uint32_t));
 
         /*
-         * Leave the space for inner & outer digest.
+         * Leave the space for inner & outer digest / GHASH key
+	 * For GCM we store only GHASH key of size auth_block_len
+	 * and for other algo we store inner & outer digest each
+	 * of size auth_state_len
          */
-        size = algo->auth_state_len;
-        crypt_words += (size / sizeof(uint32_t)); /* ipad */
-        crypt_words += (size / sizeof(uint32_t)); /* opad */
-
+	size = algo->auth_state_len ? (algo->auth_state_len *2) : algo->auth_block_len;
+	crypt_words += (size / sizeof(uint32_t));
 
         /*
          * IPsec specific fields for EIP96.
@@ -347,7 +348,7 @@ void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
 	/*
          * Fill nonce.
          */
-        if (nonce_en)
+        if (crypto->nonce)
                 *crypt_words++ = crypto->nonce;
 
         /*
