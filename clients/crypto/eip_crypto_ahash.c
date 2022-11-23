@@ -853,7 +853,7 @@ int eip_crypto_ahash_update(struct ahash_request *req)
 	 */
 	ret = eip_tr_ahash_auth(tr, req, &rctx->res);
 	if (ret) {
-		pr_warn("%px: Authentication error: %d\n", rctx, ret);
+		pr_debug("%px: Authentication error: %d\n", rctx, ret);
 		atomic_dec(&tfm_ctx->usage_count);
 		clear_bit(EIP_CRYPTO_AHASH_IN_PROG_BIT, &rctx->flags);
 		rcu_read_unlock();
