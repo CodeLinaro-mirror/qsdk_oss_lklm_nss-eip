@@ -415,22 +415,22 @@ void eip_tr_ipsec_enc_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
         crypt_words += (size / sizeof(uint32_t)); /* opad */
 
         /*
-         * Fill nonce.
-         */
-        if (nonce_en)
-                *crypt_words++ = crypto->nonce;
-
-        /*
          * IPsec specific fields for EIP96.
          * - SPI in Host order (1 word)
          * - Sequence number start (2 words for ESN else 1 word)
          */
         *crypt_words++ = ntohl(ipsec->spi_idx);
-        *crypt_words++ = 0x1;
+        *crypt_words++ = 0x0;
         seq_offset = crypt_words - tr_words - 1;
 
         if (esn)
                 *crypt_words++ = 0;
+
+	/*
+	 * Fill nonce.
+	 */
+	if (nonce_en)
+		*crypt_words++ = crypto->nonce;
 
         /*
          * Done with EIP crypto context words.

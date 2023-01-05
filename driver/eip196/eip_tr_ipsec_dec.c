@@ -274,6 +274,7 @@ void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
         uint32_t *tr_words = tr->hw_words;
         uint8_t seq_offset;
 	bool esn, natt;
+	uint8_t mask_sz;
         uint32_t size;
 	uint32_t mode;
 
@@ -314,11 +315,6 @@ void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
         crypt_words += (size / sizeof(uint32_t)); /* ipad */
         crypt_words += (size / sizeof(uint32_t)); /* opad */
 
-        /*
-         * Fill nonce.
-         */
-        if (nonce_en)
-                *crypt_words++ = crypto->nonce;
 
         /*
          * IPsec specific fields for EIP96.
@@ -327,12 +323,25 @@ void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
          * - Sequence mask to support window size.
          */
         *crypt_words++ = ntohl(ipsec->spi_idx);
-        *crypt_words++ = 0x1;
+        *crypt_words++ = 0x0;
         seq_offset = crypt_words - tr_words - 1;
         if (esn)
                 *crypt_words++ = 0;
 
-        crypt_words += eip_tr_ipsec_get_replay_words(ipsec->replay);
+	/*
+	 * Set all bits to '1' in mask. For 32bit we need to set extra word to '1'.
+	 */
+        mask_sz = eip_tr_ipsec_get_replay_words(ipsec->replay);
+	mask_sz += (ipsec->replay == EIP_IPSEC_REPLAY_32) ? 1 : 0;
+	while (mask_sz--) {
+		*crypt_words++ = 0xFFFFFFFF;
+	}
+
+	/*
+         * Fill nonce.
+         */
+        if (nonce_en)
+                *crypt_words++ = crypto->nonce;
 
         /*
          * Done with EIP crypto context words.

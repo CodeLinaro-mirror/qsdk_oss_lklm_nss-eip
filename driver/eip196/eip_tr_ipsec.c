@@ -38,6 +38,7 @@
  * Forward declaration for tr_init functions.
  */
 static bool eip_tr_ipsec_aes_cbc_init(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo);
+static bool eip_tr_ipsec_des_cbc_init(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo);
 
 /*
  * Global constant algorith information.
@@ -57,6 +58,79 @@ static const struct eip_svc_entry ipsec_algo_list[] = {
 		.iv_len = AES_BLOCK_SIZE,
 		.cipher_blk_len = AES_BLOCK_SIZE
 	},
+	{
+		.name = "eip-aes-cbc-md5-hmac",
+		.enc_tk_fill = &eip_tk_ipsec_encauth_cbc,
+		.dec_tk_fill = &eip_tk_ipsec_authdec_cbc,
+		.tr_init = eip_tr_ipsec_aes_cbc_init,
+		.auth_digest_len = MD5_DIGEST_SIZE,
+		.auth_block_len = MD5_HMAC_BLOCK_SIZE,
+		.auth_state_len = EIP_HW_PAD_KEYSZ_MD5,
+		.ctrl_words_0 = EIP_HW_CTX_WITH_KEY | EIP_HW_CTX_ALGO_MD5 |
+			EIP_HW_CTX_AUTH_MODE_HMAC | EIP_TR_IPSEC_SPI | EIP_TR_IPSEC_SEQ_NUM,
+		.ctrl_words_1 = EIP_HW_CTX_CIPHER_MODE_CBC,
+		.iv_len = AES_BLOCK_SIZE,
+		.cipher_blk_len = AES_BLOCK_SIZE
+	},
+	{
+		.name = "eip-aes-cbc-sha256-hmac",
+		.enc_tk_fill = &eip_tk_ipsec_encauth_cbc,
+		.dec_tk_fill = &eip_tk_ipsec_authdec_cbc,
+		.tr_init = eip_tr_ipsec_aes_cbc_init,
+		.auth_digest_len = SHA256_DIGEST_SIZE,
+		.auth_block_len = SHA256_BLOCK_SIZE,
+		.auth_state_len = EIP_HW_PAD_KEYSZ_SHA256,
+		.ctrl_words_0 = EIP_HW_CTX_WITH_KEY | EIP_HW_CTX_ALGO_SHA256 |
+			EIP_HW_CTX_AUTH_MODE_HMAC | EIP_TR_IPSEC_SPI | EIP_TR_IPSEC_SEQ_NUM,
+		.ctrl_words_1 = EIP_HW_CTX_CIPHER_MODE_CBC,
+		.iv_len = AES_BLOCK_SIZE,
+		.cipher_blk_len = AES_BLOCK_SIZE
+	},
+	{
+		.name = "eip-3des-cbc-sha1-hmac",
+		.enc_tk_fill = &eip_tk_ipsec_encauth_cbc,
+		.dec_tk_fill = &eip_tk_ipsec_authdec_cbc,
+		.tr_init = eip_tr_ipsec_des_cbc_init,
+		.auth_digest_len = SHA1_DIGEST_SIZE,
+		.auth_block_len = SHA1_BLOCK_SIZE,
+		.auth_state_len = EIP_HW_PAD_KEYSZ_SHA1,
+		.ctrl_words_0 = EIP_HW_CTX_WITH_KEY | EIP_HW_CTX_ALGO_SHA1 |
+			EIP_HW_CTX_AUTH_MODE_HMAC | EIP_TR_IPSEC_SPI | EIP_TR_IPSEC_SEQ_NUM,
+		.ctrl_words_1 = EIP_HW_CTX_CIPHER_MODE_CBC,
+		.iv_len = DES3_EDE_BLOCK_SIZE,
+		.cipher_blk_len = DES3_EDE_BLOCK_SIZE
+	},
+	{
+		.name = "eip-3des-cbc-md5-hmac",
+		.enc_tk_fill = &eip_tk_ipsec_encauth_cbc,
+		.dec_tk_fill = &eip_tk_ipsec_authdec_cbc,
+		.tr_init = eip_tr_ipsec_des_cbc_init,
+		.auth_digest_len = MD5_DIGEST_SIZE,
+		.auth_block_len = MD5_HMAC_BLOCK_SIZE,
+		.auth_state_len = EIP_HW_PAD_KEYSZ_MD5,
+		.ctrl_words_0 = EIP_HW_CTX_WITH_KEY | EIP_HW_CTX_ALGO_MD5 |
+			EIP_HW_CTX_AUTH_MODE_HMAC | EIP_TR_IPSEC_SPI | EIP_TR_IPSEC_SEQ_NUM,
+		.ctrl_words_1 = EIP_HW_CTX_CIPHER_MODE_CBC,
+		.iv_len = DES3_EDE_BLOCK_SIZE,
+		.cipher_blk_len = DES3_EDE_BLOCK_SIZE
+	},
+	{
+		.name = "eip-3des-cbc-sha256-hmac",
+		.enc_tk_fill = &eip_tk_ipsec_encauth_cbc,
+		.dec_tk_fill = &eip_tk_ipsec_authdec_cbc,
+		.tr_init = eip_tr_ipsec_des_cbc_init,
+		.auth_digest_len = SHA256_DIGEST_SIZE,
+		.auth_block_len = SHA256_BLOCK_SIZE,
+		.auth_state_len = EIP_HW_PAD_KEYSZ_SHA256,
+		.ctrl_words_0 = EIP_HW_CTX_WITH_KEY | EIP_HW_CTX_ALGO_SHA256 |
+			EIP_HW_CTX_AUTH_MODE_HMAC | EIP_TR_IPSEC_SPI | EIP_TR_IPSEC_SEQ_NUM,
+		.ctrl_words_1 = EIP_HW_CTX_CIPHER_MODE_CBC,
+		.iv_len = DES3_EDE_BLOCK_SIZE,
+		.cipher_blk_len = DES3_EDE_BLOCK_SIZE
+	},
+	/*
+	 * TODO: add support for aes-gcm
+	 */
 };
 
 /*
@@ -140,6 +214,52 @@ static bool eip_tr_ipsec_aes_cbc_init(struct eip_tr *tr, struct eip_tr_info *inf
 	case AES_KEYSIZE_256:
 		tr_words[0] |= EIP_HW_CTX_ALGO_AES256;
 		tr->ctrl_words[0] |= EIP_HW_CTX_ALGO_AES256;
+		break;
+	default:
+		pr_err("%px: Invalid key length(%u)\n", tr, crypto->cipher.key_len);
+		return false;
+	}
+
+	/*
+	 * Flush record memory.
+	 * Driver must not make any update in transform records words after this.
+	 */
+	dmac_clean_range(tr->hw_words, tr->hw_words + EIP_HW_CTX_SIZE_LARGE_WORDS);
+
+	/*
+	 * HMAC Inner and Outer Digest Precalculation
+	 */
+	if (!eip_tr_ahash_key2digest(tr, info, algo)) {
+		pr_err("%px: Digest computation failed for algo(%s)\n", tr, algo->name);
+		return false;
+	}
+
+	return true;
+}
+
+/*
+ * eip_tr_ipsec_des_cbc_init()
+ *	Initialize the transform record for ipsec.
+ */
+static bool eip_tr_ipsec_des_cbc_init(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo)
+{
+	struct eip_tr_base *crypto = &info->base;
+	uint32_t *tr_words = tr->hw_words;
+
+	/*
+	 * We first do common initialization and then algo specific initialization.
+	 */
+	if (!eip_tr_ipsec_verify(tr, info, algo)) {
+		pr_err("%px: TR verification failed.\n", tr);
+		return false;
+	}
+
+	eip_tr_ipsec_cmn_init(tr, info, algo);
+
+	switch(crypto->cipher.key_len) {
+	case DES3_EDE_KEY_SIZE:
+		tr_words[0] |= EIP_HW_CTX_ALGO_3DES;
+		tr->ctrl_words[0] |= EIP_HW_CTX_ALGO_3DES;
 		break;
 	default:
 		pr_err("%px: Invalid key length(%u)\n", tr, crypto->cipher.key_len);
