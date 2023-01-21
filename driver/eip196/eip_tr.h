@@ -183,7 +183,6 @@ struct eip_tr_ipsec {
 struct eip_tr_ipsec_skb_cb {
 	uint8_t protocol;	/* Protocol for IPv4, NH for IPv6. */
 	uint8_t pad_len;	/* Padding length required for encryption */
-	uint8_t tos; 		/* IPv4 TOS or IPv6 TC value from inner */
 };
 
 /*

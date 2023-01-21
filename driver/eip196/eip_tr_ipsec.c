@@ -103,7 +103,6 @@ static void eip_tr_ipsec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, c
 	tr->ctrl_words[0] = tr_words[0];
 	tr->ctrl_words[1] = tr_words[1];
 	tr->nonce = info->base.nonce;
-	tr->iv_len = algo->iv_len;
 
 	tr->ipsec.ops.cb = ipsec->cb;
 	tr->ipsec.ops.err_cb = ipsec->err_cb;

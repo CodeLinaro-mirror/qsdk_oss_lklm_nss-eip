@@ -98,7 +98,7 @@ static void eip_tr_ipsec_enc_tun4(struct eip_tr *tr, struct sk_buff *skb)
 
 		udph->source = ipsec->src_port;
 		udph->dest = ipsec->dst_port;
-		udph->len = htons(payload_len - ipsec->ip_len);
+		udph->len = htons(payload_len - sizeof(struct iphdr));
 		udph->check = 0; /* TODO: add support for user configurable checksum option */
 	}
 
@@ -351,12 +351,13 @@ void eip_tr_ipsec_enc_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
         tr_words[1] |= EIP_TR_IPSEC_SEQ_NUM_STORE;
 
         /*
-         * Store the seq no offset, icv length and cipher block length
+         * Store the seq no offset, icv, iv and cipher block length
          * to be used during token fill
          */
         tr_ipsec->seq_offset = seq_offset;
         tr->digest_len = ipsec->icv_len;
         tr->blk_len = algo->cipher_blk_len;
+	tr->iv_len = algo->iv_len;
 
         /*
          * Configure IPsec encapsulation specific details in TR

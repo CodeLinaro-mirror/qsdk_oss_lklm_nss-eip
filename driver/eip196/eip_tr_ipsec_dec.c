@@ -302,6 +302,7 @@ void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
         tr_ipsec->seq_offset = seq_offset;
         tr->digest_len = ipsec->icv_len;
         tr->blk_len = algo->cipher_blk_len;
+	tr->iv_len = algo->iv_len;
 
 	/*
 	 * Assign the pre & post procesing callback for IP header
