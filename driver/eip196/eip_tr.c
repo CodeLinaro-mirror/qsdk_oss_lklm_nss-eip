@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -117,7 +117,7 @@ static void eip_tr_inval(struct work_struct *work)
 {
 	struct delayed_work *dwork = to_delayed_work(work);
 	struct eip_sw_desc *sw;
-	uint32_t cmd_token_hdr;
+	uint32_t tk_hdr;
 	struct scatterlist sg;
 	struct eip_dma *dma;
 	struct eip_ctx *ctx;
@@ -136,8 +136,8 @@ static void eip_tr_inval(struct work_struct *work)
 	/*
 	 * Initialize command token header.
 	 */
-	cmd_token_hdr = EIP_HW_TOKEN_HDR_CMN;
-	cmd_token_hdr |= EIP_HW_TOKEN_HDR_REUSE_CTX;
+	tk_hdr = EIP_HW_TOKEN_HDR_CMN;
+	tk_hdr |= EIP_HW_TOKEN_HDR_REUSE_CTX;
 
 	/*
 	 * Allocate SW descriptor.
@@ -157,7 +157,7 @@ static void eip_tr_inval(struct work_struct *work)
 	sw->tk = NULL;
 	sw->comp = &eip_tr_inval_done;
 	sw->err_comp = &eip_tr_inval_err;
-	sw->cmd_token_hdr = cmd_token_hdr;
+	sw->tk_hdr = tk_hdr;
 	sw->tr_addr_type = tr->tr_addr_type;
 	sw->tk_addr = 0;
 	sw->tk_words = 0;
@@ -323,7 +323,7 @@ EXPORT_SYMBOL(eip_tr_alloc);
  */
 void eip_tr_free(struct eip_tr *tr)
 {
-	struct eip_tr_template *tmpl;
+	struct eip_tr_ops *ops;
 
 	/*
 	 * Mark TR as inactive.
@@ -336,25 +336,25 @@ void eip_tr_free(struct eip_tr *tr)
 	switch (tr->svc) {
 	case EIP_SVC_SKCIPHER:
 	case EIP_SVC_AEAD:
-		tmpl = &tr->crypto.enc;
-		xchg(&tmpl->cb, eip_tr_dummy_cb);
-		xchg(&tmpl->err_cb, eip_tr_dummy_err);
+		ops = &tr->crypto.enc;
+		xchg(&ops->cb, eip_tr_dummy_cb);
+		xchg(&ops->err_cb, eip_tr_dummy_err);
 
-		tmpl = &tr->crypto.dec;
-		xchg(&tmpl->cb, eip_tr_dummy_cb);
-		xchg(&tmpl->err_cb, eip_tr_dummy_err);
+		ops = &tr->crypto.dec;
+		xchg(&ops->cb, eip_tr_dummy_cb);
+		xchg(&ops->err_cb, eip_tr_dummy_err);
 		break;
 
 	case EIP_SVC_AHASH:
-		tmpl = &tr->crypto.auth;
-		xchg(&tmpl->cb, eip_tr_dummy_cb);
-		xchg(&tmpl->err_cb, eip_tr_dummy_err);
+		ops = &tr->crypto.auth;
+		xchg(&ops->cb, eip_tr_dummy_cb);
+		xchg(&ops->err_cb, eip_tr_dummy_err);
 		break;
 
 	case EIP_SVC_IPSEC:
-		tmpl = &tr->ipsec.op;
-		xchg(&tmpl->cb, eip_tr_dummy_cb);
-		xchg(&tmpl->err_cb, eip_tr_dummy_err);
+		ops = &tr->ipsec.ops;
+		xchg(&ops->cb, eip_tr_dummy_cb);
+		xchg(&ops->err_cb, eip_tr_dummy_err);
 		break;
 
 	default:
