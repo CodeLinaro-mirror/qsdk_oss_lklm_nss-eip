@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -349,7 +349,7 @@ static irqreturn_t eip_dma_handle_irq(int irq, void *ctx)
 
 /*
  * eip_dma_napi_rx_poll()
- *	NAPI poll callback to handle EIP197 interrupt.
+ *	NAPI poll callback to handle EIP196 interrupt.
  */
 static int eip_dma_napi_rx_poll(struct napi_struct *napi, int budget)
 {
@@ -367,6 +367,56 @@ static int eip_dma_napi_rx_poll(struct napi_struct *napi, int budget)
 	}
 
 	return processed;
+}
+
+/*
+ * eip_dma_tx_skb_paged()
+ *	Send SKB which may be paged.
+ */
+static void eip_dma_tx_skb_paged(struct eip_dma *dma, struct eip_sw_desc *sw, struct sk_buff *skb,
+		uint32_t *cmd_idx, uint32_t *res_idx, bool last)
+{
+	uint8_t nr_frags = skb_shinfo(skb)->nr_frags;
+	skb_frag_t *skb_frag;
+	struct eip_frag frag;
+
+	/*
+	 * Head SKB
+	 * Fill fragment details for command & result ring
+	 * Using inplace, so dst is same as src
+	 */
+	frag.data = skb->data;
+	frag.len = skb_headlen(skb);
+	frag.flag = EIP_HW_CMD_FLAGS(!sw->src_nsegs, (last && !nr_frags));
+	frag.idx = *cmd_idx;
+	eip_dma_tx_cmd(dma, sw, &frag);
+	(*cmd_idx) = EIP_DMA_IDX_INC(*cmd_idx);
+
+	/*
+	 * Update for result ring
+	 */
+	frag.idx = *res_idx;
+	eip_dma_tx_res(dma, sw, &frag);
+	(*res_idx) = EIP_DMA_IDX_INC(*res_idx);
+
+	/*
+	 * Handle nr_frags for command & result ring
+	 */
+	skb_frag = &skb_shinfo(skb)->frags[0];
+	while(nr_frags--) {
+		frag.data = skb_frag_address(skb_frag);
+		frag.len = skb_frag_size(skb_frag);
+		frag.flag = EIP_HW_CMD_FLAGS(0, (last && !nr_frags));
+		frag.idx = *cmd_idx;
+		eip_dma_tx_cmd(dma, sw, &frag);
+		(*cmd_idx) = EIP_DMA_IDX_INC(*cmd_idx);
+
+		frag.idx = *res_idx;
+		eip_dma_tx_res(dma, sw, &frag);
+		(*res_idx) = EIP_DMA_IDX_INC(*res_idx);
+
+		skb_frag++;
+	}
 }
 
 /*
@@ -428,10 +478,66 @@ int eip_dma_tx_linear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct sk
  */
 int eip_dma_tx_nonlinear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct sk_buff *skb)
 {
-	/*
-	 * TODO: Add support.
-	 */
-	return -EINVAL;
+        struct eip_tr_stats *tr_stats = this_cpu_ptr(sw->tr->stats_pcpu);
+        struct eip_dma_stats *dma_stats = &dma->stats;
+        struct sk_buff *iter_skb = NULL;
+        unsigned int len = skb->len;
+        uint32_t in_count, out_count, desc_count;
+        uint32_t cmd_idx, res_idx;
+        uint8_t desc_req;
+        bool last_frag;
+
+        BUG_ON(!skb_is_nonlinear(skb));
+
+        in_count = eip_dma_avail_idx_and_count(&dma->in, &cmd_idx);
+	out_count = eip_dma_avail_idx_and_count(&dma->out, &res_idx);
+	desc_count = min(in_count, out_count);
+        sw->src_nsegs = 0;
+	sw->dst_nsegs = 0;
+
+        /*
+         * Send Head SKB which may be paged.
+         * Command & result descriptor required is head SKB + nr_frags in it.
+         */
+        desc_req = skb_shinfo(skb)->nr_frags + 1;
+        if (desc_count < desc_req) {
+                return -EBUSY;
+        }
+
+        last_frag = !skb_has_frag_list(skb);
+        eip_dma_tx_skb_paged(dma, sw, skb, &cmd_idx, &res_idx, last_frag);
+        desc_count -= desc_req;
+        sw->src_nsegs += desc_req;
+
+        /*
+         * Walk through all fraglist skbs and fill command & result ring
+         */
+        skb_walk_frags(skb, iter_skb) {
+                desc_req = skb_shinfo(iter_skb)->nr_frags + 1;
+                if (desc_count < desc_req) {
+                        return -EBUSY;
+                }
+
+                last_frag = !iter_skb->next;
+                eip_dma_tx_skb_paged(dma, sw, iter_skb, &cmd_idx, &res_idx, last_frag);
+
+		desc_count -= desc_req;
+                sw->src_nsegs += desc_req;
+        }
+
+        /*
+         * Increament Tx statistics.
+         */
+	sw->dst_nsegs = sw->src_nsegs;
+        tr_stats->tx_frags += sw->src_nsegs;
+        tr_stats->tx_pkts++;
+        tr_stats->tx_bytes += len;
+        dma_stats->tx_frags += sw->src_nsegs;
+        dma_stats->tx_pkts++;
+        dma_stats->tx_bytes += len;
+
+	eip_dma_notify(dma, sw->src_nsegs, sw->dst_nsegs, cmd_idx, res_idx);
+        return 0;
 }
 
 /*
@@ -717,7 +823,7 @@ void eip_dma_la_deinit(struct eip_dma *dma)
 
 /*
  * eip_dma_la_init()
- *	initialize the EIP197 DMA.
+ *	initialize the EIP196 DMA.
  */
 int eip_dma_la_init(struct eip_dma *dma, struct platform_device *pdev, uint8_t tx_cpu,
 		uint8_t rx_cpu,	uint32_t ring_id, void __iomem *base_addr)

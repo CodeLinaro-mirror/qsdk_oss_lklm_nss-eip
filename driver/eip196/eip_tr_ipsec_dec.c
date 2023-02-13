@@ -48,6 +48,42 @@ static void eip_tr_ipsec_dec_dummy_post(struct eip_tr *tr, struct sk_buff *skb)
 }
 
 /*
+ * eip_tr_ipsec_dec_trans4_post()
+ *	IP header modification for transport mode post decapsulation
+ */
+static void eip_tr_ipsec_dec_trans4_post(struct eip_tr *tr, struct sk_buff *skb)
+{
+	struct iphdr *iph = ip_hdr(skb);
+
+	/*
+	 * Update protocol, length and checksum
+	 */
+	iph->protocol = EIP_TR_IPSEC_SKB_CB(skb)->ip_proto;
+	iph->tot_len = htons(skb->len);
+
+	/*
+	 * TODO: update checksum with only the modified field
+	 */
+	iph->check = 0;
+	iph->check = ip_fast_csum((unsigned char *)iph, iph->ihl);
+}
+
+/*
+ * eip_tr_ipsec_dec_trans6_post()
+ *	IP header modification for transport mode post decapsulation
+ */
+static void eip_tr_ipsec_dec_trans6_post(struct eip_tr *tr, struct sk_buff *skb)
+{
+	struct ipv6hdr *ip6h = ipv6_hdr(skb);
+
+	/*
+	 * Update next header & payload length
+	 */
+	ip6h->nexthdr = EIP_TR_IPSEC_SKB_CB(skb)->ip_proto;
+	ip6h->payload_len = htons(skb->len - sizeof(*ip6h));
+}
+
+/*
  * eip_tr_ipsec_dec_err()
  *	Hardware error callback API for Decapsulation.
  */
@@ -75,17 +111,25 @@ void eip_tr_ipsec_dec_err(struct eip_tr *tr, struct eip_hw_desc *hw, struct eip_
 void eip_tr_ipsec_dec_done(struct eip_tr *tr, struct eip_hw_desc *hw, struct eip_sw_desc *sw)
 {
 	uint16_t out_len = EIP_HW_RES_DATA_LEN(hw->token[0]);
+	bool tun = tr->tr_flags & EIP_TR_IPSEC_FLAG_TUNNEL;
 	struct eip_tr_ipsec *ipsec = &tr->ipsec;
 	struct eip_ctx *ctx = tr->ctx;
 	struct sk_buff *skb;
 
 	/*
 	 * After successful Transformation SKB data length needs to be decreased.
-	 * TODO: Fix for nonlinear skb
 	 */
 	skb = eip_req2skb(sw->req);
-	skb_trim(skb, out_len);
+	pskb_trim(skb, out_len);
 	skb_reset_network_header(skb);
+
+	/*
+	 * For transport mode call the post processing function
+	 */
+	if(unlikely(!tun)) {
+		EIP_TR_IPSEC_SKB_CB(skb)->ip_proto = EIP_HW_RES_NEXT_HDR(hw->token[3]);
+		ipsec->ops.post(tr, skb);
+	}
 
 	/*
 	 * Call the client callback.
@@ -131,7 +175,7 @@ int eip_tr_ipsec_dec(struct eip_tr *tr, struct sk_buff *skb)
 		return -ENOMEM;
 	}
 
-	skb_pull(skb, tr->ipsec.hdr_len);
+	skb_pull(skb, tr->ipsec.remove_len);
 
 	/*
 	 * Fill token for decryption and hash for ipsec
@@ -230,7 +274,9 @@ void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
         uint32_t *tr_words = tr->hw_words;
         uint8_t seq_offset;
 	bool esn, natt;
+	uint8_t mask_sz;
         uint32_t size;
+	uint32_t mode;
 
         esn = ipsec->sa_flags & EIP_TR_IPSEC_FLAG_ESN;
 	natt =ipsec->sa_flags & EIP_TR_IPSEC_FLAG_UDP;
@@ -269,11 +315,6 @@ void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
         crypt_words += (size / sizeof(uint32_t)); /* ipad */
         crypt_words += (size / sizeof(uint32_t)); /* opad */
 
-        /*
-         * Fill nonce.
-         */
-        if (nonce_en)
-                *crypt_words++ = crypto->nonce;
 
         /*
          * IPsec specific fields for EIP96.
@@ -282,12 +323,25 @@ void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
          * - Sequence mask to support window size.
          */
         *crypt_words++ = ntohl(ipsec->spi_idx);
-        *crypt_words++ = 0x1;
+        *crypt_words++ = 0x0;
         seq_offset = crypt_words - tr_words - 1;
         if (esn)
                 *crypt_words++ = 0;
 
-        crypt_words += eip_tr_ipsec_get_replay_words(ipsec->replay);
+	/*
+	 * Set all bits to '1' in mask. For 32bit we need to set extra word to '1'.
+	 */
+        mask_sz = eip_tr_ipsec_get_replay_words(ipsec->replay);
+	mask_sz += (ipsec->replay == EIP_IPSEC_REPLAY_32) ? 1 : 0;
+	while (mask_sz--) {
+		*crypt_words++ = 0xFFFFFFFF;
+	}
+
+	/*
+         * Fill nonce.
+         */
+        if (nonce_en)
+                *crypt_words++ = crypto->nonce;
 
         /*
          * Done with EIP crypto context words.
@@ -308,19 +362,45 @@ void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
 	 * Assign the pre & post procesing callback for IP header
 	 *
 	 * For transport mode decap we will bypass the IP header
-	 * Note for NATT we are removing UDP header before decap,
+	 * and with NATT we will remove UDP header using EIP hw
 	 * so the bypass len does not include UDP header length.
 	 */
 	tr_ipsec->ops.pre = eip_tr_ipsec_dec_dummy_pre;
 	tr_ipsec->ops.post = eip_tr_ipsec_dec_dummy_post;
 	tr_ipsec->bypass_len = 0;
+	tr_ipsec->remove_len = 0;
 
-	switch (ipsec->ip_ver) {
-	case IPVERSION:
-		tr_ipsec->hdr_len = sizeof(struct iphdr) + (natt ? sizeof(struct udphdr) : 0);
+	mode = ipsec->sa_flags & (EIP_TR_IPSEC_FLAG_TUNNEL | EIP_TR_IPSEC_FLAG_UDP | EIP_TR_IPSEC_FLAG_IPV6);
+
+	switch (mode) {
+	/*
+	 * Tunnel mode
+	 */
+	case (EIP_TR_IPSEC_FLAG_TUNNEL | EIP_TR_IPSEC_FLAG_UDP):
+		tr_ipsec->remove_len = sizeof(struct iphdr) + sizeof(struct udphdr);
 		break;
-        default:
-		tr_ipsec->hdr_len = sizeof(struct ipv6hdr);
+	case EIP_TR_IPSEC_FLAG_TUNNEL:
+		tr_ipsec->remove_len = sizeof(struct iphdr);
+		break;
+	case (EIP_TR_IPSEC_FLAG_TUNNEL | EIP_TR_IPSEC_FLAG_IPV6):
+		tr_ipsec->remove_len = sizeof(struct ipv6hdr);
+		break;
+	/*
+	 * Transport mode
+	 */
+	case (EIP_TR_IPSEC_FLAG_IPV6):
+		tr_ipsec->bypass_len = sizeof(struct ipv6hdr);
+		tr_ipsec->ops.post = eip_tr_ipsec_dec_trans6_post;
+		break;
+	case EIP_TR_IPSEC_FLAG_UDP:
+		/*
+		 * TODO: Add support
+		 */
+		BUG_ON(1);
+		break;
+	default:
+		tr_ipsec->bypass_len = sizeof(struct iphdr);
+		tr_ipsec->ops.post = eip_tr_ipsec_dec_trans4_post;
 		break;
 	}
 }
