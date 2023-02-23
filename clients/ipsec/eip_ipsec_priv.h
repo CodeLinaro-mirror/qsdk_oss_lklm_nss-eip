@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -40,9 +40,9 @@
 	#define EIP_IPSEC_DEFAULT_SVC EIP_SVC_IPSEC
 #endif
 
-#define EIP_IPSEC_MAX_STR_LEN 64	/* Maximum print lenght */
-#define EIP_IPSEC_HASH_SHIFT 6
-#define EIP_IPSEC_HASH_SIZE (1 << EIP_IPSEC_HASH_SHIFT)
+#define EIP_IPSEC_MAX_STR_LEN 64U	/* Maximum print lenght */
+#define EIP_IPSEC_HASH_SHIFT 6U
+#define EIP_IPSEC_HASH_SIZE (1U << EIP_IPSEC_HASH_SHIFT)
 #define EIP_IPSEC_HASH_MASK (EIP_IPSEC_HASH_SIZE - 1)
 
 /*
