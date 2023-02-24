@@ -123,7 +123,6 @@ static void eip_tr_inval(struct work_struct *work)
 	struct eip_dma *dma;
 	struct eip_ctx *ctx;
 	struct eip_tr *tr;
-	int cpu;
 
 	tr = container_of(dwork, struct eip_tr, inval_work);
 	ctx = tr->ctx;
@@ -166,31 +165,20 @@ static void eip_tr_inval(struct work_struct *work)
 	sw->req = NULL;
 
 	/*
-	 * We are in process context (workqueue). disable preemption.
-	 * We have per cpu DMA object. So this ensures that there is no race condition.
-	 */
-	cpu = get_cpu();
-
-	/*
 	 * Schedule the transformation.
 	 * There is potential chance that DMA fails to schedule this request during peak
 	 * traffic. In that case we need to reschedule the invalidation.
 	 */
-	dma = &ctx->ep->la[cpu];
+	dma = &ctx->ep->la[smp_processor_id()];
 
 	if (eip_dma_tx_sg(dma, sw, &sg, &sg)) {
 		pr_warn("%px: DMA is busy for invalidation schedule\n", tr);
 
-		put_cpu();
 		kmem_cache_free(ctx->sw_cache, sw);
 		schedule_delayed_work(&tr->inval_work, EIP_TR_INVAL_TIMEOUT);
 		return;
 	}
 
-	/*
-	 * Re-enable preemption.
-	 */
-	put_cpu();
 	return;
 }
 

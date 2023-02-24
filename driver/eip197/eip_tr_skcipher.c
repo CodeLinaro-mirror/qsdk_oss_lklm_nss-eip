@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -369,19 +369,14 @@ int eip_tr_skcipher_enc(struct eip_tr *tr, struct skcipher_request *req)
 	sw->hw_svc = EIP_HW_CMD_HWSERVICE_LAC;
 	sw->req = req;
 
-	dma = &ctx->dma[get_cpu()];
+	dma = &ctx->dma[smp_processor_id()];
 
 	status = eip_dma_tx_sg(dma, sw, req->src, req->dst);
 	if (status < 0) {
 		dma->stats.tx_error++;
-		put_cpu();
 		goto fail_tx;
 	}
 
-	/*
-	 * Reenable bottom half.
-	 */
-	put_cpu();
 	return 0;
 fail_tx:
 	eip_tr_deref(tr);
@@ -446,19 +441,14 @@ int eip_tr_skcipher_dec(struct eip_tr *tr, struct skcipher_request *req)
 	sw->hw_svc = EIP_HW_CMD_HWSERVICE_LAC;
 	sw->req = req;
 
-	dma = &ctx->dma[get_cpu()];
+	dma = &ctx->dma[smp_processor_id()];
 
 	status = eip_dma_tx_sg(dma, sw, req->src, req->dst);
 	if (status < 0) {
 		dma->stats.tx_error++;
-		put_cpu();
 		goto fail_tx;
 	}
 
-	/*
-	 * Reenable bottom half.
-	 */
-	put_cpu();
 	return 0;
 fail_tx:
 	eip_tr_deref(tr);
