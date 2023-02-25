@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -17,14 +17,14 @@
 #ifndef __EIP_FLOW_H
 #define __EIP_FLOW_H
 
-#define EIP_FLOW_MAX (1 << (EIP_HW_FLUE_CONFIG_TABLE_SZ + 5))
+#define EIP_FLOW_MAX (1U << (EIP_HW_FLUE_CONFIG_TABLE_SZ + 5))
 #define EIP_FLOW_MASK (EIP_FLOW_MAX - 1)
 #define EIP_FLOW_HASH_IDX(hash) ((hash.words[0] >> 6) & EIP_FLOW_MASK)
-#define EIP_FLOW_HASH_DATA_SZ 13 /* Iterations for hash function */
-#define EIP_FLOW_MAX_COLLISION 64
+#define EIP_FLOW_HASH_DATA_SZ 13U /* Iterations for hash function */
+#define EIP_FLOW_MAX_COLLISION 64U
 #define EIP_HASH_EQUAL(H1,H2) ((H1.words[0] == H2.words[0]) && (H1.words[1] == H2.words[1]) && (H1.words[2] == H2.words[2]) && (H1.words[3] == H2.words[3]))
 #define EIP_FLOW_TR_DISABLE 0x0
-#define EIP_FLOW_VALID_BIT 0x1
+#define EIP_FLOW_VALID_BIT 0x1U
 
 /*
  * eip_flow_hash_t
