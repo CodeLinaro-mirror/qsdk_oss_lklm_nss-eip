@@ -25,6 +25,7 @@
 #define EIP_TR_CTRL_CONTEXT_WORDS(x) (((x) & 0x3FU) << 8)
 #define EIP_TR_REDIR_EN (0x1U << 11) /* Redirect enable */
 #define EIP_TR_REDIR_IFACE(i) (((i) & 0xFU) << 12) /* Redirect destination interface */
+#define EIP_TR_FILL_TOKEN(tr, ops, tk, req, tk_hdr) ((ops)->tk_fill(tk, tr, req, tk_hdr)) /* Call Token fill function */
 
 struct eip_svc_entry;
 typedef bool (*eip_tr_init_t) (struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo);
@@ -125,11 +126,12 @@ struct eip_tr_stats {
 };
 
 /*
- * eip_tr_template
+ * eip_tr_ops
  *	Template to hold callbacks.
  */
-struct eip_tr_template {
-	eip_tk_fill_t tk_fill;		/* cached Token fill method */
+struct eip_tr_ops {
+	eip_tk_proc_t tk_fill;		/* cached Token fill method */
+	void *app_data;			/* App data passed for callback */
 	eip_tr_callback_t cb;		/* completion callback to client */
 	eip_tr_err_callback_t err_cb;	/* completion with error callback to client */
 };
@@ -139,10 +141,9 @@ struct eip_tr_template {
  *	Crypto specific information.
  */
 struct eip_tr_crypto {
-	struct eip_tr_template enc;		/* Encode operation */
-	struct eip_tr_template dec;		/* Decode operation */
-	struct eip_tr_template auth;		/* Auth operation */
-	void *app_data;			/* Opaque to pass with callback */
+	struct eip_tr_ops enc;		/* Encode operation */
+	struct eip_tr_ops dec;		/* Decode operation */
+	struct eip_tr_ops auth;		/* Auth operation */
 };
 
 /*
@@ -150,7 +151,7 @@ struct eip_tr_crypto {
  *	IPsec specific information.
  */
 struct eip_tr_ipsec {
-	struct eip_tr_template op;	/* Transformation operation callback */
+	struct eip_tr_ops ops;		/* Transformation operation callback */
 	void *app_data;			/* Opaque to pass with callback */
 };
 

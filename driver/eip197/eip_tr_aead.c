@@ -214,7 +214,7 @@ static inline void eip_tr_aead_tx_complete(struct eip_tr *tr, struct eip_sw_desc
 static void eip_tr_aead_enc_err(struct eip_tr *tr, struct eip_hw_desc *hw, struct eip_sw_desc *sw, uint16_t cle_err, uint16_t tr_err)
 {
 	eip_tr_err_callback_t cb = tr->crypto.enc.err_cb;
-	void *app_data = tr->crypto.app_data;
+	void *app_data = tr->crypto.enc.app_data;
 	eip_req_t eip_req = sw->req;
 	int err = 0;
 
@@ -241,7 +241,7 @@ static void eip_tr_aead_enc_err(struct eip_tr *tr, struct eip_hw_desc *hw, struc
 static void eip_tr_aead_dec_err(struct eip_tr *tr, struct eip_hw_desc *hw, struct eip_sw_desc *sw, uint16_t cle_err, uint16_t tr_err)
 {
 	eip_tr_err_callback_t cb = tr->crypto.dec.err_cb;
-	void *app_data = tr->crypto.app_data;
+	void *app_data = tr->crypto.dec.app_data;
 	eip_req_t eip_req = sw->req;
 	int err = 0;
 
@@ -268,7 +268,7 @@ static void eip_tr_aead_dec_err(struct eip_tr *tr, struct eip_hw_desc *hw, struc
 static void eip_tr_aead_enc_done(struct eip_tr *tr, struct eip_hw_desc *hw, struct eip_sw_desc *sw)
 {
 	eip_tr_callback_t cb = tr->crypto.enc.cb;
-	void *app_data = tr->crypto.app_data;
+	void *app_data = tr->crypto.enc.app_data;
 	eip_req_t eip_req = sw->req;
 
 	/*
@@ -289,7 +289,7 @@ static void eip_tr_aead_enc_done(struct eip_tr *tr, struct eip_hw_desc *hw, stru
 static void eip_tr_aead_dec_done(struct eip_tr *tr, struct eip_hw_desc *hw, struct eip_sw_desc *sw)
 {
 	eip_tr_callback_t cb = tr->crypto.dec.cb;
-	void *app_data = tr->crypto.app_data;
+	void *app_data = tr->crypto.dec.app_data;
 	eip_req_t eip_req = sw->req;
 
 	/*
@@ -328,13 +328,17 @@ bool eip_tr_aead_init(struct eip_tr *tr, struct eip_tr_info *info, const struct 
 	tr->crypto.enc.tk_fill = algo->enc_tk_fill;
 	tr->crypto.enc.cb = crypto->enc_cb;
 	tr->crypto.enc.err_cb = crypto->enc_err_cb;
+	tr->crypto.enc.app_data = crypto->app_data;
+
 	tr->crypto.dec.tk_fill = algo->dec_tk_fill;
 	tr->crypto.dec.cb = crypto->dec_cb;
 	tr->crypto.dec.err_cb = crypto->dec_err_cb;
+	tr->crypto.dec.app_data = crypto->app_data;
+
 	tr->crypto.auth.tk_fill = NULL;
 	tr->crypto.auth.cb = NULL;
 	tr->crypto.auth.err_cb = NULL;
-	tr->crypto.app_data = crypto->app_data;
+	tr->crypto.auth.app_data = NULL;
 
 	/*
 	 * For crypto, Control words are in tokens.
@@ -421,13 +425,15 @@ bool eip_tr_aead_gcm_init(struct eip_tr *tr, struct eip_tr_info *info, const str
 	tr->crypto.enc.tk_fill = algo->enc_tk_fill;
 	tr->crypto.enc.cb = crypto->enc_cb;
 	tr->crypto.enc.err_cb = crypto->enc_err_cb;
+	tr->crypto.enc.app_data = crypto->app_data;
 	tr->crypto.dec.tk_fill = algo->dec_tk_fill;
 	tr->crypto.dec.cb = crypto->dec_cb;
 	tr->crypto.dec.err_cb = crypto->dec_err_cb;
+	tr->crypto.dec.app_data = crypto->app_data;
 	tr->crypto.auth.tk_fill = NULL;
 	tr->crypto.auth.cb = NULL;
 	tr->crypto.auth.err_cb = NULL;
-	tr->crypto.app_data = crypto->app_data;
+	tr->crypto.auth.app_data = NULL;
 
 	/*
 	 * For crypto, Control words are in tokens.
@@ -519,7 +525,7 @@ size_t eip_tr_aead_get_svc_len(void)
 int eip_tr_aead_encauth(struct eip_tr *tr, struct aead_request *req)
 {
 	struct eip_ctx *ctx = tr->ctx;
-	uint32_t cmd_token_hdr = 0;
+	uint32_t tk_hdr = 0;
 	struct eip_sw_desc *sw;
 	struct eip_dma *dma;
 	struct eip_tk *tk;
@@ -538,7 +544,7 @@ int eip_tr_aead_encauth(struct eip_tr *tr, struct aead_request *req)
 	/*
 	 * Fill token for encryption and hmac.
 	 */
-	tk_words = tr->crypto.enc.tk_fill(tk, tr, req, &cmd_token_hdr);
+	tk_words = EIP_TR_FILL_TOKEN(tr, &tr->crypto.enc, tk, req, &tk_hdr);
 
 	dmac_clean_range(tk, tk + 1);
 
@@ -559,7 +565,7 @@ int eip_tr_aead_encauth(struct eip_tr *tr, struct aead_request *req)
 	sw->tk = tk;
 	sw->comp = &eip_tr_aead_enc_done;
 	sw->err_comp = &eip_tr_aead_enc_err;
-	sw->cmd_token_hdr = cmd_token_hdr;
+	sw->tk_hdr = tk_hdr;
 	sw->tk_addr = virt_to_phys(tk);
 	sw->tr_addr_type = tr->tr_addr_type;
 	sw->tk_words = tk_words;
@@ -591,7 +597,7 @@ EXPORT_SYMBOL(eip_tr_aead_encauth);
 int eip_tr_aead_authdec(struct eip_tr *tr, struct aead_request *req)
 {
 	struct eip_ctx *ctx = tr->ctx;
-	uint32_t cmd_token_hdr = 0;
+	uint32_t tk_hdr = 0;
 	struct eip_sw_desc *sw;
 	struct eip_dma *dma;
 	struct eip_tk *tk;
@@ -610,7 +616,7 @@ int eip_tr_aead_authdec(struct eip_tr *tr, struct aead_request *req)
 	/*
 	 * Fill token for hmac and decryption.
 	 */
-	tk_words = tr->crypto.dec.tk_fill(tk, tr, req, &cmd_token_hdr);
+	tk_words = EIP_TR_FILL_TOKEN(tr, &tr->crypto.dec, tk, req, &tk_hdr);
 
 	dmac_clean_range(tk, tk + 1);
 
@@ -631,7 +637,7 @@ int eip_tr_aead_authdec(struct eip_tr *tr, struct aead_request *req)
 	sw->tk = tk;
 	sw->comp = &eip_tr_aead_dec_done;
 	sw->err_comp = &eip_tr_aead_dec_err;
-	sw->cmd_token_hdr = cmd_token_hdr;
+	sw->tk_hdr = tk_hdr;
 	sw->tk_addr = virt_to_phys(tk);
 	sw->tr_addr_type = tr->tr_addr_type;
 	sw->tk_words = tk_words;

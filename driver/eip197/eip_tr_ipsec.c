@@ -440,7 +440,7 @@ static void eip_tr_ipsec_enc_cmn_init(struct eip_tr *tr, struct eip_tr_info *inf
 	 * - Sequence number start (2 words for ESN else 1 word)
 	 */
 	*crypt_words++ = ntohl(ipsec->spi_idx);
-	*crypt_words++ = 0x1;
+	*crypt_words++ = 0x0;
 	seq_num_offst = crypt_words - tr_words - 1;
 	if (esn)
 		*crypt_words++ = 0;
@@ -580,9 +580,9 @@ static bool eip_tr_ipsec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, c
 	tr->ctrl_words[1] = tr_words[1];
 	tr->nonce = info->base.nonce;
 
-	tr->ipsec.op.tk_fill = NULL;
-	tr->ipsec.op.cb = ipsec->cb;
-	tr->ipsec.op.err_cb = ipsec->err_cb;
+	tr->ipsec.ops.tk_fill = NULL;
+	tr->ipsec.ops.cb = ipsec->cb;
+	tr->ipsec.ops.err_cb = ipsec->err_cb;
 	tr->ipsec.app_data = ipsec->app_data;
 	memcpy(tr->bypass, ipsec->ppe_mdata, sizeof(tr->bypass));
 
@@ -904,7 +904,7 @@ int eip_tr_ipsec_enc(struct eip_tr *tr, struct sk_buff *skb)
 	 */
 	sw->tr = eip_tr_ref(tr);
 	sw->tk = NULL;
-	sw->cmd_token_hdr = EIP_HW_TOKEN_HDR_EXTENDED;
+	sw->tk_hdr = EIP_HW_TOKEN_HDR_EXTENDED;
 	sw->tk_addr = 0;
 	sw->tr_addr_type = tr->tr_addr_type;
 	sw->tk_words = 0;
@@ -916,7 +916,7 @@ int eip_tr_ipsec_enc(struct eip_tr *tr, struct sk_buff *skb)
 	 * Set handler to trasmit completion as packet will be redirected to inline.
 	 */
 	skb_push(skb, sizeof(struct ethhdr));
-	sw->cmd_token_hdr |= skb->len;
+	sw->tk_hdr |= skb->len;
 	sw->comp = &eip_tr_ipsec_tx_done;
 	sw->err_comp = NULL; /* There is no error in Transmit completion */
 
@@ -966,7 +966,7 @@ int eip_tr_ipsec_dec(struct eip_tr *tr, struct sk_buff *skb)
 	 */
 	sw->tr = eip_tr_ref(tr);
 	sw->tk = NULL;
-	sw->cmd_token_hdr = EIP_HW_TOKEN_HDR_EXTENDED;
+	sw->tk_hdr = EIP_HW_TOKEN_HDR_EXTENDED;
 	sw->tk_addr = 0;
 	sw->tr_addr_type = tr->tr_addr_type;
 	sw->tk_words = 0;
@@ -978,7 +978,7 @@ int eip_tr_ipsec_dec(struct eip_tr *tr, struct sk_buff *skb)
 	 * Set handler to trasmit completion as packet will be redirected to inline.
 	 */
 	skb_push(skb, sizeof(struct ethhdr));
-	sw->cmd_token_hdr |= skb->len;
+	sw->tk_hdr |= skb->len;
 	sw->comp = &eip_tr_ipsec_tx_done;
 	sw->err_comp = NULL; /* There is no error in Transmit completion */
 
