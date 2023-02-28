@@ -235,9 +235,10 @@ static uint32_t eip_tr_ipsec_get_replay_words(enum eip_ipsec_replay replay)
                 return 2;
         case EIP_IPSEC_REPLAY_128:
                 return 4;
-        case EIP_IPSEC_REPLAY_384:
+	/* TODO: add support for larger replay window size */
         default:
-                return 12;
+		pr_warn("Unexpected replay window <%u>", replay);
+                return 0;
         }
 }
 
@@ -255,9 +256,9 @@ static uint32_t eip_tr_ipsec_get_replay_seq_mask(enum eip_ipsec_replay replay)
                 return EIP_TR_IPSEC_SEQ_NUM_MASK_64;
         case EIP_IPSEC_REPLAY_128:
                 return EIP_TR_IPSEC_SEQ_NUM_MASK_128;
-        case EIP_IPSEC_REPLAY_384:
         default:
-                return EIP_TR_IPSEC_SEQ_NUM_MASK_384;
+		pr_warn("Unexpected replay window <%u>", replay);
+                return 0;
         }
 }
 
@@ -272,6 +273,7 @@ void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
         struct eip_tr_base *crypto = &info->base;
         uint32_t *crypt_words = tr->hw_words;
         uint32_t *tr_words = tr->hw_words;
+	uint8_t ctx_num_words;
         uint8_t seq_offset;
 	bool esn, natt;
 	uint8_t mask_sz;
@@ -325,14 +327,19 @@ void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
         *crypt_words++ = ntohl(ipsec->spi_idx);
         *crypt_words++ = 0x0;
         seq_offset = crypt_words - tr_words - 1;
+
         if (esn)
                 *crypt_words++ = 0;
 
 	/*
-	 * Set all bits to '1' in mask. For 32bit we need to set extra word to '1'.
+	 * Set all bits to '1' in mask.
+	 * For 32bit we need to set an extra word to '1', but its not included
+	 * in the context update length
 	 */
         mask_sz = eip_tr_ipsec_get_replay_words(ipsec->replay);
+	ctx_num_words = mask_sz + EIP_TR_IPSEC_CTX_WORDS_ESN(esn);
 	mask_sz += (ipsec->replay == EIP_IPSEC_REPLAY_32) ? 1 : 0;
+
 	while (mask_sz--) {
 		*crypt_words++ = 0xFFFFFFFF;
 	}
@@ -350,12 +357,12 @@ void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
         tr_words[0] |= EIP_TR_CTRL_CONTEXT_WORDS(crypt_words - tr_words - 2);
 
         /*
-         * Store the seq no offset, icv length and cipher block length
-         * to be used during token fill
+         * Store the details to be used during token fill
          */
         tr_ipsec->seq_offset = seq_offset;
-        tr->digest_len = ipsec->icv_len;
+	tr_ipsec->ctx_num_words = ctx_num_words;
         tr->blk_len = algo->cipher_blk_len;
+        tr->digest_len = ipsec->icv_len;
 	tr->iv_len = algo->iv_len;
 
 	/*
