@@ -22,8 +22,8 @@
 struct eip_tr;
 
 #define EIP_TK_INST_CONTEXT_ACCESS_LEN(words) (((words) & 0xF) << 24)
-#define EIP_TR_IPSEC_ESP_TRAILER_LEN    (2)
-#define EIP_TR_IPSEC_ESP_NXT_HDR(proto) (proto << 9)
+#define EIP_TK_IPSEC_ESP_TRAILER_LEN    (2)
+#define EIP_TK_IPSEC_ESP_NXT_HDR(proto) (proto << 9)
 
 /*
  * eip_tk_ctrl_op
@@ -81,12 +81,12 @@ enum eip_tk_inst {
 	EIP_TK_INST_ENC_HMAC_IPSEC = 0x07000000,	/* Encrypt then hash intermediate block */
 	EIP_TK_INST_PAD_ENC_HMAC = 0x2F220000,		/* Pad before encryption then hash */
 	EIP_TK_INST_CHK_SEQ_NO_ROLLOVER = 0xD0060000,	/* Verify sequence no rollover */
-	EIP_TK_INST_SEQ_NO_UPDT = 0xE1561800,		/* Update sequence no in context record */
+	EIP_TK_INST_SEQ_NO_UPDT = 0xE0561800,		/* Update sequence no in context record */
 
 	EIP_TK_INST_ESP_HDR_CHK = 0x42900000,		/* ESP header authentication */
 	EIP_TK_INST_HMAC_GET_IPSEC = 0x40E60000,	/* Retrieve hash */
 	EIP_TK_INST_ICV_SPI_SEQ_NO_CHK = 0xDD070000,	/* Verify hash, SPI, Seq no */
-	EIP_TK_INST_SEQ_NO_AND_MASK_UPDT = 0xE32E1800,	/* Update sequence no & mask in context record */
+	EIP_TK_INST_SEQ_NO_AND_MASK_UPDT = 0xE02E1800,	/* Update sequence no & mask in context record */
 };
 
 /*

@@ -43,11 +43,13 @@ uint8_t eip_tk_ipsec_encauth_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t
         *tk_word++ = EIP_TK_INST_ESP_HDR_HMAC | auth_len;			/* Pure hash, ESP hdr & IV added by EIP196 */
         *tk_word++ = EIP_TK_INST_ENC_HMAC_IPSEC | (data_len - bypass_len);	/* Encryption + Hash */
         *tk_word++ = EIP_TK_INST_PAD_ENC_HMAC | \
-		     EIP_TR_IPSEC_ESP_NXT_HDR(proto) | \
-                     (pad_len + EIP_TR_IPSEC_ESP_TRAILER_LEN);			/* Add trailer and ecrypt */
+		     EIP_TK_IPSEC_ESP_NXT_HDR(proto) | \
+                     (pad_len + EIP_TK_IPSEC_ESP_TRAILER_LEN);			/* Add trailer and ecrypt */
         *tk_word++ = EIP_TK_INST_HMAC_ADD | digest_len;                         /* Insert generated hash */
         *tk_word++ = EIP_TK_INST_CHK_SEQ_NO_ROLLOVER;				/* Verify seq no rollover */
-        *tk_word++ = EIP_TK_INST_SEQ_NO_UPDT | (ipsec->seq_offset);       	/* Update seq no in contxt record */
+        *tk_word++ = EIP_TK_INST_SEQ_NO_UPDT |					/* TODO: modify origin to support ESN */
+		EIP_TK_INST_CONTEXT_ACCESS_LEN(ipsec->ctx_num_words) |
+		(ipsec->seq_offset);       					/* Update seq no in context record */
 
         /*
          * Fill token header
@@ -94,8 +96,9 @@ uint8_t eip_tk_ipsec_authdec_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t
         *tk_word++ = EIP_TK_INST_HMAC_DEC | cipher_len;			/* Hash + Decrypt */
         *tk_word++ = EIP_TK_INST_HMAC_GET_IPSEC | digest_len;		/* Fetch hash */
         *tk_word++ = EIP_TK_INST_ICV_SPI_SEQ_NO_CHK | digest_len;	/* Verify hash, SPI, seq no */
-        *tk_word++ = EIP_TK_INST_SEQ_NO_AND_MASK_UPDT | \
-                     ipsec->seq_offset;					/* Update seq no, mask in contxt record */
+        *tk_word++ = EIP_TK_INST_SEQ_NO_AND_MASK_UPDT |			/* TODO: modify origin to support ESN */
+		EIP_TK_INST_CONTEXT_ACCESS_LEN(ipsec->ctx_num_words) |
+		ipsec->seq_offset;					/* Update seq no, mask in context record */
 
         /*
          * Fill token header

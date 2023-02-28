@@ -38,8 +38,8 @@ static inline uint16_t eip_tr_ipsec_enc_len(struct eip_tr *tr, struct sk_buff *s
 	uint16_t total_len;
 	uint16_t pad_len;
 
-	total_len = ALIGN(payload_len + EIP_TR_IPSEC_ESP_TRAILER_LEN, tr->blk_len);
-	pad_len = total_len - (payload_len + EIP_TR_IPSEC_ESP_TRAILER_LEN);
+	total_len = ALIGN(payload_len + EIP_TK_IPSEC_ESP_TRAILER_LEN, tr->blk_len);
+	pad_len = total_len - (payload_len + EIP_TK_IPSEC_ESP_TRAILER_LEN);
 	EIP_TR_IPSEC_SKB_CB(skb)->pad_len = pad_len;
 
 	return total_len;
@@ -442,12 +442,12 @@ void eip_tr_ipsec_enc_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
         tr_words[1] |= EIP_TR_IPSEC_SEQ_NUM_STORE;
 
         /*
-         * Store the seq no offset, icv, iv and cipher block length
-         * to be used during token fill
+         * Store the details to be used during token fill
          */
         tr_ipsec->seq_offset = seq_offset;
-        tr->digest_len = ipsec->icv_len;
+	tr_ipsec->ctx_num_words = EIP_TR_IPSEC_CTX_WORDS_ESN(esn);
         tr->blk_len = algo->cipher_blk_len;
+        tr->digest_len = ipsec->icv_len;
 	tr->iv_len = algo->iv_len;
 
         /*
