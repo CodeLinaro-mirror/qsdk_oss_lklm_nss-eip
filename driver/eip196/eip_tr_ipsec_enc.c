@@ -316,12 +316,12 @@ int eip_tr_ipsec_enc(struct eip_tr *tr, struct sk_buff *skb)
 		return -ENOMEM;
 	}
 
-	eip_tr_pre_process(tr, &tr->ipsec.ops, skb);
+	EIP_TR_PRE_PROCESS(tr, &tr->ipsec.ops, skb);
 
 	/*
 	 * Fill token for encryption and hash for ipsec
 	 */
-	tk_words = eip_tr_fill_token(tr, &tr->ipsec.ops, tk, skb, &tk_hdr);
+	tk_words = EIP_TR_FILL_TOKEN(tr, &tr->ipsec.ops, tk, skb, &tk_hdr);
 	dmac_clean_range(tk, tk + 1);
 
 	dma_tx = skb_is_nonlinear(skb) ? eip_dma_tx_nonlinear_skb : eip_dma_tx_linear_skb;

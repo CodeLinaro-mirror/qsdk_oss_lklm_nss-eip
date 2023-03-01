@@ -306,7 +306,7 @@ bool eip_tr_ahash_init(struct eip_tr *tr, struct eip_tr_info *info, const struct
 		/*
 		 * Flush record memory.
 		 * Driver must not make any update in transform records words after this.
-		 * EIP197 will do ipad/opad update.
+		 * EIP196 will do ipad/opad update.
 		 */
 		dmac_clean_range(tr->hw_words, tr->hw_words + EIP_HW_CTX_SIZE_SMALL_BYTES);
 		return true;
@@ -322,7 +322,7 @@ bool eip_tr_ahash_init(struct eip_tr *tr, struct eip_tr_info *info, const struct
 	/*
 	 * Flush record memory.
 	 * Driver must not make any update in transform records words after this.
-	 * EIP197 will do ipad/opad update.
+	 * EIP196 will do ipad/opad update.
 	 */
 	dmac_clean_range(tr->hw_words, tr->hw_words+ EIP_HW_CTX_SIZE_SMALL_BYTES);
 
@@ -567,7 +567,7 @@ int eip_tr_ahash_auth(struct eip_tr *tr, struct ahash_request *req, struct scatt
 	/*
 	 * Fill token for hmac and decryption.
 	 */
-	tk_words = tr->crypto.auth.tk_fill(tk, tr, req, &tk_hdr);
+	tk_words = EIP_TR_FILL_TOKEN(tr, &tr->crypto.auth, tk, req, &tk_hdr);
 
 	dmac_clean_range(tk, tk + 1);
 
