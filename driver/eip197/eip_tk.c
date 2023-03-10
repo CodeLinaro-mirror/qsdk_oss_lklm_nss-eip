@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -17,7 +17,69 @@
 #include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <crypto/gcm.h>
+#include <crypto/aes.h>
 #include "eip_priv.h"
+
+/*
+ * eip_tk_encauth_gcm_cmn()
+ *	Fill encryption and GHASH token instructions for outbound traffic
+ */
+static inline uint8_t eip_tk_encauth_gcm_cmn(uint32_t *tk_word, uint8_t auth_len, uint8_t skip_len,
+		uint16_t data_len, uint8_t digest_len, uint32_t *tk_hdr)
+{
+	uint32_t *inst  = tk_word;
+	uint16_t crypt_len = data_len - auth_len - skip_len;
+
+	/*
+	 * Fill instructions.
+	 */
+	*inst++ = EIP_TK_INST_GCM_HMAC | auth_len;		/* pure hash */
+	*inst++ = EIP_TK_INST_BYPASS | skip_len;		/* Bypass data */
+	*inst++ = EIP_TK_INST_DEL_DATA | (auth_len + skip_len);	/* Remove y0 */
+	*inst++ = EIP_TK_INST_ADD_DATA | AES_BLOCK_SIZE;	/* Hash + enc + store */
+	*inst++ = EIP_TK_INST_ENC_GCM | crypt_len;		/* Hash + enc + store */
+	*inst++ = EIP_TK_INST_NOPAD_ENC_HMAC;			/* Don't pad */
+	*inst++ = EIP_TK_INST_HMAC_ADD | digest_len;		/* insert hash */
+
+	/*
+	 * Fill token header.
+	 */
+	*tk_hdr |= EIP_HW_TOKEN_HDR_CRYPTO_IV16;
+	*tk_hdr |= (EIP_HW_TOKEN_HDR_OUTBOUND | data_len);
+
+	return (inst - tk_word);
+}
+
+/*
+ * eip_tk_authdec_gcm_cmn()
+ *	Fill decryption and GHASH token instructions for inbound traffic
+ */
+static inline uint8_t eip_tk_authdec_gcm_cmn(uint32_t *tk_word, uint8_t auth_len, uint8_t skip_len,
+		uint16_t data_len, uint8_t digest_len, uint32_t *tk_hdr)
+{
+	uint32_t *inst = tk_word;
+	uint16_t crypt_len = data_len - auth_len - skip_len - digest_len;
+
+	/*
+	 * Fill instructions.
+	 */
+	*inst++ = EIP_TK_INST_GCM_HMAC | auth_len;		/* pure hash */
+	*inst++ = EIP_TK_INST_BYPASS | skip_len;		/* Bypass data */
+	*inst++ = EIP_TK_INST_DEL_DATA | (auth_len + skip_len);	/* Remove Y0 */
+	*inst++ = EIP_TK_INST_ADD_DATA | AES_BLOCK_SIZE;	/* enc + hash */
+	*inst++ = EIP_TK_INST_HMAC_DEC | crypt_len;		/* hash + dec */
+	*inst++ = EIP_TK_INST_HMAC_GET | digest_len;		/* Fetch hash/pad */
+	*inst++ = EIP_TK_INST_HMAC_CHK | digest_len;		/* Verify hash */
+
+	/*
+	 * Fill token header.
+	 */
+	*tk_hdr |= EIP_HW_TOKEN_HDR_CRYPTO_IV16;
+	*tk_hdr |= (EIP_HW_TOKEN_HDR_INBOUND | data_len);
+
+	return (inst - tk_word);
+}
 
 /*
  * eip_tk_enc_3des()
@@ -571,3 +633,185 @@ uint8_t eip_tk_digest(struct eip_tk *tk, struct eip_tr *tr, struct scatterlist *
 			tr->digest_len, pad_words, sg->length);
 	return (tk_word - tk->words);
 }
+
+/*
+ * eip_tk_encauth_gcm()
+ *	Fill tokens for AEAD outbound traffic.
+ */
+uint8_t eip_tk_encauth_gcm(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr)
+{
+	struct aead_request *req = eip_req2aead_request(eip_req);
+	struct crypto_aead *tfm = crypto_aead_reqtfm(req);
+	uint16_t data_len = req->cryptlen + req->assoclen;
+	uint16_t digest_len = crypto_aead_authsize(tfm);
+	uint32_t *iv_word = (uint32_t *)req->iv;
+	uint16_t auth_len = req->assoclen;
+	uint32_t *tk_word = tk->words;
+
+	/*
+	 * Fill token control info.
+	 */
+	*tk_word++ = tr->ctrl_words[0] | EIP_TK_CTRL_OP_ENC_HMAC;
+	*tk_word++ = tr->ctrl_words[1];
+
+	/*
+	 * We construct IV here. In case of GCM linux only give 12 bytes of IV.
+	 * We add additional 4 bytes of counter to make it 16 bytes as this is
+	 * expected from hardware.
+	 * Byte[0..2]: IV[0..2] from request.
+	 * Byte[3]: Counter set to 1.
+	 */
+	*tk_word++ = iv_word[0];
+	*tk_word++ = iv_word[1];
+	*tk_word++ = iv_word[2];
+	*tk_word++ = ntohl(0x1);
+
+	/*
+	 * Fill instructions and token header.
+	 * For non RFC case IV is included for authentication hence skip length is 0.
+	 */
+	tk_word += eip_tk_encauth_gcm_cmn(tk_word, auth_len, 0, data_len, digest_len, tk_hdr);
+
+	/*
+	 * Total token words.
+	 */
+	return (tk_word - tk->words);
+}
+EXPORT_SYMBOL(eip_tk_encauth_gcm);
+
+/*
+ * eip_tk_authdec_gcm()
+ *	Fill tokens for AEAD inbound traffic.
+ */
+uint8_t eip_tk_authdec_gcm(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr)
+{
+	struct aead_request *req = eip_req2aead_request(eip_req);
+	struct crypto_aead *tfm = crypto_aead_reqtfm(req);
+	uint16_t data_len = req->cryptlen + req->assoclen;
+	uint16_t digest_len = crypto_aead_authsize(tfm);
+	uint32_t *iv_word = (uint32_t *)req->iv;
+	uint16_t auth_len = req->assoclen;
+	uint32_t *tk_word = tk->words;
+
+	/*
+	 * Fill token control info.
+	 */
+	*tk_word++ = tr->ctrl_words[0] | EIP_TK_CTRL_OP_HMAC_DEC;
+	*tk_word++ = tr->ctrl_words[1];
+
+	/*
+	 * We construct IV here. In case of GCM linux only give 12 bytes of IV.
+	 * We add additional 4 bytes of counter to make it 16 bytes as this is
+	 * expected from hardware.
+	 * Byte[0..2]: IV[0..2] from request.
+	 * Byte[3]: Counter set to 1.
+	 */
+	*tk_word++ = iv_word[0];
+	*tk_word++ = iv_word[1];
+	*tk_word++ = iv_word[2];
+	*tk_word++ = ntohl(0x1);
+
+	/*
+	 * Fill token instructions and token header
+	 * For non RFC case IV is included for authentication hence skip length is 0.
+	 */
+	tk_word += eip_tk_authdec_gcm_cmn(tk_word, auth_len, 0, data_len, digest_len, tk_hdr);
+
+	/*
+	 * Total token words.
+	 */
+	return (tk_word - tk->words);
+}
+EXPORT_SYMBOL(eip_tk_authdec_gcm);
+
+/*
+ * eip_tk_encauth_gcm_rfc()
+ *	Fill encryption tokens followed by gmac tokens.
+ */
+uint8_t eip_tk_encauth_gcm_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr)
+{
+	struct aead_request *req = eip_req2aead_request(eip_req);
+	struct crypto_aead *tfm = crypto_aead_reqtfm(req);
+	uint16_t data_len = req->cryptlen + req->assoclen;
+	uint16_t digest_len = crypto_aead_authsize(tfm);
+	uint32_t *iv_word = (uint32_t *)req->iv;
+	uint16_t iv_len = crypto_aead_ivsize(tfm);
+	uint16_t auth_len = req->assoclen - iv_len;
+	uint32_t *tk_word = tk->words;
+
+	/*
+	 * Fill token control info.
+	 */
+	*tk_word++ = tr->ctrl_words[0] | EIP_TK_CTRL_OP_ENC_HMAC;
+	*tk_word++ = tr->ctrl_words[1];
+
+	/*
+	 * We construct IV here from cached nonce during tr alloc.
+	 * Byte[0]: nonce from key.
+	 * Byte[1]: IV[0] from request.
+	 * Byte[2]: IV[1] from request.
+	 * Byte[3]: Counter set to 1.
+	 */
+	*tk_word++ = tr->nonce;
+	*tk_word++ = iv_word[0];
+	*tk_word++ = iv_word[1];
+	*tk_word++ = ntohl(0x1);
+
+	/*
+	 * Fill token instructions and token header
+	 * For RFC case IV is not included for authentication.
+	 */
+	tk_word += eip_tk_encauth_gcm_cmn(tk_word, auth_len, iv_len, data_len, digest_len, tk_hdr);
+
+	/*
+	 * Total token words.
+	 */
+	return (tk_word - tk->words);
+}
+EXPORT_SYMBOL(eip_tk_encauth_gcm_rfc);
+
+/*
+ * eip_tk_authdec_gcm_rfc()
+ *	Fill gmac tokens followed by decryption tokens.
+ */
+uint8_t eip_tk_authdec_gcm_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr)
+{
+	struct aead_request *req = eip_req2aead_request(eip_req);
+	struct crypto_aead *tfm = crypto_aead_reqtfm(req);
+	uint16_t data_len = req->cryptlen + req->assoclen;
+	uint16_t digest_len = crypto_aead_authsize(tfm);
+	uint32_t *iv_word = (uint32_t *)req->iv;
+	uint16_t iv_len = crypto_aead_ivsize(tfm);
+	uint16_t auth_len = req->assoclen - iv_len;
+	uint32_t *tk_word = tk->words;
+
+	/*
+	 * Fill token control info.
+	 */
+	*tk_word++ = tr->ctrl_words[0] | EIP_TK_CTRL_OP_HMAC_DEC;
+	*tk_word++ = tr->ctrl_words[1];
+
+	/*
+	 * We construct IV here from cached nonce during setkey.
+	 * Byte[0]: nonce from key.
+	 * Byte[1]: IV[0] from request.
+	 * Byte[2]: IV[1] from request.
+	 * Byte[3]: Counter set to 1.
+	 */
+	*tk_word++ = tr->nonce;
+	*tk_word++ = iv_word[0];
+	*tk_word++ = iv_word[1];
+	*tk_word++ = ntohl(0x1);
+
+	/*
+	 * Fill token instructions and token header
+	 * For RFC case IV is not included for authentication
+	 */
+	tk_word += eip_tk_authdec_gcm_cmn(tk_word, auth_len, iv_len, data_len, digest_len, tk_hdr);
+
+	/*
+	 * Total token words.
+	 */
+	return (tk_word - tk->words);
+}
+EXPORT_SYMBOL(eip_tk_authdec_gcm_rfc);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -21,6 +21,8 @@
 #include <crypto/md5.h>
 #include <crypto/aead.h>
 #include <crypto/ctr.h>
+#include <crypto/gcm.h>
+#include <crypto/ghash.h>
 #include <crypto/authenc.h>
 #include <crypto/internal/aead.h>
 
@@ -34,6 +36,7 @@ static struct eip_crypto aead_g = {0};
 /*
  * Function declaration.
  */
+static int eip_crypto_aead_setkey_noauth(struct crypto_aead *tfm, const u8 *key, unsigned int keylen);
 static int eip_crypto_aead_setkey(struct crypto_aead *tfm, const u8 *key, unsigned int keylen);
 static void eip_crypto_aead_tfm_exit(struct crypto_aead *aead_tfm);
 static int eip_crypto_aead_tfm_init(struct crypto_aead *aead_tfm);
@@ -50,7 +53,7 @@ static struct aead_alg eip_crypto_aead_algs[] = {
 		 * aes-cbc, MD5
 		 */
 		.base = {
-			.cra_name 	= "echainiv(authenc(hmac(md5),cbc(aes)))",
+			.cra_name 	= "authenc(hmac(md5),cbc(aes))",
 			.cra_driver_name = "eip-aes-cbc-md5-hmac",
 			.cra_priority 	= 10000,
 			.cra_flags 	= CRYPTO_ALG_ASYNC,
@@ -73,7 +76,7 @@ static struct aead_alg eip_crypto_aead_algs[] = {
 		 * aes-cbc, sha1
 		 */
 		.base = {
-			.cra_name 	= "echainiv(authenc(hmac(sha1),cbc(aes)))",
+			.cra_name 	= "authenc(hmac(sha1),cbc(aes))",
 			.cra_driver_name = "eip-aes-cbc-sha1-hmac",
 			.cra_priority 	= 10000,
 			.cra_flags 	= CRYPTO_ALG_ASYNC,
@@ -141,7 +144,7 @@ static struct aead_alg eip_crypto_aead_algs[] = {
 		 * aes-cbc, sha256
 		 */
 		.base = {
-			.cra_name = "echainiv(authenc(hmac(sha256),cbc(aes)))",
+			.cra_name = "authenc(hmac(sha256),cbc(aes))",
 			.cra_driver_name = "eip-aes-cbc-sha256-hmac",
 			.cra_priority = 10000,
 			.cra_flags = CRYPTO_ALG_ASYNC,
@@ -231,96 +234,6 @@ static struct aead_alg eip_crypto_aead_algs[] = {
 		 * aes-cbc, sha384
 		 */
 		.base = {
-			.cra_name 	= "echainiv(authenc(hmac(sha384),cbc(aes)))",
-			.cra_driver_name = "eip-aes-cbc-sha384-hmac",
-			.cra_priority 	= 10000,
-			.cra_flags 	= CRYPTO_ALG_ASYNC,
-			.cra_blocksize 	= AES_BLOCK_SIZE,
-			.cra_ctxsize 	= sizeof(struct eip_crypto_tfm_ctx),
-			.cra_alignmask 	= 0,
-			.cra_module 	= THIS_MODULE,
-		},
-
-		.init 		= eip_crypto_aead_tfm_init,
-		.exit 		= eip_crypto_aead_tfm_exit,
-		.ivsize 	= AES_BLOCK_SIZE,
-		.maxauthsize 	= SHA384_DIGEST_SIZE,
-		.setkey 	= eip_crypto_aead_setkey,
-		.encrypt 	= eip_crypto_aead_encrypt,
-		.decrypt 	= eip_crypto_aead_decrypt,
-	},
-	{	/*
-		 * aes-cbc, sha512
-		 */
-		.base = {
-			.cra_name 	= "echainiv(authenc(hmac(sha512),cbc(aes)))",
-			.cra_driver_name = "eip-aes-cbc-sha512-hmac",
-			.cra_priority 	= 10000,
-			.cra_flags 	= CRYPTO_ALG_ASYNC,
-			.cra_blocksize 	= AES_BLOCK_SIZE,
-			.cra_ctxsize 	= sizeof(struct eip_crypto_tfm_ctx),
-			.cra_alignmask 	= 0,
-			.cra_module 	= THIS_MODULE,
-		},
-
-		.init 		= eip_crypto_aead_tfm_init,
-		.exit 		= eip_crypto_aead_tfm_exit,
-		.ivsize 	= AES_BLOCK_SIZE,
-		.maxauthsize 	= SHA512_DIGEST_SIZE,
-		.setkey 	= eip_crypto_aead_setkey,
-		.encrypt 	= eip_crypto_aead_encrypt,
-		.decrypt 	= eip_crypto_aead_decrypt,
-	},
-	{
-		/*
-		 * aes-cbc, sha1
-		 */
-		.base = {
-			.cra_name 	= "authenc(hmac(sha1),cbc(aes))",
-			.cra_driver_name = "eip-aes-cbc-sha1-hmac",
-			.cra_priority 	= 10000,
-			.cra_flags 	= CRYPTO_ALG_ASYNC,
-			.cra_blocksize 	= AES_BLOCK_SIZE,
-			.cra_ctxsize 	= sizeof(struct eip_crypto_tfm_ctx),
-			.cra_alignmask 	= 0,
-			.cra_module 	= THIS_MODULE,
-		},
-
-		.init 		= eip_crypto_aead_tfm_init,
-		.exit 		= eip_crypto_aead_tfm_exit,
-		.ivsize 	= AES_BLOCK_SIZE,
-		.maxauthsize 	= SHA1_DIGEST_SIZE,
-		.setkey 	= eip_crypto_aead_setkey,
-		.encrypt 	= eip_crypto_aead_encrypt,
-		.decrypt 	= eip_crypto_aead_decrypt,
-	},
-	{	/*
-		 * aes-cbc, sha256
-		 */
-		.base = {
-			.cra_name 	= "authenc(hmac(sha256),cbc(aes))",
-			.cra_driver_name = "eip-aes-cbc-sha256-hmac",
-			.cra_priority 	= 10000,
-			.cra_flags 	= CRYPTO_ALG_ASYNC,
-			.cra_blocksize 	= AES_BLOCK_SIZE,
-			.cra_ctxsize 	= sizeof(struct eip_crypto_tfm_ctx),
-			.cra_alignmask 	= 0,
-			.cra_module 	= THIS_MODULE,
-		},
-
-		.init 		= eip_crypto_aead_tfm_init,
-		.exit 		= eip_crypto_aead_tfm_exit,
-		.ivsize 	= AES_BLOCK_SIZE,
-		.maxauthsize 	= SHA256_DIGEST_SIZE,
-		.setkey 	= eip_crypto_aead_setkey,
-		.encrypt 	= eip_crypto_aead_encrypt,
-		.decrypt 	= eip_crypto_aead_decrypt,
-	},
-	{
-		/*
-		 * aes-cbc, sha384
-		 */
-		.base = {
 			.cra_name 	= "authenc(hmac(sha384),cbc(aes))",
 			.cra_driver_name = "eip-aes-cbc-sha384-hmac",
 			.cra_priority 	= 10000,
@@ -361,6 +274,50 @@ static struct aead_alg eip_crypto_aead_algs[] = {
 		.encrypt 	= eip_crypto_aead_encrypt,
 		.decrypt 	= eip_crypto_aead_decrypt,
 	},
+	{	/*
+		 * RFC4106, GCM
+		 */
+		.base = {
+			.cra_name 	= "rfc4106(gcm(aes))",
+			.cra_driver_name = "eip-aes-gcm-rfc4106",
+			.cra_priority 	= 10000,
+			.cra_flags 	= CRYPTO_ALG_ASYNC,
+			.cra_blocksize 	= 1,
+			.cra_ctxsize 	= sizeof(struct eip_crypto_tfm_ctx),
+			.cra_alignmask 	= 0,
+			.cra_module 	= THIS_MODULE,
+		},
+
+		.init 		= eip_crypto_aead_tfm_init,
+		.exit 		= eip_crypto_aead_tfm_exit,
+		.ivsize 	= GCM_RFC4106_IV_SIZE,
+		.maxauthsize 	= GHASH_DIGEST_SIZE,
+		.setkey 	= eip_crypto_aead_setkey_noauth,
+		.encrypt 	= eip_crypto_aead_encrypt,
+		.decrypt 	= eip_crypto_aead_decrypt,
+	},
+	{	/*
+		 * GCM
+		 */
+		.base = {
+			.cra_name 	= "gcm(aes)",
+			.cra_driver_name = "eip-aes-gcm",
+			.cra_priority 	= 10000,
+			.cra_flags 	= CRYPTO_ALG_ASYNC,
+			.cra_blocksize 	= 1,
+			.cra_ctxsize 	= sizeof(struct eip_crypto_tfm_ctx),
+			.cra_alignmask 	= 0,
+			.cra_module 	= THIS_MODULE,
+		},
+
+		.init 		= eip_crypto_aead_tfm_init,
+		.exit 		= eip_crypto_aead_tfm_exit,
+		.ivsize 	= GCM_AES_IV_SIZE,
+		.maxauthsize 	= GHASH_DIGEST_SIZE,
+		.setkey 	= eip_crypto_aead_setkey_noauth,
+		.encrypt 	= eip_crypto_aead_encrypt,
+		.decrypt 	= eip_crypto_aead_decrypt,
+	}
 };
 
 /*
@@ -596,6 +553,79 @@ static void eip_crypto_aead_err(void *app_data, eip_req_t eip_req, int err)
 }
 
 /*
+ * eip_crypto_aead_setkey_noauth()
+ *      Sets key for transformation with no authentication.
+ */
+static int eip_crypto_aead_setkey_noauth(struct crypto_aead *tfm, const u8 *key, unsigned int keylen)
+{
+	struct eip_crypto_tfm_ctx *tfm_ctx = crypto_tfm_ctx(crypto_aead_tfm(tfm));
+	const char *alg_name = (char *)crypto_tfm_alg_driver_name(crypto_aead_tfm(tfm));
+	struct eip_tr_info_crypto *crypto;
+	struct eip_tr_info info = {0};
+	struct eip_tr *tr, *old_tr;
+	struct eip_tr_base *base;
+	uint32_t nonce = 0;
+
+	BUG_ON(!tfm_ctx);
+
+	base = &info.base;
+	crypto = &info.crypto;
+
+	/*
+	 * In case of rfc4106 nonce is present as part of key in last 4 bytes.
+	 * We copy it here so it can be used in data path.
+	 */
+	if (strstr(alg_name, "gcm-rfc4106")) {
+		keylen -= CTR_RFC3686_NONCE_SIZE;
+		memcpy(&nonce, key + keylen, CTR_RFC3686_NONCE_SIZE);
+	}
+
+	/*
+	 * Fill info object.
+	 */
+	strlcpy(base->alg_name, alg_name, CRYPTO_MAX_ALG_NAME);
+	base->cipher.key_data = key;
+	base->cipher.key_len = keylen;
+	base->nonce = nonce;
+
+	/*
+	 * Set callbacks and app data.
+	 */
+	crypto->enc_cb = eip_crypto_aead_done;
+	crypto->enc_err_cb = eip_crypto_aead_err;
+	crypto->dec_cb = eip_crypto_aead_done;
+	crypto->dec_err_cb = eip_crypto_aead_err;
+	crypto->app_data = tfm_ctx;
+
+	/*
+	 * Allocate a new TR.
+	 */
+	tr = eip_tr_alloc(aead_g.dma_ctx, &info);
+	if (!tr) {
+		pr_warn("%px: Unable to allocate new TR.\n", tfm_ctx);
+		crypto_aead_set_flags(tfm, CRYPTO_TFM_RES_BAD_FLAGS);
+		return -EBUSY;
+	}
+
+	/*
+	 * There cannot be race condition between setkey and tfm exit,
+	 * hence we are not taking any write lock.
+	 */
+	old_tr = tfm_ctx->tr;
+	rcu_assign_pointer(tfm_ctx->tr, tr);
+	if (old_tr) {
+		synchronize_rcu();
+		eip_tr_free(old_tr);
+	}
+
+	/*
+	 * Mark tfm as active.
+	 */
+	atomic_set(&tfm_ctx->active, 1);
+	return 0;
+}
+
+/*
  * eip_crypto_aead_setkey()
  *	Used to set key for transformation.
  */
@@ -751,8 +781,7 @@ static int eip_crypto_aead_encrypt(struct aead_request *req)
  */
 static int eip_crypto_aead_decrypt(struct aead_request *req)
 {
-	struct crypto_aead *base = crypto_aead_reqtfm(req);
-	struct eip_crypto_tfm_ctx *tfm_ctx = crypto_aead_ctx(base);
+	struct eip_crypto_tfm_ctx *tfm_ctx = crypto_aead_ctx(crypto_aead_reqtfm(req));
 	struct eip_crypto_tfm_stats *tfm_stats = this_cpu_ptr(tfm_ctx->stats);
 	struct eip_crypto_tfm_stats *aead_stats = this_cpu_ptr(aead_g.stats);
 	uint32_t cryptlen = req->cryptlen;

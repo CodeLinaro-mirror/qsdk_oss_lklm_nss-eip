@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -17,10 +17,10 @@
 #ifndef __EIP_IPSEC_DEV_H
 #define __EIP_IPSEC_DEV_H
 
-#define EIP_IPSEC_DEV_MAX_HDR_LEN 96
-#define EIP_IPSEC_DEV_MAX_HEADROOM 128           /* Size of the buffer headroom. */
-#define EIP_IPSEC_DEV_MAX_TAILROOM 192           /* Size of the buffer tailroom. */
-#define EIP_IPSEC_DEV_ARPHRD 31	/* ARP (iana.org) hardware type for an IPsec tunnel. */
+#define EIP_IPSEC_DEV_MAX_HDR_LEN 96U
+#define EIP_IPSEC_DEV_MAX_HEADROOM 128U           /* Size of the buffer headroom. */
+#define EIP_IPSEC_DEV_MAX_TAILROOM 192U           /* Size of the buffer tailroom. */
+#define EIP_IPSEC_DEV_ARPHRD 31U	/* ARP (iana.org) hardware type for an IPsec tunnel. */
 
 /*
  * IPsec device statistics.

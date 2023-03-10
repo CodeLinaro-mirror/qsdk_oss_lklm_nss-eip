@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -17,8 +17,8 @@
 #ifndef __EIP_IPSEC_XFRM_H
 #define __EIP_IPSEC_XFRM_H
 
-#define IPSEC_XFRM_SA_MAX_REPLAY_WIN_SZ 64
-#define DEBUG_LEVEL 2
+#define IPSEC_XFRM_SA_MAX_REPLAY_WIN_SZ 64U
+#define DEBUG_LEVEL 2U
 
 #if (DEBUG_LEVEL < 1)
 #define DEBUG_ASSERT(s, ...)
