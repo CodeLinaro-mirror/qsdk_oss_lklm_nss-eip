@@ -504,7 +504,7 @@ int eip_tr_genkey(struct eip_tr *tr, struct eip_tr_info *info, uint8_t *key, uin
 	 */
 	sk_tfm = crypto_alloc_sync_skcipher("ctr(aes-generic)", 0, 0);
 	if (IS_ERR(sk_tfm)) {
-		pr_err("%px: Error allocating tfm for skcipher: ctr(aes)\n", sk_tfm);
+		pr_err("%px: Error allocating tfm for skcipher: ctr(aes-generic)\n", sk_tfm);
 		return PTR_ERR(sk_tfm);
 	}
 
