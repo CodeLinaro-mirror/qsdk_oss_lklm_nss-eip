@@ -386,9 +386,11 @@ static void eip_crypto_aead_tfm_exit(struct crypto_aead *aead_tfm)
 
 	/*
 	 * Free the TR & stats
+	 * TR is not allocated when setkey is not called
 	 */
-	BUG_ON(!tfm_ctx->tr);
-	eip_tr_free(tfm_ctx->tr);
+	if(likely(tfm_ctx->tr)) {
+		eip_tr_free(tfm_ctx->tr);
+	}
 
 	BUG_ON(!tfm_ctx->stats);
 	free_percpu(tfm_ctx->stats);
