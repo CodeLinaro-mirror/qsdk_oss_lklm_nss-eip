@@ -323,6 +323,20 @@ static inline bool eip_dma_hy_classify_err(struct eip_dma *dma, struct sk_buff *
 }
 
 /*
+ * eip_dma_hy_refill_all()
+ *	Refill new SKB(s) in all hybrid DMA output ring.
+ */
+void eip_dma_hy_refill_all(struct eip_ctx *ctx)
+{
+	struct eip_pdev *ep = ctx->ep;
+	int cpu;
+
+	for_each_online_cpu(cpu) {
+		eip_dma_hy_refill(&ep->hy[cpu]);
+	}
+}
+
+/*
  * eip_dma_hy_rx()
  *	Process all recieved packet on DMA.
  */
@@ -874,7 +888,7 @@ int eip_dma_hy_init(struct eip_dma *dma, struct platform_device *pdev, uint8_t t
 	init_dummy_netdev(&dma->out.ndev);
 	netif_napi_add(&dma->out.ndev, &dma->out.napi, eip_dma_hy_napi_rx_poll, EIP_DMA_RX_HY_NAPI_WEIGHT);
 	napi_enable(&dma->out.napi);
-	eip_dma_hy_refill(dma);
+	ep->dma_refill_req = true;
 
 	/*
 	 * Interrupt can only be handled by the specified CPU.
