@@ -122,6 +122,7 @@ struct eip_pdev {
 	dma_addr_t dev_paddr;			/* starting physical address of device */
 	dma_addr_t hwcache_paddr;		/* Physical address for HW flow */
 	bool redirect_en;			/* Redirection / Hybrid mode is configured */
+	bool dma_refill_req;			/* Hybrid DMA refill required */
 	struct eip_flow_tbl flow_table;		/* Flow table */
 };
 
