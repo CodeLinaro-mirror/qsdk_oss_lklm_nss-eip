@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -27,15 +27,15 @@
 #include "eip_tr.h"
 #include "eip_flow.h"
 
-#define EIP_MAX_STR_LEN 25		/* Maximum string length */
-#define EIP_DEBUGFS_MAX_NAME 128	/* Maximum string length for debugfs */
+#define EIP_MAX_STR_LEN 25U		/* Maximum string length */
+#define EIP_DEBUGFS_MAX_NAME 128U	/* Maximum string length for debugfs */
 
 /*
  * TODO: what should be correct value?
  */
-#define EIP_RX_BUFFER_HEADROOM 128
-#define EIP_RX_BUFFER_TAILROOM 192
-#define EIP_RX_BUFFER_DATA_LEN 1500
+#define EIP_RX_BUFFER_HEADROOM 128U
+#define EIP_RX_BUFFER_TAILROOM 192U
+#define EIP_RX_BUFFER_DATA_LEN 1500U
 #define EIP_RX_BUFFER_SIZE ((EIP_RX_BUFFER_HEADROOM) + (EIP_RX_BUFFER_TAILROOM) + (EIP_RX_BUFFER_DATA_LEN))
 
 #define ASSERT(x) \

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -129,7 +129,7 @@ static const struct eip_svc_entry ipsec_algo_list[] = {
 		.ctrl_words_1 = EIP_HW_CTX_CIPHER_MODE_GCM | EIP_TR_IPSEC_CONTROL_IV(0x1) |
 			EIP_TR_IPSEC_IV_FORMAT(0x1),
 		.iv_len = 8,
-		.cipher_blk_len = 4
+		.cipher_blk_len = 4 /* IPsec ESP requires dword aligned */
 	},
 	{
 		.name = "eip-cbc-null-sha1-hmac",
@@ -244,7 +244,7 @@ static uint8_t eip_tr_ipsec_get_ohdr(uint32_t sa_flags)
  * eip_tr_ipsec_dec_cmn_init()
  *	Initialize the transform record for ipsec Decapsulation.
  */
-static void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo, bool nonce_en)
+static void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo)
 {
 	struct eip_tr_info_ipsec *ipsec = &info->ipsec;
 	struct eip_tr_base *crypto = &info->base;
@@ -283,17 +283,13 @@ static void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *inf
 	crypt_words += (crypto->cipher.key_len /  sizeof(uint32_t));
 
 	/*
-	 * Leave the space for inner & outer digest.
+	 * Leave the space for inner & outer digest / GHASH key
+	 * For GCM we store only GHASH key of size auth_block_len
+	 * and for other algo we store inner & outer digest each
+	 * of size auth_state_len
 	 */
-	size = algo->auth_state_len;
-	crypt_words += (size / sizeof(uint32_t)); /* ipad */
-	crypt_words += (size / sizeof(uint32_t)); /* opad */
-
-	/*
-	 * Fill nonce.
-	 */
-	if (nonce_en)
-		*crypt_words++ = crypto->nonce;
+	size = algo->auth_state_len ? (algo->auth_state_len * 2) : algo->auth_block_len;
+	crypt_words += (size / sizeof(uint32_t));
 
 	/*
 	 * IPsec specific fields for EIP96.
@@ -315,6 +311,12 @@ static void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *inf
 	while (mask_sz--) {
 		*crypt_words++ = 0xFFFFFFFF;
 	}
+
+	/*
+	 * Fill nonce.
+	 */
+	if (crypto->nonce)
+		*crypt_words++ = crypto->nonce;
 
 	/*
 	 * Done with EIP crypto context words.
@@ -387,7 +389,7 @@ static void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *inf
  * eip_tr_ipsec_enc_cmn_init()
  *	Initialize the transform record for ipsec encapsulation.
  */
-static void eip_tr_ipsec_enc_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo, bool nonce_en)
+static void eip_tr_ipsec_enc_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo)
 {
 	struct eip_tr_info_ipsec *ipsec = &info->ipsec;
 	struct eip_tr_base *crypto = &info->base;
@@ -424,17 +426,13 @@ static void eip_tr_ipsec_enc_cmn_init(struct eip_tr *tr, struct eip_tr_info *inf
 	crypt_words += (crypto->cipher.key_len /  sizeof(uint32_t));
 
 	/*
-	 * Leave the space for inner & outer digest.
+	 * Leave the space for inner & outer digest / GHASH key
+	 * For GCM we store only GHASH key of size auth_block_len
+	 * and for other algo we store inner & outer digest each
+	 * of size auth_state_len
 	 */
-	size = algo->auth_state_len;
-	crypt_words += (size / sizeof(uint32_t)); /* ipad */
-	crypt_words += (size / sizeof(uint32_t)); /* opad */
-
-	/*
-	 * Fill nonce.
-	 */
-	if (nonce_en)
-		*crypt_words++ = crypto->nonce;
+	size = algo->auth_state_len ? (algo->auth_state_len * 2) : algo->auth_block_len;
+	crypt_words += (size / sizeof(uint32_t));
 
 	/*
 	 * IPsec specific fields for EIP96.
@@ -446,6 +444,12 @@ static void eip_tr_ipsec_enc_cmn_init(struct eip_tr *tr, struct eip_tr_info *inf
 	seq_num_offst = crypt_words - tr_words - 1;
 	if (esn)
 		*crypt_words++ = 0;
+
+	/*
+	 * Fill nonce.
+	 */
+	if (crypto->nonce)
+		*crypt_words++ = crypto->nonce;
 
 	/*
 	 * Done with EIP crypto context words.
@@ -558,15 +562,11 @@ static bool eip_tr_ipsec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, c
 	 * We first do common initialization and then algo specific initialization.
 	 */
 	if (enc) {
-		eip_tr_ipsec_enc_cmn_init(tr, info, algo, false);
-
+		eip_tr_ipsec_enc_cmn_init(tr, info, algo);
 		tr_words[0] |= EIP_TK_CTRL_OP_ENC_HMAC;
-		tr_words[68] |= EIP_TR_IPSEC_ESP_PROTO(EIP_TR_IPSEC_PROTO_OUT_CBC);
 	} else {
-		eip_tr_ipsec_dec_cmn_init(tr, info, algo, false);
-
+		eip_tr_ipsec_dec_cmn_init(tr, info, algo);
 		tr_words[0] |= EIP_TK_CTRL_OP_HMAC_DEC;
-		tr_words[68] |= EIP_TR_IPSEC_ESP_PROTO(EIP_TR_IPSEC_PROTO_IN_CBC);
 	}
 
 	/*
@@ -710,8 +710,14 @@ static bool eip_tr_ipsec_des_cbc_init(struct eip_tr *tr, struct eip_tr_info *inf
 static bool eip_tr_ipsec_aes_gcm_init(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo)
 {
 	struct eip_tr_info_ipsec *ipsec = &info->ipsec;
+	struct eip_tr_base *base = &info->base;
+	uint8_t authkey[AES_BLOCK_SIZE] = {0};
 	uint32_t *tr_words = tr->hw_words;
+	uint32_t *doffset = NULL;
+	uint32_t *key = NULL;
+	uint8_t auth_key_idx;
 	uint8_t enc;
+	int err = 0;
 
 	/*
 	 * We first do common initialization and then algo specific initialization.
@@ -721,8 +727,7 @@ static bool eip_tr_ipsec_aes_gcm_init(struct eip_tr *tr, struct eip_tr_info *inf
 		return false;
 	}
 
-#if 0
-	switch(crypto->cipher.key_len) {
+	switch(base->cipher.key_len) {
 	case AES_KEYSIZE_128:
 		tr_words[0] |= EIP_HW_CTX_ALGO_AES128;
 		tr->ctrl_words[0] |= EIP_HW_CTX_ALGO_AES128;
@@ -739,7 +744,6 @@ static bool eip_tr_ipsec_aes_gcm_init(struct eip_tr *tr, struct eip_tr_info *inf
 		pr_err("%px: Invalid key length(%u)\n", tr, base->cipher.key_len);
 		return false;
 	}
-#endif
 
 	enc = !!(ipsec->sa_flags & EIP_TR_IPSEC_FLAG_ENC);
 	if (enc) {
@@ -749,20 +753,29 @@ static bool eip_tr_ipsec_aes_gcm_init(struct eip_tr *tr, struct eip_tr_info *inf
 	}
 
 	/*
+	 * Generate and fill ghash key.
+	 * Here we are using software for generation of the keys
+	 */
+	err = eip_tr_genkey(tr, info, (uint8_t *)authkey, algo->auth_block_len);
+	if (err) {
+		pr_warn("Failed to generate authentication key for GCM with err <%x>\n", err);
+		return false;
+	}
+
+	auth_key_idx = EIP_HW_CTRL_WORDS + (base->cipher.key_len / sizeof(uint32_t));
+	doffset = &tr_words[auth_key_idx];
+
+	key = (uint32_t *)authkey;
+	doffset[0] = ntohl(key[0]);
+	doffset[1] = ntohl(key[1]);
+	doffset[2] = ntohl(key[2]);
+	doffset[3] = ntohl(key[3]);
+
+	/*
 	 * Flush record memory.
 	 * Driver must not make any update in transform records words after this.
 	 */
 	dmac_clean_range(tr->hw_words, tr->hw_words + EIP_HW_CTX_SIZE_LARGE_WORDS);
-
-#if 0
-	/*
-	 * GCM hash calculation.
-	 */
-	if (!eip_tr_ahash_gcm_digest(tr, info, algo)) {
-		pr_err("%px: Digest computation failed for algo(%s)\n", tr, algo->name);
-		return false;
-	}
-#endif
 
 	return true;
 }
