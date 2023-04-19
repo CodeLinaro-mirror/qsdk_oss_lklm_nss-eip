@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -370,7 +370,6 @@ bool eip_tr_ahash_key2digest(struct eip_tr *tr, struct eip_tr_info *info, const 
 	void *key_data;
 	uint32_t data_len;
 	uint32_t tk_words;
-	int cpu;
 
 	DECLARE_COMPLETION_ONSTACK(completion);
 
@@ -445,17 +444,11 @@ bool eip_tr_ahash_key2digest(struct eip_tr *tr, struct eip_tr_info *info, const 
 	sw->req = &completion;
 
 	/*
-	 * We may be in process context. disable bottom half to prevent preemption.
-	 * We have per cpu DMA object. So this ensures that there is no race condition.
-	 */
-	cpu = get_cpu();
-
-	/*
 	 * Schedule the transformation.
 	 * There is potential chance that DMA fails to schedule this request during peak
 	 * traffic. In that case we need to reschedule the digest calculation.
 	 */
-	dma = &ctx->ep->la[cpu];
+	dma = &ctx->ep->la[smp_processor_id()];
 
 retry:
 	if (eip_dma_tx_sg(dma, sw, &sg, &sg)) {
@@ -464,16 +457,9 @@ retry:
 		/*
 		 * TODO: Find better way to handle this scenario than sleeping.
 		 */
-		put_cpu();
 		usleep_range(1000, 1000);
-		get_cpu();
 		goto retry;
 	}
-
-	/*
-	 * Re-enable preemption.
-	 */
-	put_cpu();
 
 	/*
 	 * Wait for digest computation. We only free data memory here.
@@ -607,19 +593,14 @@ int eip_tr_ahash_auth(struct eip_tr *tr, struct ahash_request *req, struct scatt
 	sw->hw_svc = EIP_HW_CMD_HWSERVICE_LAC;
 	sw->req = req;
 
-	dma = &ctx->dma[get_cpu()];
+	dma = &ctx->dma[smp_processor_id()];
 
 	status = eip_dma_tx_sg(dma, sw, req->src, res);
 	if (status < 0) {
 		dma->stats.tx_error++;
-		put_cpu();
 		goto fail_tx;
 	}
 
-	/*
-	 * Reenable bottom half.
-	 */
-	put_cpu();
 	return 0;
 fail_tx:
 	eip_tr_deref(tr);

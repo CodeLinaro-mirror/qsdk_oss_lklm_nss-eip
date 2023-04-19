@@ -433,11 +433,18 @@ int eip_dma_tx_linear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct sk
 
 	BUG_ON(skb_is_nonlinear(skb));
 
+	/*
+	 * We may be in process context. disable bottom half to prevent preemption.
+	 * We have per cpu DMA object. So this ensures that there is no race condition.
+	 */
+	local_bh_disable();
+
 	in_count = eip_dma_avail_idx_and_count(&dma->in, &src.idx);
 	out_count = eip_dma_avail_idx_and_count(&dma->out, &dst.idx);
 
-	if ((!in_count | !out_count))
-		return -EBUSY;
+	if ((!in_count | !out_count)) {
+		goto fail;
+	}
 
 	/*
 	 * Fill Source fragment for Command ring.
@@ -469,7 +476,16 @@ int eip_dma_tx_linear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct sk
 	dma->stats.tx_bytes += src.len;
 
 	eip_dma_notify(dma, 1, 1, EIP_DMA_IDX_INC(src.idx), EIP_DMA_IDX_INC(dst.idx));
+
+	/*
+	 * Re-enable preemption.
+	 */
+	local_bh_enable();
 	return 0;
+
+fail:
+	local_bh_enable();
+	return -EBUSY;
 }
 
 /*
@@ -489,6 +505,12 @@ int eip_dma_tx_nonlinear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct
 
         BUG_ON(!skb_is_nonlinear(skb));
 
+	/*
+	 * We may be in process context. disable bottom half to prevent preemption.
+	 * We have per cpu DMA object. So this ensures that there is no race condition.
+	 */
+	local_bh_disable();
+
         in_count = eip_dma_avail_idx_and_count(&dma->in, &cmd_idx);
 	out_count = eip_dma_avail_idx_and_count(&dma->out, &res_idx);
 	desc_count = min(in_count, out_count);
@@ -501,8 +523,8 @@ int eip_dma_tx_nonlinear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct
          */
         desc_req = skb_shinfo(skb)->nr_frags + 1;
         if (desc_count < desc_req) {
-                return -EBUSY;
-        }
+		goto fail;
+	}
 
         last_frag = !skb_has_frag_list(skb);
         eip_dma_tx_skb_paged(dma, sw, skb, &cmd_idx, &res_idx, last_frag);
@@ -515,8 +537,8 @@ int eip_dma_tx_nonlinear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct
         skb_walk_frags(skb, iter_skb) {
                 desc_req = skb_shinfo(iter_skb)->nr_frags + 1;
                 if (desc_count < desc_req) {
-                        return -EBUSY;
-                }
+			goto fail;
+		}
 
                 last_frag = !iter_skb->next;
                 eip_dma_tx_skb_paged(dma, sw, iter_skb, &cmd_idx, &res_idx, last_frag);
@@ -537,7 +559,16 @@ int eip_dma_tx_nonlinear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct
         dma_stats->tx_bytes += len;
 
 	eip_dma_notify(dma, sw->src_nsegs, sw->dst_nsegs, cmd_idx, res_idx);
+
+	/*
+	 * Re-enable preemption.
+	 */
+	local_bh_enable();
         return 0;
+
+fail:
+	local_bh_enable();
+	return -EBUSY;
 }
 
 /*
@@ -555,6 +586,12 @@ int eip_dma_tx_sg(struct eip_dma *dma, struct eip_sw_desc *sw, struct scatterlis
 	uint32_t count;
 
 	/*
+	 * We may be in process context. disable bottom half to prevent preemption.
+	 * We have per cpu DMA object. So this ensures that there is no race condition.
+	 */
+	local_bh_disable();
+
+	/*
 	 * Map only required data to descriptor.
 	 * Application may send larger buffer then actual data length. (To accomodate hash output).
 	 */
@@ -569,8 +606,9 @@ int eip_dma_tx_sg(struct eip_dma *dma, struct eip_sw_desc *sw, struct scatterlis
 	for (src_nsegs = 0, iter = src, len = src_len; iter; src_nsegs++, iter = sg_next(iter)) {
 		struct eip_frag frag;
 
-		if (unlikely(!count--))
-			return -ENOMEM;
+		if (unlikely(!count--)) {
+			goto fail;
+		}
 
 		/*
 		 * Set fragment specific information.
@@ -597,8 +635,9 @@ int eip_dma_tx_sg(struct eip_dma *dma, struct eip_sw_desc *sw, struct scatterlis
 	for (dst_nsegs = 0, iter = dst; iter; dst_nsegs++, iter = sg_next(iter)) {
 		struct eip_frag frag;
 
-		if (unlikely(!count--))
-			return -ENOMEM;
+		if (unlikely(!count--)) {
+			goto fail;
+		}
 
 		/*
 		 * Set fragment specific information.
@@ -633,7 +672,15 @@ int eip_dma_tx_sg(struct eip_dma *dma, struct eip_sw_desc *sw, struct scatterlis
 	 */
 	eip_dma_notify(dma, src_nsegs, dst_nsegs, cmd_idx, res_idx);
 
+	/*
+	 * Re-enable preemption.
+	 */
+	local_bh_enable();
 	return 0;
+
+fail:
+	local_bh_enable();
+	return -ENOMEM;
 }
 
 struct file_operations dma_stats_ops = {

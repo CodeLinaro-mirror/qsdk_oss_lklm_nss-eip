@@ -24,6 +24,7 @@
 #include <linux/debugfs.h>
 #include <linux/slab.h>
 #include <asm/cacheflush.h>
+#include <crypto/aes.h>
 
 #include "eip_priv.h"
 
@@ -102,7 +103,7 @@ static void eip_tr_inval_done(struct eip_tr *tr, struct eip_hw_desc *hw, struct 
 
 /*
  * eip_tr_inval_err()
- *	Invalidation completion with error.
+ *	Invalidation completion with error
  */
 static void eip_tr_inval_err(struct eip_tr *tr, struct eip_hw_desc *hw, struct eip_sw_desc *sw, uint16_t cle_err, uint16_t tr_err)
 {
@@ -122,7 +123,6 @@ static void eip_tr_inval(struct work_struct *work)
 	struct eip_dma *dma;
 	struct eip_ctx *ctx;
 	struct eip_tr *tr;
-	int cpu;
 
 	tr = container_of(dwork, struct eip_tr, inval_work);
 	ctx = tr->ctx;
@@ -155,8 +155,8 @@ static void eip_tr_inval(struct work_struct *work)
 	 */
 	sw->tr = tr;
 	sw->tk = NULL;
-	sw->comp = &eip_tr_inval_done;
-	sw->err_comp = &eip_tr_inval_err;
+	sw->comp = eip_tr_inval_done;
+	sw->err_comp = eip_tr_inval_err;
 	sw->tk_hdr = tk_hdr;
 	sw->tr_addr_type = tr->tr_addr_type;
 	sw->tk_addr = 0;
@@ -165,31 +165,20 @@ static void eip_tr_inval(struct work_struct *work)
 	sw->req = NULL;
 
 	/*
-	 * We are in process context (workqueue). disable preemption.
-	 * We have per cpu DMA object. So this ensures that there is no race condition.
-	 */
-	cpu = get_cpu();
-
-	/*
 	 * Schedule the transformation.
 	 * There is potential chance that DMA fails to schedule this request during peak
 	 * traffic. In that case we need to reschedule the invalidation.
 	 */
-	dma = &ctx->ep->la[cpu];
+	dma = &ctx->ep->la[smp_processor_id()];
 
 	if (eip_dma_tx_sg(dma, sw, &sg, &sg)) {
 		pr_warn("%px: DMA is busy for invalidation schedule\n", tr);
 
-		put_cpu();
 		kmem_cache_free(ctx->sw_cache, sw);
 		schedule_delayed_work(&tr->inval_work, EIP_TR_INVAL_TIMEOUT);
 		return;
 	}
 
-	/*
-	 * Re-enable preemption.
-	 */
-	put_cpu();
 	return;
 }
 
@@ -441,4 +430,72 @@ int eip_tr_classify_err(uint16_t cle_err, uint16_t tr_err)
 	}
 
 	return -EINVAL;
+}
+
+/*
+ * eip_tr_genkey()
+ *      Generates auth keys
+ */
+int eip_tr_genkey(struct eip_tr *tr, struct eip_tr_info *info, uint8_t *key, uint16_t len)
+{
+        struct crypto_sync_skcipher *sk_tfm = NULL;
+        struct eip_tr_base *base = &info->base;
+        struct skcipher_request *req = NULL;
+        uint8_t iv[AES_BLOCK_SIZE] = {0};
+        struct scatterlist sg[1];
+        int err = 0;
+
+	/*
+	 * Validate if the key generation is supported
+	 * currently it is only supported for aes-gcm and aes-gcm-rfc4106
+	 */
+	if (!strstr(base->alg_name, "gcm")) {
+		pr_warn("Auth key generation not supported for algo <%s>\n", base->alg_name);
+		return -ENOSYS;
+	}
+
+	/*
+	 * Allocate skcipher tfm
+	 */
+	sk_tfm = crypto_alloc_sync_skcipher("ctr(aes-generic)", 0, 0);
+	if (IS_ERR(sk_tfm)) {
+		pr_err("%px: Error allocating tfm for skcipher: ctr(aes-generic)\n", sk_tfm);
+		return PTR_ERR(sk_tfm);
+	}
+
+	/*
+	 * Setup cipher keys
+	 */
+	err = crypto_sync_skcipher_setkey(sk_tfm, base->cipher.key_data, base->cipher.key_len);
+	if (err) {
+		pr_err("%X: Failed to set the key for skcipher: ctr(aes-generic)\n", err);
+		goto fail2;
+	}
+
+	/*
+	 * Allocate skcipher request
+	 */
+	req = kzalloc(sizeof(struct skcipher_request), GFP_KERNEL);
+	if (!req) {
+		pr_warn("%px: Failed to allocate req\n", req);
+		err = -ENOMEM;
+		goto fail1;
+	}
+
+	sg_init_one(sg, key, len);
+	skcipher_request_set_sync_tfm(req, sk_tfm);
+	skcipher_request_set_callback(req, 0, NULL, NULL);
+	skcipher_request_set_crypt(req, sg, sg, len, iv);
+
+	err = crypto_skcipher_encrypt(req);
+	if (err) {
+		pr_debug("%px: Failed to encrypt; err(%d)\n", sk_tfm, err);
+		goto fail1;
+	}
+
+fail1:
+	kfree(req);
+fail2:
+	crypto_free_sync_skcipher(sk_tfm);
+        return err;
 }

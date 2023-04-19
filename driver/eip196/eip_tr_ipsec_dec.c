@@ -235,9 +235,10 @@ static uint32_t eip_tr_ipsec_get_replay_words(enum eip_ipsec_replay replay)
                 return 2;
         case EIP_IPSEC_REPLAY_128:
                 return 4;
-        case EIP_IPSEC_REPLAY_384:
+	/* TODO: add support for larger replay window size */
         default:
-                return 12;
+		pr_warn("Unexpected replay window <%u>", replay);
+                return 0;
         }
 }
 
@@ -255,9 +256,9 @@ static uint32_t eip_tr_ipsec_get_replay_seq_mask(enum eip_ipsec_replay replay)
                 return EIP_TR_IPSEC_SEQ_NUM_MASK_64;
         case EIP_IPSEC_REPLAY_128:
                 return EIP_TR_IPSEC_SEQ_NUM_MASK_128;
-        case EIP_IPSEC_REPLAY_384:
         default:
-                return EIP_TR_IPSEC_SEQ_NUM_MASK_384;
+		pr_warn("Unexpected replay window <%u>", replay);
+                return 0;
         }
 }
 
@@ -265,13 +266,14 @@ static uint32_t eip_tr_ipsec_get_replay_seq_mask(enum eip_ipsec_replay replay)
  * eip_tr_ipsec_dec_cmn_init()
  *      Initialize the transform record for ipsec Decapsulation.
  */
-void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo, bool nonce_en)
+void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo)
 {
         struct eip_tr_info_ipsec *ipsec = &info->ipsec;
 	struct eip_tr_ipsec *tr_ipsec = &tr->ipsec;
         struct eip_tr_base *crypto = &info->base;
         uint32_t *crypt_words = tr->hw_words;
         uint32_t *tr_words = tr->hw_words;
+	uint8_t ctx_num_words;
         uint8_t seq_offset;
 	bool esn, natt;
 	uint8_t mask_sz;
@@ -309,12 +311,13 @@ void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
         crypt_words += (crypto->cipher.key_len /  sizeof(uint32_t));
 
         /*
-         * Leave the space for inner & outer digest.
+         * Leave the space for inner & outer digest / GHASH key
+	 * For GCM we store only GHASH key of size auth_block_len
+	 * and for other algo we store inner & outer digest each
+	 * of size auth_state_len
          */
-        size = algo->auth_state_len;
-        crypt_words += (size / sizeof(uint32_t)); /* ipad */
-        crypt_words += (size / sizeof(uint32_t)); /* opad */
-
+	size = algo->auth_state_len ? (algo->auth_state_len *2) : algo->auth_block_len;
+	crypt_words += (size / sizeof(uint32_t));
 
         /*
          * IPsec specific fields for EIP96.
@@ -325,14 +328,19 @@ void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
         *crypt_words++ = ntohl(ipsec->spi_idx);
         *crypt_words++ = 0x0;
         seq_offset = crypt_words - tr_words - 1;
+
         if (esn)
                 *crypt_words++ = 0;
 
 	/*
-	 * Set all bits to '1' in mask. For 32bit we need to set extra word to '1'.
+	 * Set all bits to '1' in mask.
+	 * For 32bit we need to set an extra word to '1', but its not included
+	 * in the context update length
 	 */
         mask_sz = eip_tr_ipsec_get_replay_words(ipsec->replay);
+	ctx_num_words = mask_sz + EIP_TR_IPSEC_CTX_WORDS_ESN(esn);
 	mask_sz += (ipsec->replay == EIP_IPSEC_REPLAY_32) ? 1 : 0;
+
 	while (mask_sz--) {
 		*crypt_words++ = 0xFFFFFFFF;
 	}
@@ -340,7 +348,7 @@ void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
 	/*
          * Fill nonce.
          */
-        if (nonce_en)
+        if (crypto->nonce)
                 *crypt_words++ = crypto->nonce;
 
         /*
@@ -350,12 +358,12 @@ void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
         tr_words[0] |= EIP_TR_CTRL_CONTEXT_WORDS(crypt_words - tr_words - 2);
 
         /*
-         * Store the seq no offset, icv length and cipher block length
-         * to be used during token fill
+         * Store the details to be used during token fill
          */
         tr_ipsec->seq_offset = seq_offset;
-        tr->digest_len = ipsec->icv_len;
+	tr_ipsec->ctx_num_words = ctx_num_words;
         tr->blk_len = algo->cipher_blk_len;
+        tr->digest_len = ipsec->icv_len;
 	tr->iv_len = algo->iv_len;
 
 	/*

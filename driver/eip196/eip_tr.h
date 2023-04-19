@@ -113,6 +113,7 @@ typedef void (*eip_tr_proc_t)(struct eip_tr *tr, struct sk_buff *skb);
 
 #define EIP_TR_ERR_SHIFT 16U
 
+#define EIP_TR_IPSEC_CTX_WORDS_ESN(esn) ((esn) ? 2 : 1)
 #define EIP_TR_IPSEC_SKB_CB(__skb) ((struct eip_tr_ipsec_skb_cb *)&((__skb)->cb[0]))
 
 /*
@@ -169,6 +170,7 @@ struct eip_tr_ipsec {
 	uint8_t tos;				/* DSCP for transform record */
 	uint8_t ttl;				/* Time-to-live */
 	uint8_t seq_offset;			/* Sequence no offset in context record */
+	uint8_t ctx_num_words;			/* No of context dword to be updated */
 	uint8_t remove_len;			/* Length of headers to be removed */
 	uint8_t bypass_len; 			/* Length of headers to be bypassed (IP/IP+UDP) */
 	uint8_t fixed_len; 			/* Per packet fixed length */
@@ -226,6 +228,7 @@ const struct eip_svc_entry *eip_tr_ipsec_get_svc(void);
 size_t eip_tr_ipsec_get_svc_len(void);
 
 bool eip_tr_ahash_key2digest(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo);
+int eip_tr_genkey(struct eip_tr *tr, struct eip_tr_info *info, uint8_t *key, uint16_t len);
 void eip_tr_get_stats(struct eip_tr *tr, struct eip_tr_stats *stats);
 void eip_tr_final(struct kref *kref);
 int eip_tr_classify_err(uint16_t cle_err, uint16_t tr_err);

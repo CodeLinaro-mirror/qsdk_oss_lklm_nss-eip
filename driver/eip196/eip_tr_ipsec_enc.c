@@ -38,8 +38,8 @@ static inline uint16_t eip_tr_ipsec_enc_len(struct eip_tr *tr, struct sk_buff *s
 	uint16_t total_len;
 	uint16_t pad_len;
 
-	total_len = ALIGN(payload_len + EIP_TR_IPSEC_ESP_TRAILER_LEN, tr->blk_len);
-	pad_len = total_len - (payload_len + EIP_TR_IPSEC_ESP_TRAILER_LEN);
+	total_len = ALIGN(payload_len + EIP_TK_IPSEC_ESP_TRAILER_LEN, tr->blk_len);
+	pad_len = total_len - (payload_len + EIP_TK_IPSEC_ESP_TRAILER_LEN);
 	EIP_TR_IPSEC_SKB_CB(skb)->pad_len = pad_len;
 
 	return total_len;
@@ -365,7 +365,7 @@ EXPORT_SYMBOL(eip_tr_ipsec_enc);
  * eip_tr_ipsec_enc_cmn_init()
  *      Initialize the transform record for ipsec encapsulation.
  */
-void eip_tr_ipsec_enc_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo, bool nonce_en)
+void eip_tr_ipsec_enc_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo)
 {
         struct eip_tr_info_ipsec *ipsec = &info->ipsec;
 	struct eip_tr_ipsec *tr_ipsec = &tr->ipsec;
@@ -408,11 +408,13 @@ void eip_tr_ipsec_enc_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
         crypt_words += (crypto->cipher.key_len /  sizeof(uint32_t));
 
         /*
-         * Leave the space for inner & outer digest.
+         * Leave the space for inner & outer digest / GHASH key
+	 * For GCM we store only GHASH key of size auth_block_len
+	 * and for other algo we store inner & outer digest each
+	 * of size auth_state_len
          */
-        size = algo->auth_state_len;
-        crypt_words += (size / sizeof(uint32_t)); /* ipad */
-        crypt_words += (size / sizeof(uint32_t)); /* opad */
+	size = algo->auth_state_len ? (algo->auth_state_len * 2) : algo->auth_block_len;
+	crypt_words += (size / sizeof(uint32_t));
 
         /*
          * IPsec specific fields for EIP96.
@@ -427,10 +429,10 @@ void eip_tr_ipsec_enc_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
                 *crypt_words++ = 0;
 
 	/*
-	 * Fill nonce.
-	 */
-	if (nonce_en)
-		*crypt_words++ = crypto->nonce;
+         * Fill nonce.
+         */
+        if (crypto->nonce)
+                *crypt_words++ = crypto->nonce;
 
         /*
          * Done with EIP crypto context words.
@@ -442,12 +444,12 @@ void eip_tr_ipsec_enc_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
         tr_words[1] |= EIP_TR_IPSEC_SEQ_NUM_STORE;
 
         /*
-         * Store the seq no offset, icv, iv and cipher block length
-         * to be used during token fill
+         * Store the details to be used during token fill
          */
         tr_ipsec->seq_offset = seq_offset;
-        tr->digest_len = ipsec->icv_len;
+	tr_ipsec->ctx_num_words = EIP_TR_IPSEC_CTX_WORDS_ESN(esn);
         tr->blk_len = algo->cipher_blk_len;
+        tr->digest_len = ipsec->icv_len;
 	tr->iv_len = algo->iv_len;
 
         /*
