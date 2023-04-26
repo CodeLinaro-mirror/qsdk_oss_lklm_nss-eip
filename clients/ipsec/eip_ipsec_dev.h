@@ -36,6 +36,7 @@ struct eip_ipsec_dev_stats {
 	uint64_t tx_bytes;		/* Encap Bytes transmitted */
 	uint64_t tx_vp_exp;		/* Encap Packet transmitted via VP exception */
 	uint64_t tx_host;		/* Encap packet trasmitted via Host */
+	uint64_t tx_vp;			/* Encap packet trasmitted via PPE-VP */
 	uint64_t tx_fail;		/* Encapsulation failure */
 	uint64_t tx_fail_sa;		/* sa not found failure */
 	uint64_t tx_fail_vp_sa;		/* sa not found failure during VP exception */
@@ -45,6 +46,7 @@ struct eip_ipsec_dev_stats {
 	 */
 	uint64_t rx_pkts;		/* Decap Packet received */
 	uint64_t rx_host;		/* Decap Packet received via Host */
+	uint64_t rx_vp;			/* Decap Packet received via PPE-VP */
 	uint64_t rx_bytes;		/* Decap Bytes received */
 	uint64_t rx_fail;		/* Decapsulation failure */
 	uint64_t rx_fail_sa;		/* sa not found failure */
@@ -71,6 +73,9 @@ struct eip_ipsec_dev {
 void eip_ipsec_dev_enc_err(void *app_data, eip_req_t req, int err);
 void eip_ipsec_dev_enc_done_v4(void *app_data, eip_req_t req);
 void eip_ipsec_dev_enc_done_v6(void *app_data, eip_req_t req);
+#if defined(EIP_IPSEC_HYBRID)
+void eip_ipsec_dev_enc_done_hy(void *app_data, eip_req_t req);
+#endif
 
 struct net_device *eip_ipsec_dev_get_by_id(int64_t devid);
 void eip_ipsec_dev_link_id(struct net_device *dev, int64_t devid);

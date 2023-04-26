@@ -26,6 +26,7 @@
 	#include <ppe_drv_sc.h>
 	#include <ppe_drv_eip.h>
 	#include <ppe_drv_iface.h>
+	#include <ppe_vp_tx.h>
 #endif
 
 #include "../exports/eip_ipsec.h"
@@ -33,12 +34,6 @@
 #include "eip_ipsec_dev.h"
 #include "eip_ipsec_proto.h"
 #include "eip_ipsec_xfrm.h"
-
-#if defined(EIP_IPSEC_HYBRID)
-	#define EIP_IPSEC_DEFAULT_SVC EIP_SVC_HYBRID_IPSEC
-#else
-	#define EIP_IPSEC_DEFAULT_SVC EIP_SVC_IPSEC
-#endif
 
 #define EIP_IPSEC_MAX_STR_LEN 64U	/* Maximum print lenght */
 #define EIP_IPSEC_HASH_SHIFT 6U
@@ -88,6 +83,7 @@ struct eip_ipsec_ppe_mdata {
 }__attribute__((packed));
 
 extern struct eip_ipsec_drv eip_ipsec_drv_g;	/* Global Driver object */
+extern uint8_t eip_ipsec_core_mask;		/* Global ipsec core mask */
 extern void eip_ipsec_drv_final(struct kref *kref);
 
 /*

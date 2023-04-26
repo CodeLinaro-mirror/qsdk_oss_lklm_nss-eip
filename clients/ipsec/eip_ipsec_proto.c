@@ -68,7 +68,6 @@ void eip_ipsec_proto_dec_err(void *app_data, eip_req_t req, int err)
 	sa_stats->fail_transform++;
 
 	eip_ipsec_sa_deref(sa);
-	skb_dump(KERN_DEBUG, skb, false);
 	consume_skb(skb);
 }
 
@@ -220,7 +219,7 @@ static int eip_ipsec_proto_esp4_rx(struct sk_buff *skb)
 	 */
 	sa = eip_ipsec_sa_ref_get_decap_v4(&ip_hdr(skb)->daddr, ip_esp_hdr(skb)->spi);
 	if (!sa) {
-		pr_debug("IPv4 SA not found %pI4n %x\n", ipv6_hdr(skb)->daddr.s6_addr32, ip_esp_hdr(skb)->spi);
+		pr_debug("IPv4 SA not found %pI4n SPI is: %x\n", &(ip_hdr(skb)->daddr), ip_esp_hdr(skb)->spi);
 		return -EHOSTUNREACH;
 	}
 
@@ -316,6 +315,46 @@ static int eip_ipsec_proto_udp_rx(struct sock *sk, struct sk_buff *skb)
 non_esp_pkt:
 	BUG_ON(!drv->sk_encap_rcv);
 	return drv->sk_encap_rcv(sk, skb);
+}
+
+/*
+ * eip_ipsec_proto_vp_rx()
+ * 	VP callback after PPE lookup.
+ */
+bool eip_ipsec_proto_vp_rx(struct net_device *ndev, struct sk_buff *skb, void *cb_data)
+{
+	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
+	struct eip_ipsec_dev *eid = cb_data;
+	struct eip_ipsec_dev_stats *dev_stats;
+	struct iphdr *iph;
+
+	skb_reset_network_header(skb);
+	dev_stats = this_cpu_ptr(eid->stats_pcpu);
+	iph = ip_hdr(skb);
+
+	/*
+	 * Update device stats
+	 */
+	dev_stats->rx_vp++;
+
+	/*
+	 * We need to pull ip header to point to ESP or UDP header and then
+	 * send packet to the ESP packet handler
+	 */
+	if (iph->version != IPVERSION) {
+		skb_pull(skb, sizeof(struct ipv6hdr));
+		skb_reset_transport_header(skb);
+		return eip_ipsec_proto_esp6_rx(skb);
+	}
+
+	skb_pull(skb, sizeof(struct iphdr));
+	skb_reset_transport_header(skb);
+
+	if (iph->protocol == IPPROTO_UDP) {
+		return eip_ipsec_proto_udp_rx(drv->sk, skb);
+	}
+
+	return eip_ipsec_proto_esp4_rx(skb);
 }
 
 /*
