@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -456,9 +456,11 @@ void eip_crypto_ahash_cra_exit(struct crypto_tfm *tfm)
 
 	/*
 	 * Free the TR & stats
+	 * TR may not be allocated if setkey is not called
 	 */
-	BUG_ON(!tfm_ctx->tr);
-	eip_tr_free(tfm_ctx->tr);
+	if(likely(tfm_ctx->tr)) {
+		eip_tr_free(tfm_ctx->tr);
+	}
 
 	BUG_ON(!tfm_ctx->stats);
 	free_percpu(tfm_ctx->stats);
