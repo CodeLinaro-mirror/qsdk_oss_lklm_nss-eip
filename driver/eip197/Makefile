@@ -4,6 +4,9 @@
 
 NSS_EIP_MOD_NAME=qca-nss-eip
 
+NSS_EIP_DRIVER_INCLUDE = -I$(obj)/../exports
+ccflags-y += $(NSS_EIP_DRIVER_INCLUDE)
+
 ccflags-y += -Wall -Werror
 ccflags-y += -DNSS_EIP_BUILD_ID=\"'Build_ID - $(shell date +'%m/%d/%y, %H:%M:%S') SoC=$(SoC)'\"
 

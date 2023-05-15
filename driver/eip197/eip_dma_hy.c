@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -115,7 +115,7 @@ static inline void eip_dma_hy_tx_cmd(struct eip_dma *dma, struct eip_sw_desc *sw
 
 		cmd->token[0] = sw->tk_addr;
 		cmd->token[1] = 0;
-		cmd->token[2] = sw->cmd_token_hdr;
+		cmd->token[2] = sw->tk_hdr;
 		cmd->token[3] = 0;
 		cmd->token[4] = sw->tr_addr_type;
 		cmd->token[5] = 0;
@@ -225,7 +225,7 @@ static inline void eip_dma_hy_tr_deliver(struct eip_tr *tr, struct sk_buff *skb,
 	/*
 	 * Call completion callback.
 	 */
-	tr->ipsec.op.cb(tr->ipsec.app_data, skb);
+	tr->ipsec.ops.cb(tr->ipsec.app_data, skb);
 }
 
 /*
@@ -246,7 +246,7 @@ static inline void eip_dma_hy_tr_deliver_err(struct eip_tr *tr, struct sk_buff *
 	/*
 	 * Call completion callback.
 	 */
-	tr->ipsec.op.err_cb(tr->ipsec.app_data, skb, -EBADE);
+	tr->ipsec.ops.err_cb(tr->ipsec.app_data, skb, -EBADE);
 }
 
 /*

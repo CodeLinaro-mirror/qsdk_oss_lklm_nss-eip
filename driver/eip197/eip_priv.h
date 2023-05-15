@@ -19,7 +19,7 @@
 
 #include <linux/platform_device.h>
 #include <linux/ip.h>
-#include "../exports/eip.h"
+#include "eip.h"
 #include "eip_dma.h"
 #include "eip_hw.h"
 #include "eip_ctx.h"
@@ -48,9 +48,9 @@ do { if (unlikely(!(x))) { panic("ASSERT FAILED at (%s:%d): %s\n", __FILE__, __L
 struct eip_svc_entry {
 	char name[CRYPTO_MAX_ALG_NAME];		/* Algo name as per cra-driver name */
 
-	eip_tk_fill_t enc_tk_fill;		/* Token fill method for encode operation */
-	eip_tk_fill_t dec_tk_fill;		/* Token fill method for decode operation */
-	eip_tk_fill_t auth_tk_fill;		/* Token fill method for auth operation */
+	eip_tk_proc_t enc_tk_fill;		/* Token fill method for encode operation */
+	eip_tk_proc_t dec_tk_fill;		/* Token fill method for decode operation */
+	eip_tk_proc_t auth_tk_fill;		/* Token fill method for auth operation */
 	eip_tr_init_t tr_init;			/* TR initialization */
 
 	uint32_t ctrl_words_0;			/* Initial control word 0 for HW */
@@ -85,7 +85,7 @@ struct eip_sw_desc {
 	eip_dma_callback_t comp;		/* HW Rx completion callback */
 	eip_dma_err_callback_t err_comp;	/* HW Rx completion with error callback */
 
-	uint32_t cmd_token_hdr;		/* Command token[2] */
+	uint32_t tk_hdr;		/* Command token[2] */
 	uint32_t tk_addr;		/* Control token address (EIP96 instructions) */
 	uint32_t tr_addr_type;		/* TR physical address with lower 2 bits OR'd with type */
 	uint32_t tk_words;		/* Command Frag[0] Contol token length in words */
