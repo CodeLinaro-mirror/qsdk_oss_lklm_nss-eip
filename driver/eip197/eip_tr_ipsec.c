@@ -254,9 +254,10 @@ static void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *inf
 	uint8_t mask_sz;
 	uint32_t size;
 
-	uint8_t esn = !!(ipsec->sa_flags & EIP_TR_IPSEC_FLAG_ESN);
-	uint8_t natt = !!(ipsec->sa_flags & EIP_TR_IPSEC_FLAG_UDP);
-	uint8_t tun = !!(ipsec->sa_flags & EIP_TR_IPSEC_FLAG_TUNNEL);
+	bool esn = ipsec->sa_flags & EIP_TR_IPSEC_FLAG_ESN;
+	bool natt = ipsec->sa_flags & EIP_TR_IPSEC_FLAG_UDP;
+	bool tun = ipsec->sa_flags & EIP_TR_IPSEC_FLAG_TUNNEL;
+	bool ipv6 = ipsec->sa_flags & EIP_TR_IPSEC_FLAG_IPV6;
 
 	/*
 	 * First two words are Control words.
@@ -331,7 +332,7 @@ static void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *inf
 
 	tr_words[65] = EIP_TR_IPSEC_IPHDR_PROC;
 	tr_words[65] |= EIP_TR_IPSEC_EXT_SEQ_NUM_PROC(esn);
-	if (ipsec->ip_ver == 6) {
+	if (ipv6) {
 		tr_words[65] |= EIP_TR_IPSEC_IPV6_EN;
 	}
 
@@ -398,10 +399,11 @@ static void eip_tr_ipsec_enc_cmn_init(struct eip_tr *tr, struct eip_tr_info *inf
 	uint8_t seq_num_offst;
 	uint32_t size;
 
-	uint8_t esn = !!(ipsec->sa_flags & EIP_TR_IPSEC_FLAG_ESN);
-	uint8_t natt = !!(ipsec->sa_flags & EIP_TR_IPSEC_FLAG_UDP);
-	uint8_t copy_dscp = !!(ipsec->sa_flags & EIP_TR_IPSEC_FLAG_CP_TOS);
-	uint8_t copy_df = !!(ipsec->sa_flags & EIP_TR_IPSEC_FLAG_CP_DF);
+	bool esn = ipsec->sa_flags & EIP_TR_IPSEC_FLAG_ESN;
+	bool natt = ipsec->sa_flags & EIP_TR_IPSEC_FLAG_UDP;
+	bool copy_dscp = ipsec->sa_flags & EIP_TR_IPSEC_FLAG_CP_TOS;
+	bool copy_df = ipsec->sa_flags & EIP_TR_IPSEC_FLAG_CP_DF;
+	bool ipv6 = ipsec->sa_flags & EIP_TR_IPSEC_FLAG_IPV6;
 
 	/*
 	 * First two words are Control words.
@@ -463,7 +465,7 @@ static void eip_tr_ipsec_enc_cmn_init(struct eip_tr *tr, struct eip_tr_info *inf
 	/*
 	 * Configure IPsec encapsulation specfic field in TR.
 	 */
-	if (ipsec->ip_ver == 4) {
+	if (!ipv6) {
 		uint32_t csum;
 
 		tr_words[56] = ipsec->src_ip[0];
@@ -537,31 +539,35 @@ static void eip_tr_ipsec_enc_cmn_init(struct eip_tr *tr, struct eip_tr_info *inf
 }
 
 /*
+ * eip_tr_ipsec_verify()
+ * 	IPsec specific validation
+ */
+static bool eip_tr_ipsec_verify(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo)
+{
+	struct eip_tr_info_ipsec *ipsec = &info->ipsec;
+	bool enc;
+
+	enc = ipsec->sa_flags & EIP_TR_IPSEC_FLAG_ENC;
+	if (!enc && (ipsec->sa_flags & EIP_TR_IPSEC_FLAG_ESN) && (ipsec->replay == EIP_IPSEC_REPLAY_NONE)) {
+		pr_warn("%px: Anti-replay should be enabled with ESN.\n", tr);
+		return false;
+	}
+	return true;
+}
+
+/*
  * eip_tr_ipsec_cmn_init()
  *	Initialize the transform record for ipsec.
  */
-static bool eip_tr_ipsec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo)
+static void eip_tr_ipsec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo)
 {
 	struct eip_tr_info_ipsec *ipsec = &info->ipsec;
 	uint32_t *tr_words = tr->hw_words;
-	uint8_t enc;
-	uint8_t esn;
-
-	enc = !!(ipsec->sa_flags & EIP_TR_IPSEC_FLAG_ENC);
-	esn = !!(ipsec->sa_flags & EIP_TR_IPSEC_FLAG_ESN);
-
-	/*
-	 * For decapsulation, Anti-replay must be enabled with ESN.
-	 */
-	if (!enc && esn && (ipsec->replay == EIP_IPSEC_REPLAY_NONE)) {
-		pr_err("%px: Anti-replay is not enabled with ESN.\n", tr);
-		return false;
-	}
 
 	/*
 	 * We first do common initialization and then algo specific initialization.
 	 */
-	if (enc) {
+	if (ipsec->sa_flags & EIP_TR_IPSEC_FLAG_ENC) {
 		eip_tr_ipsec_enc_cmn_init(tr, info, algo);
 		tr_words[0] |= EIP_TK_CTRL_OP_ENC_HMAC;
 	} else {
@@ -570,7 +576,7 @@ static bool eip_tr_ipsec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, c
 	}
 
 	/*
-	 * We use large record for aead.
+	 * We use large record for ipsec.
 	 */
 	tr->tr_addr_type = EIP_HW_CTX_TYPE_LARGE;
 	tr->tr_addr_type |= virt_to_phys(tr->hw_words);
@@ -584,9 +590,8 @@ static bool eip_tr_ipsec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, c
 	tr->ipsec.ops.cb = ipsec->cb;
 	tr->ipsec.ops.err_cb = ipsec->err_cb;
 	tr->ipsec.app_data = ipsec->app_data;
-	memcpy(tr->bypass, ipsec->ppe_mdata, sizeof(tr->bypass));
 
-	return true;
+	memcpy(tr->bypass, ipsec->ppe_mdata, sizeof(tr->bypass));
 }
 
 /*
@@ -603,10 +608,12 @@ static bool eip_tr_ipsec_aes_cbc_init(struct eip_tr *tr, struct eip_tr_info *inf
 	/*
 	 * We first do common initialization and then algo specific initialization.
 	 */
-	if (!eip_tr_ipsec_cmn_init(tr, info, algo)) {
+	if (!eip_tr_ipsec_verify(tr, info, algo)) {
 		pr_err("%px: Common initialization failed.\n", tr);
 		return false;
 	}
+
+	eip_tr_ipsec_cmn_init(tr, info, algo);
 
 	switch(crypto->cipher.key_len) {
 	case AES_KEYSIZE_128:
@@ -664,10 +671,12 @@ static bool eip_tr_ipsec_des_cbc_init(struct eip_tr *tr, struct eip_tr_info *inf
 	/*
 	 * We first do common initialization and then algo specific initialization.
 	 */
-	if (!eip_tr_ipsec_cmn_init(tr, info, algo)) {
+	if (!eip_tr_ipsec_verify(tr, info, algo)) {
 		pr_err("%px: Common initialization failed.\n", tr);
 		return false;
 	}
+
+	eip_tr_ipsec_cmn_init(tr, info, algo);
 
 	switch(crypto->cipher.key_len) {
 	case DES3_EDE_KEY_SIZE:
@@ -722,10 +731,12 @@ static bool eip_tr_ipsec_aes_gcm_init(struct eip_tr *tr, struct eip_tr_info *inf
 	/*
 	 * We first do common initialization and then algo specific initialization.
 	 */
-	if (!eip_tr_ipsec_cmn_init(tr, info, algo)) {
+	if (!eip_tr_ipsec_verify(tr, info, algo)) {
 		pr_err("%px: Common initialization failed.\n", tr);
 		return false;
 	}
+
+	eip_tr_ipsec_cmn_init(tr, info, algo);
 
 	switch(base->cipher.key_len) {
 	case AES_KEYSIZE_128:
@@ -793,10 +804,12 @@ static bool eip_tr_ipsec_null_hmac_init(struct eip_tr *tr, struct eip_tr_info *i
 	/*
 	 * We first do common initialization and then algo specific initialization.
 	 */
-	if (!eip_tr_ipsec_cmn_init(tr, info, algo)) {
+	if (!eip_tr_ipsec_verify(tr, info, algo)) {
 		pr_err("%px: Common initialization failed.\n", tr);
 		return false;
 	}
+
+	eip_tr_ipsec_cmn_init(tr, info, algo);
 
 	/*
 	 * Override common encode decode bit set in common init.
