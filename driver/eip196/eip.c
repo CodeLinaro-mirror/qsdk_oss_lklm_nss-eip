@@ -27,7 +27,12 @@
 #include <asm/cacheflush.h>
 
 #include <crypto/md5.h>
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 #include <crypto/sha.h>
+#else
+#include <crypto/sha1.h>
+#include <crypto/sha2.h>
+#endif
 #include <crypto/sha3.h>
 #include <crypto/aes.h>
 #include <crypto/des.h>
@@ -70,7 +75,7 @@ static int eip_device_probe(struct platform_device *pdev)
 	 * remap the I/O addresses
 	 */
 	paddr = res.start + reg_offset;
-	vaddr = ioremap_nocache(paddr, resource_size(&res));
+	vaddr = ioremap(paddr, resource_size(&res));
 	if (!vaddr) {
 		pr_warn("%px: unable to remap crypto_addr(0x%px)\n", pdev, (void *)paddr);
 		return -EIO;

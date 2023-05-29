@@ -14,9 +14,15 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <linux/version.h>
 #include <linux/crypto.h>
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 #include <crypto/sha.h>
+#else
+#include <crypto/sha1.h>
+#include <crypto/sha2.h>
+#endif
 #include <crypto/hash.h>
 #include <crypto/md5.h>
 #include <crypto/algapi.h>
@@ -84,7 +90,6 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 				.cra_blocksize   = MD5_HMAC_BLOCK_SIZE,
 				.cra_ctxsize     = sizeof(struct eip_crypto_tfm_ctx),
 				.cra_alignmask   = 0,
-				.cra_type        = &crypto_ahash_type,
 				.cra_module      = THIS_MODULE,
 				.cra_init        = eip_crypto_ahash_cra_init,
 				.cra_exit        = eip_crypto_ahash_cra_exit,
@@ -110,7 +115,6 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 				.cra_blocksize   = SHA1_BLOCK_SIZE,
 				.cra_ctxsize     = sizeof(struct eip_crypto_tfm_ctx),
 				.cra_alignmask   = 0,
-				.cra_type        = &crypto_ahash_type,
 				.cra_module      = THIS_MODULE,
 				.cra_init        = eip_crypto_ahash_cra_init,
 				.cra_exit        = eip_crypto_ahash_cra_exit,
@@ -136,7 +140,6 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 				.cra_blocksize   = SHA224_BLOCK_SIZE,
 				.cra_ctxsize     = sizeof(struct eip_crypto_tfm_ctx),
 				.cra_alignmask   = 0,
-				.cra_type        = &crypto_ahash_type,
 				.cra_module      = THIS_MODULE,
 				.cra_init        = eip_crypto_ahash_cra_init,
 				.cra_exit        = eip_crypto_ahash_cra_exit,
@@ -162,7 +165,6 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 				.cra_blocksize   = SHA256_BLOCK_SIZE,
 				.cra_ctxsize     = sizeof(struct eip_crypto_tfm_ctx),
 				.cra_alignmask   = 0,
-				.cra_type        = &crypto_ahash_type,
 				.cra_module      = THIS_MODULE,
 				.cra_init        = eip_crypto_ahash_cra_init,
 				.cra_exit        = eip_crypto_ahash_cra_exit,
@@ -188,7 +190,6 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 				.cra_blocksize   = SHA384_BLOCK_SIZE,
 				.cra_ctxsize     = sizeof(struct eip_crypto_tfm_ctx),
 				.cra_alignmask   = 0,
-				.cra_type        = &crypto_ahash_type,
 				.cra_module      = THIS_MODULE,
 				.cra_init        = eip_crypto_ahash_cra_init,
 				.cra_exit        = eip_crypto_ahash_cra_exit,
@@ -214,7 +215,6 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 				.cra_blocksize   = SHA512_BLOCK_SIZE,
 				.cra_ctxsize     = sizeof(struct eip_crypto_tfm_ctx),
 				.cra_alignmask   = 0,
-				.cra_type        = &crypto_ahash_type,
 				.cra_module      = THIS_MODULE,
 				.cra_init        = eip_crypto_ahash_cra_init,
 				.cra_exit        = eip_crypto_ahash_cra_exit,
@@ -244,7 +244,6 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 				.cra_blocksize   = MD5_HMAC_BLOCK_SIZE,
 				.cra_ctxsize     = sizeof(struct eip_crypto_tfm_ctx),
 				.cra_alignmask   = 0,
-				.cra_type        = &crypto_ahash_type,
 				.cra_module      = THIS_MODULE,
 				.cra_init        = eip_crypto_ahash_cra_init,
 				.cra_exit        = eip_crypto_ahash_cra_exit,
@@ -270,7 +269,6 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 				.cra_blocksize   = SHA1_BLOCK_SIZE,
 				.cra_ctxsize     = sizeof(struct eip_crypto_tfm_ctx),
 				.cra_alignmask   = 0,
-				.cra_type        = &crypto_ahash_type,
 				.cra_module      = THIS_MODULE,
 				.cra_init        = eip_crypto_ahash_cra_init,
 				.cra_exit        = eip_crypto_ahash_cra_exit,
@@ -296,7 +294,6 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 				.cra_blocksize   = SHA224_BLOCK_SIZE,
 				.cra_ctxsize     = sizeof(struct eip_crypto_tfm_ctx),
 				.cra_alignmask   = 0,
-				.cra_type        = &crypto_ahash_type,
 				.cra_module      = THIS_MODULE,
 				.cra_init        = eip_crypto_ahash_cra_init,
 				.cra_exit        = eip_crypto_ahash_cra_exit,
@@ -322,7 +319,6 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 				.cra_blocksize   = SHA256_BLOCK_SIZE,
 				.cra_ctxsize     = sizeof(struct eip_crypto_tfm_ctx),
 				.cra_alignmask   = 0,
-				.cra_type        = &crypto_ahash_type,
 				.cra_module      = THIS_MODULE,
 				.cra_init        = eip_crypto_ahash_cra_init,
 				.cra_exit        = eip_crypto_ahash_cra_exit,
@@ -348,7 +344,6 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 				.cra_blocksize   = SHA384_BLOCK_SIZE,
 				.cra_ctxsize     = sizeof(struct eip_crypto_tfm_ctx),
 				.cra_alignmask   = 0,
-				.cra_type        = &crypto_ahash_type,
 				.cra_module      = THIS_MODULE,
 				.cra_init        = eip_crypto_ahash_cra_init,
 				.cra_exit        = eip_crypto_ahash_cra_exit,
@@ -374,7 +369,6 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 				.cra_blocksize   = SHA512_BLOCK_SIZE,
 				.cra_ctxsize     = sizeof(struct eip_crypto_tfm_ctx),
 				.cra_alignmask   = 0,
-				.cra_type        = &crypto_ahash_type,
 				.cra_module      = THIS_MODULE,
 				.cra_init        = eip_crypto_ahash_cra_init,
 				.cra_exit        = eip_crypto_ahash_cra_exit,
@@ -682,7 +676,9 @@ int eip_crypto_ahash_setkey(struct crypto_ahash *tfm, const u8 *key, unsigned in
 	tr = eip_tr_alloc(ahash.dma_ctx, &info);
 	if (!tr) {
 		pr_warn("%px: Unable to allocate new TR.\n", tfm_ctx);
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 		crypto_ahash_set_flags(tfm, CRYPTO_TFM_RES_BAD_FLAGS);
+#endif
 		tfm_stats->tr_alloc_err++;
 		ahash_stats->tr_alloc_err++;
 		return -EBUSY;
@@ -760,7 +756,9 @@ int eip_crypto_ahash_tfm_init(struct ahash_request *req)
 	tr = eip_tr_alloc(ahash.dma_ctx, &info);
 	if (!tr) {
 		pr_warn("%px: Unable to allocate new TR.\n", tfm_ctx);
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 		crypto_ahash_set_flags(crypto_ahash_reqtfm(req), CRYPTO_TFM_RES_BAD_FLAGS);
+#endif
 		tfm_stats->tr_alloc_err++;
 		ahash_stats->tr_alloc_err++;
 		return -EBUSY;

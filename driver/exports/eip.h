@@ -16,11 +16,16 @@
 #ifndef __EIP_H
 #define __EIP_H
 
+#include <linux/version.h>
 #include <linux/netdevice.h>
 #include <crypto/aead.h>
 #include <crypto/skcipher.h>
 #include <crypto/hash.h>
 #include <soc/qcom/socinfo.h>
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(6, 1, 0))
+#include <dt-bindings/arm/qcom,ids.h>
+#include <linux/soc/qcom/smem.h>
+#endif
 
 #define EIP_TR_IPSEC_FLAG_TUNNEL   BIT(0)  /* set = Tunnel, clear = Transport */
 #define EIP_TR_IPSEC_FLAG_ENC      BIT(1)  /* set = Encapsulation, clear = Decapsulation */
@@ -237,6 +242,7 @@ static inline struct sk_buff *eip_req2skb(eip_req_t req)
 	return (struct sk_buff *)req;
 }
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 /*
  * eip_is_enabled
  *	Check if EIP is enabled.
@@ -248,6 +254,28 @@ static inline bool eip_is_enabled(void)
 {
 	return cpu_is_nss_crypto_enabled();
 }
+#else
+/*
+ * eip_is_enabled
+ *	Check if EIP is enabled.
+ *
+ * @return
+ * true if crypto capabality is available.
+ */
+static inline bool eip_is_enabled(void)
+{
+	uint32_t soc_id;
+
+	if (qcom_smem_get_soc_id(&soc_id))
+		return false;
+
+	return (soc_id == QCOM_ID_IPQ5322 || soc_id == QCOM_ID_IPQ9570 ||
+			soc_id == QCOM_ID_IPQ9550 || soc_id == QCOM_ID_IPQ9574 ||
+			soc_id == QCOM_ID_IPQ9554 || soc_id == QCOM_ID_IPQ5332 ||
+			soc_id == QCOM_ID_IPQ5300);
+}
+#endif
+
 
 /*
  * eip_ctx_alloc
