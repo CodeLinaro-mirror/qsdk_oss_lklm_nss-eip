@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -730,15 +730,10 @@ void eip_ipsec_dev_del(struct net_device *ndev)
 	/*
 	 * Bring down the device and unregister from linux.
 	 */
-	if (rtnl_is_locked()) {
-		dev_close(ndev);
-		unregister_netdevice(ndev);
-	} else {
-		rtnl_lock();
-		dev_close(ndev);
-		unregister_netdevice(ndev);
-		rtnl_unlock();
-	}
+	rtnl_lock();
+	dev_close(ndev);
+	unregister_netdevice(ndev);
+	rtnl_unlock();
 }
 EXPORT_SYMBOL(eip_ipsec_dev_del);
 
@@ -751,7 +746,6 @@ struct net_device *eip_ipsec_dev_add(void)
 	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
 	struct eip_ipsec_dev *eid;
 	struct net_device *ndev;
-	bool rlock = false;
 	int status;
 
 	/*
@@ -785,11 +779,7 @@ struct net_device *eip_ipsec_dev_add(void)
 		return NULL;
 	}
 
-	if (!rtnl_is_locked()) {
-		rtnl_lock();
-		rlock = true;
-	}
-
+	rtnl_lock();
 	/*
 	 * Register netdevice with kernel.
 	 * kernels invoke the destructor upon failure
@@ -797,6 +787,7 @@ struct net_device *eip_ipsec_dev_add(void)
 	status = register_netdevice(ndev);
 	if (status < 0) {
 		pr_err("%px: Failed to register netdevce, error(%d)\n", ndev, status);
+		rtnl_unlock();
 		return NULL;
 	}
 
@@ -807,14 +798,12 @@ struct net_device *eip_ipsec_dev_add(void)
 	if (status < 0) {
 		pr_err("%px: Failed to Open netdevce, error(%d)\n", ndev, status);
 		unregister_netdevice(ndev);
-		if (rlock)
-			rtnl_unlock();
+		rtnl_unlock();
 
 		return NULL;
 	}
 
-	if (rlock)
-		rtnl_unlock();
+	rtnl_unlock();
 
 #if defined(EIP_IPSEC_HYBRID)
 	/*
