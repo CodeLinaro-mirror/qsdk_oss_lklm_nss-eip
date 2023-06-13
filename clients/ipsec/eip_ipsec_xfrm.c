@@ -402,7 +402,13 @@ static int eip_ipsec_xfrm_sa_data_init(struct xfrm_state *xs, struct eip_ipsec_d
 		ttl_hop_limit = ip4_dst_hoplimit(dst);
 	} else {
 		sa_data->base.flags |= EIP_IPSEC_FLAG_IPV6;
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 		local_dev = ipv6_dev_find(&init_net, &xs->id.daddr.in6, 1);
+#else
+		local_dev = ipv6_dev_find(&init_net, &xs->id.daddr.in6, NULL);
+#endif
+
 		ip_addr_len = sizeof(remote.in6);
 
 		/*
@@ -628,9 +634,16 @@ static void eip_ipsec_xfrm_state_delete(struct xfrm_state *xs)
  * eip_ipsec_xfrm_esp_init_state()
  *	Initialize IPsec xfrm state of type ESP.
  */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 static int eip_ipsec_xfrm_esp_init_state(struct xfrm_state *xs)
+#else
+static int eip_ipsec_xfrm_esp_init_state(struct xfrm_state *xs, struct netlink_ext_ack *extack)
+#endif
 {
 	if (eip_ipsec_xfrm_state_add(xs)) {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
+		NL_SET_ERR_MSG(extack, "Kernel is unable to initialize xfrm state");
+#endif
 		pr_err("%p: Failed to offload xfrm state\n", xs);
 		return -1;
 	}
@@ -659,9 +672,11 @@ static struct xfrm_state_afinfo xfrm_v4_afinfo = {
 	.family = AF_INET,
 	.proto = IPPROTO_IPIP,
 	.output = eip_ipsec_xfrm_v4_output,
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	.output_finish = NULL,
 	.extract_input = NULL,
 	.extract_output = NULL,
+#endif
 	.transport_finish = NULL,
 	.local_error = NULL,
 };
@@ -670,7 +685,9 @@ static struct xfrm_state_afinfo xfrm_v4_afinfo = {
  * ESP proto specific init/de-init handlers for ipv4.
  */
 static const struct xfrm_type xfrm_v4_type = {
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	.description = "NSS ESP4",
+#endif
 	.owner = THIS_MODULE,
 	.proto = IPPROTO_ESP,
 	.flags = XFRM_TYPE_REPLAY_PROT,
@@ -688,9 +705,11 @@ static struct xfrm_state_afinfo xfrm_v6_afinfo = {
 	.family = AF_INET6,
 	.proto = IPPROTO_IPV6,
 	.output = eip_ipsec_xfrm_v6_output,
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	.output_finish = NULL,
 	.extract_input = NULL,
 	.extract_output = NULL,
+#endif
 	.transport_finish = NULL,
 	.local_error = NULL,
 };
@@ -699,7 +718,9 @@ static struct xfrm_state_afinfo xfrm_v6_afinfo = {
  * ESP proto specific init/de-init handlers for ipv6.
  */
 static const struct xfrm_type xfrm_v6_type = {
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	.description = "NSS ESP6",
+#endif
 	.owner = THIS_MODULE,
 	.proto = IPPROTO_ESP,
 	.flags = XFRM_TYPE_REPLAY_PROT,
@@ -708,7 +729,9 @@ static const struct xfrm_type xfrm_v6_type = {
 	.get_mtu = eip_ipsec_xfrm_esp_get_mtu,
 	.input = NULL,
 	.output = NULL,
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	.hdr_offset = NULL,
+#endif
 };
 
 /*
