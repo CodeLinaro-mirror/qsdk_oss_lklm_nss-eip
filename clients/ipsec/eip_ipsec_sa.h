@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -18,6 +18,8 @@
 #define __EIP_IPSEC_SA_H
 
 #include <net/dst_cache.h>
+
+#define EIP_IPSEC_SA_ESP_TRAILER_LEN 2U	/* ESP trailer len */
 
 struct eip_ipsec_dev;
 
