@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -158,6 +158,15 @@ struct eip_tr_info {
 		struct eip_tr_info_crypto crypto;	/* Information require for crypto session */
 		struct eip_tr_info_ipsec ipsec;		/* Information require for IPsec session */
 	};
+};
+
+/*
+ * eip_tr_algo_info
+ * 	Algo specific information.
+ */
+struct eip_tr_algo_info {
+	uint16_t iv_len;	/* IV length for configured algo */
+	uint16_t blk_len;	/* Cipher block length for configured algo */
 };
 
 /*
@@ -402,8 +411,21 @@ int eip_tr_ipsec_enc(struct eip_tr *tr, struct sk_buff *skb);
 int eip_tr_ipsec_dec(struct eip_tr *tr, struct sk_buff *skb);
 
 /*
+ * eip_tr_get_algo_info
+ * 	Get algo info.
+ *
+ * @datatypes
+ * struct eip_tr
+ * struct eip_tr_algo_info
+ *
+ * @param[in] tr	Pointer to the transformation record.
+ * @param[out] algo	Pointer to the algo information.
+ */
+void eip_tr_get_algo_info(struct eip_tr *tr, struct eip_tr_algo_info *algo);
+
+/*
  * eip_ctx_algo_supported
- *     Check if the algorithm is supported by DMA.
+ * 	Check if the algorithm is supported by DMA.
  *
  * @datatypes
  * const char *

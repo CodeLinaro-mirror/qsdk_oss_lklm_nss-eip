@@ -176,6 +176,7 @@ struct eip_tr {
 	uint32_t tr_flags;			/* Flags for TR */
 	uint16_t iv_len;			/* IV length for configured algo */
 	uint16_t digest_len;			/* HMAC length for configured algo */
+	uint16_t blk_len;			/* Cipher block length for configured algo */
 
 	struct eip_tr_stats __percpu *stats_pcpu;	/* Statistisc */
 	struct kref ref;			/* Reference incremented per packet */

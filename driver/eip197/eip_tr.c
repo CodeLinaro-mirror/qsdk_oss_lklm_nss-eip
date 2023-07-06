@@ -552,3 +552,14 @@ fail2:
 	crypto_free_sync_skcipher(sk_tfm);
         return err;
 }
+
+/*
+ * eip_tr_get_algo_info()
+ * 	Get algo info.
+ */
+void eip_tr_get_algo_info(struct eip_tr *tr, struct eip_tr_algo_info *algo)
+{
+	algo->iv_len = tr->iv_len;
+	algo->blk_len = tr->blk_len;
+}
+EXPORT_SYMBOL(eip_tr_get_algo_info);

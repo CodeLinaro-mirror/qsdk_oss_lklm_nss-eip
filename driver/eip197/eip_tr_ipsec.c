@@ -581,6 +581,8 @@ static void eip_tr_ipsec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, c
 	tr->tr_addr_type = EIP_HW_CTX_TYPE_LARGE;
 	tr->tr_addr_type |= virt_to_phys(tr->hw_words);
 	tr->tr_flags = ipsec->sa_flags;
+	tr->iv_len = algo->iv_len;
+	tr->blk_len = algo->cipher_blk_len;
 	tr->digest_len = algo->auth_digest_len;
 	tr->ctrl_words[0] = tr_words[0];
 	tr->ctrl_words[1] = tr_words[1];
