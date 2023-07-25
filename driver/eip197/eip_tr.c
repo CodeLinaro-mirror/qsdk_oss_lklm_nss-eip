@@ -314,6 +314,14 @@ struct eip_tr *eip_tr_alloc(struct eip_ctx *ctx, struct eip_tr_info *info)
 	eip_ctx_add_tr(ctx, tr);
 
 	/*
+	 * Context is going to use hybrid ring, so refill it
+	 */
+	if (tr->svc == EIP_SVC_HYBRID_IPSEC && ep->dma_refill_req) {
+		eip_dma_hy_refill_all(ctx);
+		ep->dma_refill_req = false;
+	}
+
+	/*
 	 * If the TR is for hybrid encapsulation IPsec, then the flow is added
 	 * TODO: EIP Driver will send those packets to Linux for which there is no flow
 	 */
