@@ -682,17 +682,6 @@ static const struct xfrm_type xfrm_v4_type = {
 };
 
 /*
- * ESP proto handler for ipv4
- */
-static struct xfrm4_protocol xfrm4_proto = {
-	.handler = NULL,
-	.input_handler = NULL,
-	.cb_handler = NULL,
-	.err_handler = NULL,
-	.priority = INT_MAX,
-};
-
-/*
  * Trapping ipv6 packets to be sent for ipsec encapsulation.
  */
 static struct xfrm_state_afinfo xfrm_v6_afinfo = {
@@ -720,16 +709,6 @@ static const struct xfrm_type xfrm_v6_type = {
 	.input = NULL,
 	.output = NULL,
 	.hdr_offset = NULL,
-};
-
-/*
- * ESP proto handler for ipv6
- */
-static struct xfrm6_protocol xfrm6_proto = {
-	.handler = NULL,
-	.cb_handler = NULL,
-	.err_handler = NULL,
-	.priority = INT_MAX,
 };
 
 /*
@@ -868,19 +847,6 @@ int eip_ipsec_xfrm_init(void)
 {
 
 	/*
-	 * Register & overide the inet esp proto handlers.
-	 */
-	if (xfrm4_protocol_register(&xfrm4_proto, IPPROTO_ESP) < 0) {
-		pr_warn("can't overide the ESP handler for IPv4\n");
-		return -EAGAIN;
-	}
-
-	if (xfrm6_protocol_register(&xfrm6_proto, IPPROTO_ESP) < 0) {
-		pr_warn("can't overide the ESP handler for IPv6\n");
-		goto unreg_v4_handler;
-	}
-
-	/*
 	 * overide the xfrm_state afinfo.
 	 */
 	eip_ipsec_xfrm_override_afinfo(AF_INET);
@@ -890,10 +856,6 @@ int eip_ipsec_xfrm_init(void)
 
 	pr_info("eip xfrm module loaded\n");
 	return 0;
-
-unreg_v4_handler:
-	xfrm4_protocol_deregister(&xfrm4_proto, IPPROTO_ESP);
-	return -EAGAIN;
 }
 
 /*
@@ -902,12 +864,6 @@ unreg_v4_handler:
  */
 void eip_ipsec_xfrm_exit(void)
 {
-	/*
-	 * De-register the inet esp protocol handlers.
-	 */
-	xfrm4_protocol_deregister(&xfrm4_proto, IPPROTO_ESP);
-	xfrm6_protocol_deregister(&xfrm6_proto, IPPROTO_ESP);
-
 	/*
 	 * Restore the xfrm_state afinfo.
 	 */
