@@ -127,6 +127,7 @@ static void eip_hw_setup_core(void __iomem *base_addr)
 	 * help to recover from hang
 	 */
 	iowrite32(EIP_HW_TOKEN_CFG, base_addr + EIP_HW_PE_EIP96_TOKEN_CTRL);
+	iowrite32(EIP_HW_TOKEN2_CFG, base_addr + EIP_HW_PE_EIP96_TOKEN_CTRL2);
 	iowrite32(0x0, base_addr + EIP_HW_PE_EIP96_OUT_BUF_CTRL);
 
 	/*
