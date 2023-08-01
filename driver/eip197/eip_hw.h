@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -119,6 +119,7 @@
  * Configure Processing engine token control register
  */
 #define EIP_HW_TOKEN_CFG 0x40424004
+#define EIP_HW_TOKEN2_CFG (0x1 << 1) /* Strip excess IP packet data for outbound */
 
 /*
  * Configure Input and Output classification's engine
@@ -388,6 +389,7 @@
 #define EIP_HW_PE_EIP96_LFSR_HI (EIP_HW_PE_EIP96_BASE + 0x74)
 #define EIP_HW_PE_EIP96_VERSION (EIP_HW_PE_EIP96_BASE + 0x3FC)
 #define EIP_HW_PE_EIP96_ECN_TABLE(x) (EIP_HW_PE_EIP96_BASE + 0x3E0 + ((x) * 4))
+#define EIP_HW_PE_EIP96_TOKEN_CTRL2 (EIP_HW_PE_EIP96_BASE + 0x2C)
 
 #define EIP_HW_PE_IV0 (EIP_HW_PE_EIP96_BASE + 0x210)
 #define EIP_HW_PE_IV1 (EIP_HW_PE_EIP96_BASE + 0x214)
