@@ -119,6 +119,7 @@
  * Configure Processing engine token control register
  */
 #define EIP_HW_TOKEN_CFG 0x40424004U
+#define EIP_HW_TOKEN2_CFG (0x1U << 1) /* Strip excess IP packet data for outbound */
 
 /*
  * Configure Input and Output classification's engine
@@ -380,6 +381,7 @@
  */
 #define EIP_HW_PE_EIP96_BASE 0x21000U
 #define EIP_HW_PE_EIP96_TOKEN_CTRL (EIP_HW_PE_EIP96_BASE + 0x0)
+#define EIP_HW_PE_EIP96_TOKEN_CTRL2 (EIP_HW_PE_EIP96_BASE + 0x2CU)
 #define EIP_HW_PE_EIP96_FUNC_EN (EIP_HW_PE_EIP96_BASE + 0x4U)
 #define EIP_HW_PE_EIP96_CONTEXT_CTRL (EIP_HW_PE_EIP96_BASE + 0x8U)
 #define EIP_HW_PE_EIP96_CONTEXT_STAT (EIP_HW_PE_EIP96_BASE + 0xCU)
