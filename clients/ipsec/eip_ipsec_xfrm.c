@@ -442,6 +442,7 @@ static int eip_ipsec_xfrm_sa_data_init(struct xfrm_state *xs, struct eip_ipsec_d
 	}
 
 	sa_data->xs = xs;
+	sa_data->mtu = READ_ONCE(dst->dev->mtu);
 	xs->xflags |= XFRM_STATE_OFFLOAD_NSS;
 
 	if (sa_data->base.flags & EIP_IPSEC_FLAG_ENC) {
