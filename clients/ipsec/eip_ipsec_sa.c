@@ -41,7 +41,7 @@ static void eip_ipsec_sa_data_to_tr_info(struct eip_ipsec_data *data, struct eip
 
 	memset(tr_info, 0, sizeof(*tr_info));
 
-	base->svc = EIP_IPSEC_DEFAULT_SVC;
+	base->svc = eip_is_inline_supported() ? EIP_SVC_HYBRID_IPSEC : EIP_SVC_IPSEC;
 	strlcpy(base->alg_name, data->base.algo_name, CRYPTO_MAX_ALG_NAME);
 	base->cipher.key_data = data->base.cipher.data;
 	base->cipher.key_len = data->base.cipher.len;
@@ -651,7 +651,7 @@ int eip_ipsec_sa_add(struct net_device *ndev, struct eip_ipsec_data *data, struc
 	 */
 	tr_info.ipsec.app_data = sa;
 	if (encap) {
-		tr_info.ipsec.cb = t->ip_version == 4 ? eip_ipsec_dev_enc_done_v4 : eip_ipsec_dev_enc_done_v6;
+		tr_info.ipsec.cb = (t->ip_version == 4) ? eip_ipsec_dev_enc_done_v4 : eip_ipsec_dev_enc_done_v6;
 		tr_info.ipsec.err_cb = eip_ipsec_dev_enc_err;
 	} else {
 		tr_info.ipsec.cb = eip_ipsec_proto_dec_done;
@@ -659,10 +659,13 @@ int eip_ipsec_sa_add(struct net_device *ndev, struct eip_ipsec_data *data, struc
 	}
 
 	/*
-	 * Fill in PPE metadata for hybrid inline channel.
+	 * Override enc callback and fill PPE metadata for hybrid inline channel.
 	 */
 #if defined(EIP_IPSEC_HYBRID)
-	sa->cb = tr_info.ipsec.cb;
+	if (encap) {
+		tr_info.ipsec.cb = eip_ipsec_dev_enc_done_hy;
+	}
+
 	eip_ipsec_ppe_mdata_set(&tr_info, eid->vp_num);
 #endif
 

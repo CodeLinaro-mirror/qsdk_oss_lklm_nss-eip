@@ -59,11 +59,6 @@ struct eip_ipsec_sa {
 	struct eip_tr *tr;		/* Transform record allocated by HW */
 	struct eip_ipsec_sa_stats __percpu *stats_pcpu;	/* SA statistics */
 	struct xfrm_state *xs;          /* offloaded xfrm sate to use in SKB after decap. */
-
-#if defined(EIP_IPSEC_HYBRID)
-	eip_tr_callback_t cb;		/* Callback for VP exception */
-#endif
-
 	struct eip_ipsec_tuple tuple;	/* SA tuple */
 	struct completion completion;   /* Completion to wait for all deref */
 	struct rcu_head rcu;            /* delay rcu free */
