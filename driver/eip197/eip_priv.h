@@ -124,6 +124,7 @@ struct eip_pdev {
 	bool redirect_en;			/* Redirection / Hybrid mode is configured */
 	bool dma_refill_req;			/* Hybrid DMA refill required */
 	struct eip_flow_tbl flow_table;		/* Flow table */
+	bool inline_support;			/* EIP inline port support */
 };
 
 extern struct eip_drv eip_drv_g;	/* Global Driver object */

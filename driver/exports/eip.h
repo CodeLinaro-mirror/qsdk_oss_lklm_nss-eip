@@ -466,4 +466,13 @@ void eip_tr_get_algo_info(struct eip_tr *tr, struct eip_tr_algo_info *algo);
  */
 bool eip_ctx_algo_supported(struct eip_ctx *dma_ctx, const char *algo_name);
 
+/*
+ * eip_is_inline_supported
+ * 	Check if inline port is supported in EIP.
+ *
+ * @return
+ * true/false
+ */
+bool eip_is_inline_supported(void);
+
 #endif /* __EIP_H */
