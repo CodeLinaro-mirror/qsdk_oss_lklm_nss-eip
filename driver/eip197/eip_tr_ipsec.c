@@ -366,7 +366,8 @@ static void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *inf
 	 * Enable Sequence number verification if window is enabled
 	 */
 	tr_words[70] = EIP_TR_IPSEC_DECAP_TOKEN_VERIFY;
-	tr_words[70] |= EIP_TR_IPSEC_DECAP_TOKEN_VERIFY_PAD | EIP_TR_IPSEC_DECAP_TOKEN_VERIFY_HMAC;
+	tr_words[70] |= EIP_TR_IPSEC_DECAP_TOKEN_VERIFY_PAD;
+	tr_words[70] |= EIP_TR_IPSEC_DECAP_TOKEN_VERIFY_HMAC | ipsec->icv_len;
 	tr_words[70] |= ipsec->replay ? EIP_TR_IPSEC_DECAP_TOKEN_VERIFY_SEQ : 0;
 
 	/*
