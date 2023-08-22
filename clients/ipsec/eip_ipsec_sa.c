@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -341,6 +341,48 @@ static void eip_ipsec_ppe_mdata_set(struct eip_tr_info *tr_info, ppe_vp_num_t vp
 #endif
 
 /*
+ * eip_ipsec_sa_set_mtu()
+ *      Set IPsec device MTU.
+ */
+static void eip_ipsec_sa_set_mtu(struct eip_ipsec_sa *sa, struct eip_ipsec_data *sa_data)
+{
+	struct eip_ipsec_base *base = &sa_data->base;
+	struct net_device *ndev = sa->ndev;
+	struct eip_tr_algo_info algo = {0};
+	struct eip_tr *tr = sa->tr;
+	uint32_t mtu_overhead = 0;
+	uint32_t mode;
+
+	mtu_overhead = sizeof(struct ip_esp_hdr) + EIP_IPSEC_SA_ESP_TRAILER_LEN;
+	mode = base->flags & (EIP_IPSEC_FLAG_TUNNEL | EIP_IPSEC_FLAG_UDP | EIP_IPSEC_FLAG_IPV6);
+
+	switch (mode) {
+	case EIP_IPSEC_FLAG_TUNNEL:
+		mtu_overhead += sizeof(struct iphdr);
+		break;
+	case (EIP_IPSEC_FLAG_TUNNEL | EIP_IPSEC_FLAG_IPV6):
+		mtu_overhead += sizeof(struct ipv6hdr);
+		break;
+	case (EIP_IPSEC_FLAG_TUNNEL | EIP_IPSEC_FLAG_UDP):
+		mtu_overhead += (sizeof(struct iphdr) + sizeof(struct udphdr));
+		break;
+	case EIP_IPSEC_FLAG_UDP:
+		mtu_overhead += sizeof(struct udphdr);
+		break;
+	case EIP_IPSEC_FLAG_IPV6:
+	default:
+		break;
+	}
+
+	eip_tr_get_algo_info(tr, &algo);
+	mtu_overhead += (algo.blk_len + algo.iv_len + base->icv_len);
+
+	rtnl_lock();
+	dev_set_mtu(ndev, sa_data->mtu - mtu_overhead);
+	rtnl_unlock();
+}
+
+/*
  * eip_ipsec_dev_get_summary_stats()
  *	Update the summary stats.
  */
@@ -635,6 +677,13 @@ int eip_ipsec_sa_add(struct net_device *ndev, struct eip_ipsec_data *data, struc
 
 	if (!encap && udp_encap) {
 		eip_ipsec_proto_udp_sock_override(t);
+	}
+
+	/*
+	 * Update IPsec net device MTU
+	 */
+	if (encap) {
+		eip_ipsec_sa_set_mtu(sa, data);
 	}
 
 	/*
