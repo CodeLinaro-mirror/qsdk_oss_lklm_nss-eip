@@ -363,7 +363,9 @@ bool eip_ipsec_proto_vp_rx(struct net_device *ndev, struct sk_buff *skb, void *c
 static struct net_protocol esp_protocol = {
 	.handler = eip_ipsec_proto_esp4_rx,
 	.no_policy = 1,
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	.netns_ok  = 1,
+#endif
 };
 
 /*

@@ -22,7 +22,7 @@
 #include <linux/if.h>
 #include <linux/rculist.h>
 #include <linux/netdevice.h>
-#include <linux/netdevice.h>
+#include <linux/etherdevice.h>
 #include <linux/debugfs.h>
 #include <net/addrconf.h>
 #include <net/dst_cache.h>
@@ -725,7 +725,8 @@ static void eip_ipsec_dev_setup(struct net_device *ndev)
 	/*
 	 * Assign random ethernet address.
 	 */
-	random_ether_addr(ndev->dev_addr);
+	eth_hw_addr_random(ndev);
+
 	memset(ndev->broadcast, 0xff, ndev->addr_len);
 	memcpy(ndev->perm_addr, ndev->dev_addr, ndev->addr_len);
 }
