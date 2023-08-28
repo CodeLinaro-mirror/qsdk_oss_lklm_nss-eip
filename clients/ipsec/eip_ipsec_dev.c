@@ -532,18 +532,25 @@ static ppe_vp_num_t eip_ipsec_dev_alloc_vp(struct net_device *ndev)
 	struct ppe_drv_iface *iface;
 	struct ppe_vp_ai vpai = {0};
 	ppe_vp_num_t vp_num;
+	bool is_inline = eip_is_inline_supported();
 
 	/*
 	 * Allocate new VP
 	 */
 	vpai.type = PPE_VP_TYPE_SW_L3;
 	vpai.queue_num = 0;
-	vpai.usr_type = PPE_VP_USER_TYPE_ACTIVE;
-	vpai.core_mask = eip_ipsec_core_mask;
 	vpai.dst_cb = eip_ipsec_proto_vp_rx;
 	vpai.dst_cb_data = netdev_priv(ndev);
 	vpai.src_cb = eip_ipsec_dev_vp_except;
 	vpai.src_cb_data = netdev_priv(ndev);
+
+	/*
+	 * Active PPE_VP type with core mask is not supported for inline mode
+	 */
+	if (!is_inline) {
+		vpai.usr_type = PPE_VP_USER_TYPE_ACTIVE;
+		vpai.core_mask = eip_ipsec_core_mask;
+	}
 
 	vp_num = ppe_vp_alloc(ndev, &vpai);
 	if (vp_num < 0) {
@@ -558,7 +565,7 @@ static ppe_vp_num_t eip_ipsec_dev_alloc_vp(struct net_device *ndev)
 		return -1;
 	}
 
-	if (!eip_is_inline_supported()) {
+	if (!is_inline) {
 		ppe_drv_iface_mtu_disable(iface);
 		goto done;
 	}
