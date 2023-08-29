@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -439,6 +439,7 @@ static ppe_vp_num_t eip_ipsec_dev_alloc_vp(struct net_device *ndev)
 	vpai.src_cb = eip_ipsec_dev_vp_cb;
 	vpai.src_cb_data = netdev_priv(ndev);
 	vpai.queue_num = 0;
+	vpai.flags |= PPE_VP_FLAG_DISABLE_TTL_DEC;
 
 	vp_num = ppe_vp_alloc(ndev, &vpai);
 	if (vp_num < 0) {
