@@ -112,9 +112,9 @@ static void eip_tr_dtls_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, co
 	uint32_t *tr_words = tr->hw_words;
 
 	if (dtls->flags & EIP_TR_DTLS_FLAG_ENC)
-		eip_tr_dtls_enc_cmn_init(tr, info, algo, false);
+		eip_tr_dtls_enc_cmn_init(tr, info, algo);
 	else
-		eip_tr_dtls_dec_cmn_init(tr, info, algo, false);
+		eip_tr_dtls_dec_cmn_init(tr, info, algo);
 
 	/*
 	 * We use large record for dtls.
