@@ -38,6 +38,7 @@
  * Forward declaration for tr_init functions.
  */
 static bool eip_tr_dtls_aes_cbc_init(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo);
+static bool eip_tr_dtls_des_cbc_init(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo);
 
 /*
  * Global constant algorithm information.
@@ -56,8 +57,79 @@ static const struct eip_svc_entry dtls_algo_list[] = {
 		.ctrl_words_1 = EIP_HW_CTX_CIPHER_MODE_CBC | EIP_TR_DTLS_CTX1_PAD_TLS | EIP_TR_CTRL_SEQ_NUM_STORE | EIP_TR_DTLS_CTX1_HASH_STORE,
 		.iv_len = AES_BLOCK_SIZE,
 		.cipher_blk_len = AES_BLOCK_SIZE
-	}
+	},
+	{
+		.name = "eip-aes-cbc-sha256-hmac",
+		.enc_tk_fill = &eip_tk_dtls_encauth_cbc,
+		.dec_tk_fill = &eip_tk_dtls_authdec_cbc,
+		.tr_init = eip_tr_dtls_aes_cbc_init,
+		.auth_digest_len = SHA256_DIGEST_SIZE,
+		.auth_block_len = SHA256_BLOCK_SIZE,
+		.auth_state_len = EIP_HW_PAD_KEYSZ_SHA256,
+		.ctrl_words_0 = EIP_HW_CTX_WITH_KEY | EIP_HW_CTX_ALGO_SHA256 |
+			EIP_HW_CTX_AUTH_MODE_HMAC | EIP_TR_IPSEC_SPI | EIP_TR_DTLS_CTX0_SEQNO,
+		.ctrl_words_1 = EIP_HW_CTX_CIPHER_MODE_CBC | EIP_TR_DTLS_CTX1_PAD_TLS | EIP_TR_CTRL_SEQ_NUM_STORE | EIP_TR_DTLS_CTX1_HASH_STORE,
+		.iv_len = AES_BLOCK_SIZE,
+		.cipher_blk_len = AES_BLOCK_SIZE
+	},
+	{
+		.name = "eip-3des-cbc-sha1-hmac",
+		.enc_tk_fill = &eip_tk_dtls_encauth_cbc,
+		.dec_tk_fill = &eip_tk_dtls_authdec_cbc,
+		.tr_init = eip_tr_dtls_des_cbc_init,
+		.auth_digest_len = SHA1_DIGEST_SIZE,
+		.auth_block_len = SHA1_BLOCK_SIZE,
+		.auth_state_len = EIP_HW_PAD_KEYSZ_SHA1,
+		.ctrl_words_0 = EIP_HW_CTX_WITH_KEY | EIP_HW_CTX_ALGO_SHA1 |
+			EIP_HW_CTX_AUTH_MODE_HMAC | EIP_TR_IPSEC_SPI | EIP_TR_DTLS_CTX0_SEQNO,
+		.ctrl_words_1 = EIP_HW_CTX_CIPHER_MODE_CBC | EIP_TR_DTLS_CTX1_PAD_TLS | EIP_TR_CTRL_SEQ_NUM_STORE | EIP_TR_DTLS_CTX1_HASH_STORE,
+		.iv_len = DES3_EDE_BLOCK_SIZE,
+		.cipher_blk_len = DES3_EDE_BLOCK_SIZE
+	},
+	{
+		.name = "eip-3des-cbc-sha1-hmac",
+		.enc_tk_fill = &eip_tk_dtls_encauth_cbc,
+		.dec_tk_fill = &eip_tk_dtls_authdec_cbc,
+		.tr_init = eip_tr_dtls_des_cbc_init,
+		.auth_digest_len = SHA256_DIGEST_SIZE,
+		.auth_block_len = SHA256_BLOCK_SIZE,
+		.auth_state_len = EIP_HW_PAD_KEYSZ_SHA256,
+		.ctrl_words_0 = EIP_HW_CTX_WITH_KEY | EIP_HW_CTX_ALGO_SHA256 |
+			EIP_HW_CTX_AUTH_MODE_HMAC | EIP_TR_IPSEC_SPI | EIP_TR_DTLS_CTX0_SEQNO,
+		.ctrl_words_1 = EIP_HW_CTX_CIPHER_MODE_CBC | EIP_TR_DTLS_CTX1_PAD_TLS | EIP_TR_CTRL_SEQ_NUM_STORE | EIP_TR_DTLS_CTX1_HASH_STORE,
+		.iv_len = DES3_EDE_BLOCK_SIZE,
+		.cipher_blk_len = DES3_EDE_BLOCK_SIZE
+	},
 };
+
+/*
+ * eip_tr_dtls_cmn_init()
+ *	Initialize the transform record for DTLS.
+ */
+static void eip_tr_dtls_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo)
+{
+	struct eip_tr_info_dtls *dtls = &info->dtls;
+	uint32_t *tr_words = tr->hw_words;
+
+	if (dtls->flags & EIP_TR_DTLS_FLAG_ENC)
+		eip_tr_dtls_enc_cmn_init(tr, info, algo, false);
+	else
+		eip_tr_dtls_dec_cmn_init(tr, info, algo, false);
+
+	/*
+	 * We use large record for dtls.
+	 */
+	tr->tr_addr_type = EIP_HW_CTX_TYPE_LARGE;
+	tr->tr_addr_type |= virt_to_phys(tr->hw_words);
+	tr->tr_flags = dtls->flags;
+	tr->ctrl_words[0] = tr_words[0];
+	tr->ctrl_words[1] = tr_words[1];
+	tr->nonce = info->base.nonce;
+
+	tr->dtls.ops.cb = dtls->cb;
+	tr->dtls.ops.err_cb = dtls->err_cb;
+	tr->dtls.ops.app_data = dtls->app_data;
+}
 
 /*
  * eip_tr_dtls_aes_cbc_init()
@@ -65,12 +137,88 @@ static const struct eip_svc_entry dtls_algo_list[] = {
  */
 static bool eip_tr_dtls_aes_cbc_init(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo)
 {
-	/*
-	 * TODO: Initialize Transform record.
-	 */
-	BUG_ON(1);
+	struct eip_tr_base *crypto = &info->base;
+	uint32_t *tr_words = tr->hw_words;
 
-	return false;
+	/*
+	 * We first do common initialization and then algo specific initialization.
+	 */
+	eip_tr_dtls_cmn_init(tr, info, algo);
+
+	switch (crypto->cipher.key_len) {
+	case AES_KEYSIZE_128:
+		tr_words[0] |= EIP_HW_CTX_ALGO_AES128;
+		tr->ctrl_words[0] |= EIP_HW_CTX_ALGO_AES128;
+		break;
+	case AES_KEYSIZE_192:
+		tr_words[0] |= EIP_HW_CTX_ALGO_AES192;
+		tr->ctrl_words[0] |= EIP_HW_CTX_ALGO_AES192;
+		break;
+	case AES_KEYSIZE_256:
+		tr_words[0] |= EIP_HW_CTX_ALGO_AES256;
+		tr->ctrl_words[0] |= EIP_HW_CTX_ALGO_AES256;
+		break;
+	default:
+		pr_err("%px: Invalid key length(%u)\n", tr, crypto->cipher.key_len);
+		return false;
+	}
+
+	/*
+	 * Flush record memory.
+	 * Driver must not make any update in transform records words after this.
+	 */
+	dmac_clean_range(tr->hw_words, tr->hw_words + EIP_HW_CTX_SIZE_LARGE_WORDS);
+
+	/*
+	 * HMAC Inner and Outer Digest Precalculation
+	 */
+	if (!eip_tr_ahash_key2digest(tr, info, algo)) {
+		pr_err("%px: Digest computation failed for algo(%s)\n", tr, algo->name);
+		return false;
+	}
+
+	return true;
+}
+
+/*
+ * eip_tr_dtls_des_cbc_init()
+ *	Initialize the transform record for DTLS/AES-CBC.
+ */
+static bool eip_tr_dtls_des_cbc_init(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo)
+{
+	struct eip_tr_base *crypto = &info->base;
+	uint32_t *tr_words = tr->hw_words;
+
+	/*
+	 * We first do common initialization and then algo specific initialization.
+	 */
+	eip_tr_dtls_cmn_init(tr, info, algo);
+
+	switch (crypto->cipher.key_len) {
+	case DES3_EDE_KEY_SIZE:
+		tr_words[0] |= EIP_HW_CTX_ALGO_3DES;
+		tr->ctrl_words[0] |= EIP_HW_CTX_ALGO_3DES;
+		break;
+	default:
+		pr_err("%px: Invalid key length(%u)\n", tr, crypto->cipher.key_len);
+		return false;
+	}
+
+	/*
+	 * Flush record memory.
+	 * Driver must not make any update in transform records words after this.
+	 */
+	dmac_clean_range(tr->hw_words, tr->hw_words + EIP_HW_CTX_SIZE_LARGE_WORDS);
+
+	/*
+	 * HMAC Inner and Outer Digest Precalculation
+	 */
+	if (!eip_tr_ahash_key2digest(tr, info, algo)) {
+		pr_err("%px: Digest computation failed for algo(%s)\n", tr, algo->name);
+		return false;
+	}
+
+	return true;
 }
 
 /*
