@@ -388,8 +388,7 @@ bool eip_ipsec_proto_udp_sock_override(struct eip_ipsec_tuple *sa_tuple)
 		return false;
 	}
 
-	if (!drv->sk) {
-		sock_hold(sk);
+	if (READ_ONCE(up->encap_rcv) != eip_ipsec_proto_udp_rx) {
 		drv->sk_encap_rcv = xchg(&up->encap_rcv, eip_ipsec_proto_udp_rx);
 		drv->sk = sk;
 		pr_debug("%px: Overriden socket encap handler\n", up);
@@ -397,10 +396,6 @@ bool eip_ipsec_proto_udp_sock_override(struct eip_ipsec_tuple *sa_tuple)
 
 	rcu_read_unlock();
 
-	/*
-	 * TODO: Add support for multiple Socket handling.
-	 */
-	WARN_ON(drv->sk != sk);
 	return true;
 }
 
@@ -414,7 +409,6 @@ void eip_ipsec_proto_udp_sock_restore(void)
 	if (drv->sk) {
 		struct udp_sock *up = udp_sk(drv->sk);
 		xchg(&up->encap_rcv, drv->sk_encap_rcv);
-		sock_put(drv->sk);
 		drv->sk_encap_rcv = NULL;
 		drv->sk = NULL;
 		pr_debug("%px: Released socket encap handler\n", up);
