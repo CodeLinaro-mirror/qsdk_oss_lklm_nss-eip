@@ -20,7 +20,7 @@
 #include "eip.h"
 
 #define EIP_TR_DTLS_SKB_CB(__skb) ((struct eip_tr_dtls_skb_cb *)&((__skb)->cb[0]))
-#define EIP_TR_DTLS_PAD_LEN 0x1U
+#define EIP_TR_DTLS_TRAILER 0x1U
 #define EIP_TR_DTLS_VERSION(x) ((x) << 16)
 #define EIP_TR_DTLS_EPOCH(x) ((x) << 16)
 #define EIP_TR_DTLS_SEQ_START 0x1U
@@ -30,7 +30,6 @@
  * 	DTLS sepcific information in skb control block
  */
 struct eip_tr_dtls_skb_cb {
-	struct eip_dtls_skb_cb client;	/* Information passed/used by client */
 	uint8_t pad_len;	/* Padding length required for encryption */
 };
 
