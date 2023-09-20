@@ -164,7 +164,7 @@ drop:
  * eip_ipsec_proto_esp_rx()
  *	ESP Protocol handler for IPsec encapsulated packets.
  */
-static inline int eip_ipsec_proto_esp_rx(struct eip_ipsec_sa *sa, struct sk_buff *skb)
+static inline void eip_ipsec_proto_esp_rx(struct eip_ipsec_sa *sa, struct sk_buff *skb)
 {
 	struct eip_ipsec_dev *eid = netdev_priv(sa->ndev);
 	struct eip_ipsec_dev_stats *dev_stats;
@@ -196,13 +196,12 @@ static inline int eip_ipsec_proto_esp_rx(struct eip_ipsec_sa *sa, struct sk_buff
 	 */
 	sa_stats->tx_pkts++;
 	sa_stats->tx_bytes += len;
-
-	return 0;
+	return;
 
 fail:
 	dev_stats->rx_fail++;
 	consume_skb(skb);
-	return 0;
+	return;
 }
 
 /*
@@ -212,7 +211,6 @@ fail:
 static int eip_ipsec_proto_esp4_rx(struct sk_buff *skb)
 {
 	struct eip_ipsec_sa *sa;
-	int ret;
 
 	/*
 	 * Lookup SA using <ESP SPI, IP Destination address>.
@@ -220,14 +218,17 @@ static int eip_ipsec_proto_esp4_rx(struct sk_buff *skb)
 	 */
 	sa = eip_ipsec_sa_ref_get_decap_v4(&ip_hdr(skb)->daddr, ip_esp_hdr(skb)->spi);
 	if (!sa) {
-		pr_debug("IPv4 SA not found %pI4n %x\n", ipv6_hdr(skb)->daddr.s6_addr32, ip_esp_hdr(skb)->spi);
-		return -EHOSTUNREACH;
+		pr_debug("IPv4 SA not found %pI4n SPI is: %x\n", &(ip_hdr(skb)->daddr), ip_esp_hdr(skb)->spi);
+		goto drop;
 	}
 
-	ret = eip_ipsec_proto_esp_rx(sa, skb);
-
+	eip_ipsec_proto_esp_rx(sa, skb);
 	eip_ipsec_sa_deref(sa);
-	return ret;
+	return 0;
+
+drop:
+	consume_skb(skb);
+	return 0;
 }
 
 /*
@@ -237,7 +238,6 @@ static int eip_ipsec_proto_esp4_rx(struct sk_buff *skb)
 static int eip_ipsec_proto_esp6_rx(struct sk_buff *skb)
 {
 	struct eip_ipsec_sa *sa;
-	int ret;
 
 	/*
 	 * Lookup SA using <ESP SPI, IP Destination address>.
@@ -246,13 +246,16 @@ static int eip_ipsec_proto_esp6_rx(struct sk_buff *skb)
 	sa = eip_ipsec_sa_ref_get_decap_v6(ipv6_hdr(skb)->daddr.s6_addr32, ip_esp_hdr(skb)->spi);
 	if (!sa) {
 		pr_debug("IPv6 SA not found %pI6 %x\n", ipv6_hdr(skb)->daddr.s6_addr32, ip_esp_hdr(skb)->spi);
-		return -EHOSTUNREACH;
+		goto drop;
 	}
 
-	ret = eip_ipsec_proto_esp_rx(sa, skb);
-
+	eip_ipsec_proto_esp_rx(sa, skb);
 	eip_ipsec_sa_deref(sa);
-	return ret;
+	return 0;
+
+drop:
+	consume_skb(skb);
+	return 0;
 }
 
 /*
