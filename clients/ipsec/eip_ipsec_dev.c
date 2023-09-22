@@ -270,6 +270,7 @@ void eip_ipsec_dev_enc_done_v6(void *app_data, eip_req_t req)
 	 * Drop existing dst and set new.
 	 */
 	skb_dst_drop(skb);
+	nf_reset_ct(skb);
 	skb_dst_set(skb, dst);
 
 	/*
