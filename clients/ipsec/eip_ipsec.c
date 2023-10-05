@@ -39,9 +39,9 @@ struct eip_ipsec_drv eip_ipsec_drv_g;
 /*
  * Module params
  */
-uint8_t eip_ipsec_core_mask = 0x4;
-module_param(eip_ipsec_core_mask, byte, S_IRUSR | S_IWUSR | S_IRGRP);
-MODULE_PARM_DESC(eip_ipsec_core_mask, "CPU mask for IPsec processing");
+uint8_t eip_ipsec_core_id = 0x2;
+module_param(eip_ipsec_core_id, byte, S_IRUSR | S_IWUSR | S_IRGRP);
+MODULE_PARM_DESC(eip_ipsec_core_id, "CPU id for IPsec processing");
 
 /*
  * eip_ipsec_ppe_init()
