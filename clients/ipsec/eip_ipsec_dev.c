@@ -533,6 +533,7 @@ static ppe_vp_num_t eip_ipsec_dev_alloc_vp(struct net_device *ndev)
 	struct ppe_vp_ai vpai = {0};
 	ppe_vp_num_t vp_num;
 	bool is_inline = eip_is_inline_supported();
+	ppe_drv_eip_service_t eip_svc = PPE_DRV_EIP_SERVICE_IIPSEC;
 
 	/*
 	 * Allocate new VP
@@ -545,12 +546,10 @@ static ppe_vp_num_t eip_ipsec_dev_alloc_vp(struct net_device *ndev)
 	vpai.src_cb_data = netdev_priv(ndev);
 	vpai.flags |= PPE_VP_FLAG_DISABLE_TTL_DEC;
 
-	/*
-	 * Active PPE_VP type with core mask is not supported for inline mode
-	 */
 	if (!is_inline) {
-		vpai.usr_type = PPE_VP_USER_TYPE_ACTIVE;
-		vpai.core_mask = eip_ipsec_core_mask;
+		eip_svc = PPE_DRV_EIP_SERVICE_NONINLINE;
+		vpai.queue_num = ppe_drv_queue_from_core(eip_ipsec_core_id);
+		vpai.flags |= PPE_VP_FLAG_REDIR_ENABLE;
 	}
 
 	vp_num = ppe_vp_alloc(ndev, &vpai);
@@ -566,21 +565,12 @@ static ppe_vp_num_t eip_ipsec_dev_alloc_vp(struct net_device *ndev)
 		return -1;
 	}
 
-	if (!is_inline) {
-		ppe_drv_iface_mtu_disable(iface);
-		goto done;
-	}
-
-	/*
-	 * TODO: get this API made uniform to handle the case based on service code
-	 */
-	if (ppe_drv_iface_eip_set(iface, PPE_DRV_EIP_SERVICE_IIPSEC, PPE_DRV_EIP_FEATURE_MTU_DISABLE) != PPE_DRV_RET_SUCCESS) {
+	if (ppe_drv_iface_eip_set(iface, eip_svc, PPE_DRV_EIP_FEATURE_MTU_DISABLE) != PPE_DRV_RET_SUCCESS) {
 		ppe_vp_free(vp_num);
 		pr_debug("%px: Failed set feature on iface)\n", iface);
 		return -1;
 	}
 
-done:
 	return vp_num;
 }
 

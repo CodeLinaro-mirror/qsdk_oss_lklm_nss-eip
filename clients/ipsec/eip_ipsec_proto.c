@@ -347,17 +347,20 @@ bool eip_ipsec_proto_vp_rx(struct net_device *ndev, struct sk_buff *skb, void *c
 	if (iph->version != IPVERSION) {
 		skb_pull(skb, sizeof(struct ipv6hdr));
 		skb_reset_transport_header(skb);
-		return eip_ipsec_proto_esp6_rx(skb);
+		eip_ipsec_proto_esp6_rx(skb);
+		return true;
 	}
 
 	skb_pull(skb, sizeof(struct iphdr));
 	skb_reset_transport_header(skb);
 
 	if (iph->protocol == IPPROTO_UDP) {
-		return eip_ipsec_proto_udp_rx(drv->sk, skb);
+		eip_ipsec_proto_udp_rx(drv->sk, skb);
+		return true;
 	}
 
-	return eip_ipsec_proto_esp4_rx(skb);
+	eip_ipsec_proto_esp4_rx(skb);
+	return true;
 }
 
 /*

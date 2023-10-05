@@ -83,7 +83,7 @@ struct eip_ipsec_ppe_mdata {
 }__attribute__((packed));
 
 extern struct eip_ipsec_drv eip_ipsec_drv_g;	/* Global Driver object */
-extern uint8_t eip_ipsec_core_mask;		/* Global ipsec core mask */
+extern uint8_t eip_ipsec_core_id;		/* Global ipsec core id */
 extern void eip_ipsec_drv_final(struct kref *kref);
 
 /*
