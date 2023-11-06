@@ -41,7 +41,10 @@
 
 struct eip_drv eip_drv_g;     /* Global Driver object */
 
-static const struct of_device_id eip_dev_dt_id = { .compatible =  "qcom,eip" };
+static const struct of_device_id eip_dev_dt_id[] = {
+	{ .compatible =  "qcom,eip" },
+	{},
+};
 
 /*
  * eip_device_probe()
@@ -189,7 +192,7 @@ static struct platform_driver eip_device = {
 	.driver         = {
 		.owner  = THIS_MODULE,
 		.name   = "nss-eip-device",
-		.of_match_table = of_match_ptr(&eip_dev_dt_id),
+		.of_match_table = of_match_ptr(eip_dev_dt_id),
 	}
 };
 
