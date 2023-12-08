@@ -791,6 +791,7 @@
 #define EIP_HW_RES_ERR_IKE 164U
 #define EIP_HW_RES_ERR_FLOW_FAIL 188U
 #define EIP_HW_RES_BYPASS_SRC_PORT(by) ((by) & 0xFFFFU)
+#define EIP_HW_RES_OFFST(res) (((res) >> 16) & 0xFFU)
 
 /*
  * HW specific service number.
