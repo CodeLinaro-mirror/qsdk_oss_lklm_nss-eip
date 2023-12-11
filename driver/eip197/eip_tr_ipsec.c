@@ -903,12 +903,23 @@ size_t eip_tr_ipsec_get_svc_len(void)
 int eip_tr_ipsec_enc(struct eip_tr *tr, struct sk_buff *skb)
 {
 	int (*dma_tx)(struct eip_dma *dma, struct eip_sw_desc *sw, struct sk_buff *skb);
+	struct eip_tr_stats *tr_stats = this_cpu_ptr(tr->stats_pcpu);
 	struct eip_ctx *ctx = tr->ctx;
 	struct eip_sw_desc *sw;
 	struct eip_dma *dma;
 	int status = 0;
 
 	dma_tx = skb_is_nonlinear(skb) ? eip_dma_hy_tx_nonlinear_skb : eip_dma_hy_tx_linear_skb;
+
+	/*
+	 * check whether the packet length is within
+	 * max jumbo size limit supported by the HW.
+	 */
+	if (unlikely(skb->len > EIP_MAX_PKT_LEN)) {
+		pr_err("%px: packet size(%d) exceeds max supported limit (%d)\n", skb, skb->len, EIP_MAX_PKT_LEN);
+		tr_stats->tx_error_len++;
+		return -EINVAL;
+	}
 
 	/*
 	 * Allocate SW descriptor.
