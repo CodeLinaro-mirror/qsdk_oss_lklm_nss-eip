@@ -25,6 +25,7 @@
 #define EIP_TR_CTRL_CONTEXT_WORDS(x) (((x) & 0x3FU) << 8)
 #define EIP_TR_REDIR_EN (0x1U << 11) /* Redirect enable */
 #define EIP_TR_REDIR_IFACE(i) (((i) & 0xFU) << 12) /* Redirect destination interface */
+#define EIP_MAX_PKT_LEN	9216 /* Bytes */
 
 struct eip_svc_entry;
 typedef bool (*eip_tr_init_t) (struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo);
@@ -118,6 +119,7 @@ struct eip_tr_stats {
 	uint64_t tx_frags;	/* Total buffer fragments sent via this TR */
 	uint64_t tx_pkts;	/* Total buffer sent via this TR */
 	uint64_t tx_bytes;	/* Total bytes via this TR */
+	uint64_t tx_error_len;	/* Total packets dropped for exceeding max jumbo limit */
 	uint64_t rx_frags;	/* Total buffer fragments received via this TR */
 	uint64_t rx_pkts;	/* Total buffer received via this TR */
 	uint64_t rx_bytes;	/* Total bytes recieved via this TR */
