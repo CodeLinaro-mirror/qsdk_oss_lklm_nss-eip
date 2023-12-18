@@ -25,6 +25,7 @@
 #include "eip_ctx.h"
 #include "eip_tk.h"
 #include "eip_tr.h"
+#include "eip_tr_ipsec.h"
 #include "eip_flow.h"
 
 #define EIP_MAX_STR_LEN 25U		/* Maximum string length */
