@@ -545,6 +545,7 @@ static ppe_vp_num_t eip_ipsec_dev_alloc_vp(struct net_device *ndev)
 	vpai.src_cb = eip_ipsec_dev_vp_except;
 	vpai.src_cb_data = netdev_priv(ndev);
 	vpai.flags |= PPE_VP_FLAG_DISABLE_TTL_DEC;
+	vpai.xmit_port = PPE_DRV_PORT_EIP197;
 
 	if (!is_inline) {
 		eip_svc = PPE_DRV_EIP_SERVICE_NONINLINE;
