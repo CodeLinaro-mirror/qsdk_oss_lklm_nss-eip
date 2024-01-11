@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -601,7 +601,12 @@ void eip_crypto_ahash_done(void *app_data, eip_req_t eip_req)
 	/*
 	 * Signal linux about completion.
 	 */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0))
 	req->base.complete(&req->base, 0);
+#else
+	req->base.complete(req->base.data, 0);
+#endif
+
 	/*
 	 * Decrement tfm usage count and signal complete
 	 * once usage count becomes zero.
