@@ -55,6 +55,7 @@ typedef void (*eip_tr_proc_t)(struct eip_tr *tr, struct sk_buff *skb);
 
 /*
  * DTLS specific fields.
+ * TODO: Shall we generalize those macro across IPsec & DTLS?
  */
 #define EIP_TR_DTLS_CTX0_SEQNO (0x2U << 28) /* dtls 48-bit sequence number */
 #define EIP_TR_DTLS_CTX0_SEQNO_MASK64 (0x1U << 30)	/* 64bit replay mask */
@@ -62,6 +63,8 @@ typedef void (*eip_tr_proc_t)(struct eip_tr *tr, struct sk_buff *skb);
 #define EIP_TR_DTLS_CTX1_PAD_TLS (0x5U << 14) /* cipher padding */
 #define EIP_TR_DTLS_CTX1_HASH_STORE (0x1U << 19) /* store hash */
 #define EIP_TR_DTLS_CTX1_PRE_CRYPTO_DECAP (0x1 << 13) /* decap pre-crypto operation */
+#define EIP_TR_DTLS_CONTROL_IV(x) ((x) << 5)	/* Control IV source */
+#define EIP_TR_DTLS_IV_FORMAT(x) ((x) << 10)	/* Full IV mode or Counter mode */
 
 #define EIP_TR_ERR_SHIFT 16U
 
