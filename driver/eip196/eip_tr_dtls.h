@@ -37,8 +37,8 @@ struct eip_tr_dtls_skb_cb {
 /*
  * DTLS transformation APIs.
  */
-void eip_tr_dtls_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo, bool nonce_en);
-void eip_tr_dtls_enc_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo, bool nonce_en);
+void eip_tr_dtls_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo);
+void eip_tr_dtls_enc_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo);
 const struct eip_svc_entry *eip_tr_dtls_get_svc(void);
 size_t eip_tr_dtls_get_svc_len(void);
 
