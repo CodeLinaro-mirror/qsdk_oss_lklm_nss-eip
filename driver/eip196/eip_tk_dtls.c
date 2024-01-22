@@ -33,10 +33,8 @@ uint8_t eip_tk_dtls_encauth_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t 
 	 * TODO: Remove use of CB. Instead use structure in param to accommodate extra info.
 	 */
 	struct eip_tr_dtls_skb_cb *cb = EIP_TR_DTLS_SKB_CB(skb);
-
 	uint8_t bypass_len = dtls->bypass_len;
 	uint8_t digest_len = tr->digest_len;
-	uint8_t pkt_type = EIP_DTLS_TYPE_APP_DATA;
 	uint8_t pad_len = cb->pad_len;
 	uint32_t *tk_word = tk->words;
 	uint16_t len, clen;
@@ -50,7 +48,8 @@ uint8_t eip_tk_dtls_encauth_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t 
 	*tk_word++ = EIP_TK_INST_BYPASS | bypass_len;		/* Bypass outer headers */
 	*tk_word++ = EIP_TK_INST_EPOCH_SEQ_HMAC;		/* Hash epoch & upper 16 bit Sequence number */
 	*tk_word++ = EIP_TK_INST_LO_SEQ_HMAC;			/* Hash lower 32bit sequence number */
-	*tk_word++ = EIP_TK_INST_TYPE_HMAC_N_OUT | EIP_TK_PKT_TYPE(pkt_type);	/* Hash type and write to output */
+	*tk_word++ = EIP_TK_INST_TYPE_HMAC_N_OUT | EIP_TK_PKT_TYPE(EIP_DTLS_TYPE_APP_DATA);
+								/* Hash type and write to output */
 	*tk_word++ = EIP_TK_INST_VER_HMAC_N_OUT;		/* Hash version and write to output */
 	*tk_word++ = EIP_TK_INST_EPOCH_SEQ_OUT;			/* Write epoch & seq to output */
 	*tk_word++ = EIP_TK_INST_LO_SEQ_OUT;			/* Write lower seq to output */

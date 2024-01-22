@@ -22,6 +22,7 @@
 #include <linux/slab.h>
 #include <linux/completion.h>
 #include <asm/cacheflush.h>
+#include <net/dsfield.h>
 
 #include "eip_priv.h"
 
@@ -108,6 +109,11 @@ int eip_tr_dtls_dec(struct eip_tr *tr, struct sk_buff *skb)
 		return -ENOMEM;
 	}
 
+	/*
+	 * CAPWAP needs outer TOS value.
+	 * Store it in SKB before removing header.
+	 */
+	skb->priority = (skb->protocol == htons(ETH_P_IP)) ? ip_hdr(skb)->tos : ipv6_get_dsfield(ipv6_hdr(skb));
 	skb_pull(skb, tr->dtls.remove_len);
 
 	/*
@@ -242,7 +248,7 @@ void eip_tr_dtls_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, const
 	/*
 	 * DTLS specific fields for EIP96.
 	 */
-	*crypt_words++ = 0x0;	/* Version */
+	*crypt_words++ = EIP_TR_DTLS_VERSION(dtls->version);	/* Version */
 	*crypt_words++ = EIP_TR_DTLS_EPOCH(dtls->epoch); /* b0-15 is epoch & B16-31 is Sequence */
 	*crypt_words++ = 0x0;	/* Sequence number */
 	seq_offset = crypt_words - tr_words - 2;
@@ -271,7 +277,7 @@ void eip_tr_dtls_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, const
 	 * to be used during token fill
 	 */
 	tr_dtls->seq_offset = seq_offset;
-	tr->digest_len = dtls->icv_len;
+	tr->digest_len = algo->auth_digest_len;
 	tr->blk_len = algo->cipher_blk_len;
 	tr->iv_len = algo->iv_len;
 
