@@ -36,6 +36,9 @@
 #define EIP_TR_IPSEC_FLAG_CP_TOS   BIT(6)  /* set = copy IP TOS value from inner, clear = use default TOS */
 #define EIP_TR_IPSEC_FLAG_CP_DF    BIT(7)  /* set = copy IP DF value from inner, clear = use default DF */
 
+#define EIP_DTLS_TYPE_APP_DATA	0x17U	/* DTLS header type is Application data */
+#define EIP_DTLS_TYPE_CC_SPEC	0x20U	/* DTLS header type is change cipher spec */
+
 struct eip_ctx;	/* HW context per sevice */
 struct eip_tr;	/* Transform record per session */
 
@@ -68,6 +71,27 @@ typedef void (*eip_tr_callback_t)(void *app_data, eip_req_t req);
 typedef void (*eip_tr_err_callback_t)(void *app_data, eip_req_t req, int err);
 
 /*
+ * eip_dtls_hdr
+ *	DTLS headers as per RFC6347.
+ */
+struct eip_dtls_hdr {
+	uint8_t type;		/* Content type */
+	__be16 version;		/* DTLS version */
+	__be16 epoch;		/* Session epoch value */
+	uint8_t seq[6];		/* 48 bit sequence number */
+	__be16 length;		/* Payload length */
+} __packed;
+
+/*
+ * eip_capwap_hdr
+ *	CAPWAP header as per RFC5415.
+ */
+struct eip_capwap_hdr {
+	uint8_t preamble;	/* CAPWAP payload type */
+	uint8_t reseved[3];	/* Reserved bits */
+} __packed;
+
+/*
  * eip_svc
  *	EIP HW Services
  */
@@ -78,6 +102,7 @@ enum eip_svc {
 	EIP_SVC_AEAD,
 	EIP_SVC_IPSEC,
 	EIP_SVC_HYBRID_IPSEC,
+	EIP_SVC_DTLS,
 	EIP_SVC_MAX
 };
 
@@ -93,6 +118,17 @@ enum eip_ipsec_replay {
 	EIP_IPSEC_REPLAY_256,
 	EIP_IPSEC_REPLAY_384,
 	EIP_IPSEC_REPLAY_MAX
+};
+
+/*
+ * eip_dtls_replay
+ *	Supported Anti-replay window size.
+ */
+enum eip_dtls_replay {
+	EIP_DTLS_REPLAY_NONE = 0,
+	EIP_DTLS_REPLAY_64,
+	EIP_DTLS_REPLAY_128,
+	EIP_DTLS_REPLAY_MAX
 };
 
 /*
@@ -112,7 +148,7 @@ struct eip_tr_base {
 };
 
 /*
- * eip_tr_crypto
+ * eip_tr_info_crypto
  *	Allocated by user; mostly on stack
  */
 struct eip_tr_info_crypto {
@@ -126,7 +162,7 @@ struct eip_tr_info_crypto {
 };
 
 /*
- * eip_tr_ipsec
+ * eip_tr_info_ipsec
  *	Allocated by user; mostly on stack
  */
 struct eip_tr_info_ipsec {
@@ -154,6 +190,40 @@ struct eip_tr_info_ipsec {
 };
 
 /*
+ * eip_tr_info_dtls
+ *	Allocated by user; mostly on stack
+ */
+struct eip_tr_info_dtls {
+	uint32_t flags;			/* DTLS flags */
+#define EIP_TR_DTLS_FLAG_ENC      BIT(0)  /* set = Encapsulation, clear = Decapsulation */
+#define EIP_TR_DTLS_FLAG_IPV6     BIT(1)  /* set = IPv6 tuple, clear = IPv4 tuple SA */
+#define EIP_TR_DTLS_FLAG_UDPLITE  BIT(2)  /* set = UDPlite, clear = UDP */
+#define EIP_TR_DTLS_FLAG_CAPWAP  BIT(3)  /* set = CAPWAP+DTLS, clear = DTLS */
+#define EIP_TR_DTLS_FLAG_CP_TOS   BIT(4)  /* set = copy IP TOS value from SKB, clear = use default */
+#define EIP_TR_DTLS_FLAG_CP_DF    BIT(5)  /* set = copy IP DF value from SKB, clear = use default  */
+#define EIP_TR_DTLS_FLAG_UDPLITE_CSUM  BIT(6)  /* set = Checksum UDP-Lite header, clear = Full payload */
+
+	enum eip_dtls_replay replay;	/* Anti-replay window size */
+
+	__be32 src_ip[4];	/* Source IP address */
+	__be32 dst_ip[4];	/* Destination IP address */
+	__be16 src_port;	/* Source port for ESP-over-UDP flow */
+	__be16 dst_port;	/* Destination port for ESP-over-UDP flow */
+	__be16 epoch;		/* DTLS epoch version */
+	uint16_t version;	/* DTLS version (0xFEFF/v1.0 or 0xFEFD/v1.2) */
+
+	uint8_t ip_ver;		/* Version 4 or 6 */
+	uint8_t ip_ttl;		/* Default time-to-live */
+	uint8_t ip_df;		/* Default don't fragment bit */
+	uint8_t ip_dscp;	/* Default DSCP value, when copy from inner is disabled */
+	uint8_t icv_len;	/* Part of digest appended/verified in payload */
+
+	eip_tr_callback_t cb;		/* Transformation completion callback */
+	eip_tr_err_callback_t err_cb;	/* Transformation error callback */
+	void *app_data;			/* Opaque to pass with callback */
+};
+
+/*
  * eip_tr_info
  *	Trasform record info allocated by user; mostly on stack
  */
@@ -162,6 +232,7 @@ struct eip_tr_info {
 	union {
 		struct eip_tr_info_crypto crypto;	/* Information require for crypto session */
 		struct eip_tr_info_ipsec ipsec;		/* Information require for IPsec session */
+		struct eip_tr_info_dtls dtls;		/* Information require for DTLS session */
 	};
 };
 
@@ -172,6 +243,7 @@ struct eip_tr_info {
 struct eip_tr_algo_info {
 	uint16_t iv_len;	/* IV length for configured algo */
 	uint16_t blk_len;	/* Cipher block length for configured algo */
+	uint16_t hmac_len;	/* HMAC length for configured algo */
 };
 
 /*
@@ -407,6 +479,36 @@ int eip_tr_aead_encauth(struct eip_tr *tr, struct aead_request *aead);
  * Enqueue error.
  */
 int eip_tr_aead_authdec(struct eip_tr *tr, struct aead_request *aead);
+
+/*
+ * eip_tr_dtls_enc
+ *	Encapsulate packet with DTLS.
+ *
+ * @datatypes
+ * struct eip_tr
+ *
+ * @param[in] tr	Pointer to the transformation record.
+ * @param[in] skb	Pointer to the SKB.
+ *
+ * @return
+ * Enqueue error.
+ */
+int eip_tr_dtls_enc(struct eip_tr *tr, struct sk_buff *skb);
+
+/*
+ * eip_tr_dtls_dec
+ *	Decapsulate the packet with DTLS.
+ *
+ * @datatypes
+ * struct eip_tr
+ *
+ * @param[in] tr	Pointer to the transformation record.
+ * @param[in] skb	Pointer to the SKB.
+ *
+ * @return
+ * Enqueue error.
+ */
+int eip_tr_dtls_dec(struct eip_tr *tr, struct sk_buff *skb);
 
 /*
  * eip_tr_ipsec_enc
