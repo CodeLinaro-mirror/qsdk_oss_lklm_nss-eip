@@ -22,7 +22,6 @@
  */
 #define EIP_TR_INVAL_TIMEOUT msecs_to_jiffies(10)
 #define EIP_TR_SIZE (sizeof(struct eip_tr) + EIP_HW_CTX_SIZE_LARGE_BYTES + L1_CACHE_BYTES)
-#define EIP_TR_CTRL_CONTEXT_WORDS(x) (((x) & 0x3FU) << 8)
 #define EIP_TR_FILL_TOKEN(tr, ops, tk, req, tk_hdr) ((ops)->tk_fill(tk, tr, req, tk_hdr)) /* Call Token fill function */
 #define EIP_TR_PRE_PROCESS(tr, ops, skb) ((ops)->pre(tr, skb)) /* Call pre processing function */
 #define EIP_TR_POST_PROCESS(tr, ops, skb) ((ops)->post(tr, skb)) /* Call post processing function */
@@ -32,6 +31,14 @@ typedef bool (*eip_tr_init_t) (struct eip_tr *tr, struct eip_tr_info *info, cons
 typedef void (*eip_tr_proc_t)(struct eip_tr *tr, struct sk_buff *skb);
 
 /*
+ * Context control words fields
+ */
+#define EIP_TR_CTRL_CONTEXT_WORDS(x) (((x) & 0x3F) << 8)
+#define EIP_TR_CTRL_SEQ_NUM_STORE (1U << 22)
+#define EIP_TR_CTRL_SEQ_NUM_OFFSET(x) ((x) << 24)
+#define EIP_TR_CTRL_SEQ_NUM_OFFSET_EN (1U << 30)
+
+/*
  * IPsec specific Transform Record Field
  */
 #define EIP_TR_IPSEC_SPI (1U << 27)
@@ -39,15 +46,20 @@ typedef void (*eip_tr_proc_t)(struct eip_tr *tr, struct sk_buff *skb);
 #define EIP_TR_IPSEC_EXT_SEQ_NUM(x) ((x) << 29)
 #define EIP_TR_IPSEC_CONTROL_IV(x) ((x) << 5)
 #define EIP_TR_IPSEC_IV_FORMAT(x) ((x) << 10)
-#define EIP_TR_IPSEC_SEQ_NUM_STORE (1U << 22)
 #define EIP_TR_IPSEC_PAD_TYPE (0x1U << 16)
 #define EIP_TR_IPSEC_NULL_PAD_TYPE (0x7U << 14)
-#define EIP_TR_IPSEC_SEQ_NUM_OFFSET(x) ((x) << 24)
-#define EIP_TR_IPSEC_SEQ_NUM_OFFSET_EN (1U << 30)
 #define EIP_TR_IPSEC_SEQ_NUM_MASK_32 (0x2U << 30)
 #define EIP_TR_IPSEC_SEQ_NUM_MASK_64 (0x1U << 30)
 #define EIP_TR_IPSEC_SEQ_NUM_MASK_128 (0x3U << 30)
 #define EIP_TR_IPSEC_SEQ_NUM_MASK_384 ((0x2U << 30) | (0x1U << 15))
+
+/*
+ * DTLS specific fields.
+ */
+#define EIP_TR_DTLS_CTX0_SEQNO (0x2U << 28) /* dtls 48-bit sequence number */
+#define EIP_TR_DTLS_CTX1_PAD_TLS (0x5U << 14) /* cipher padding */
+#define EIP_TR_DTLS_CTX1_HASH_STORE (0x1U << 19) /* store hash */
+
 #define EIP_TR_ERR_SHIFT 16U
 
 #define EIP_TR_IPSEC_CTX_WORDS_ESN(esn) ((esn) ? 2 : 1)
@@ -114,6 +126,28 @@ struct eip_tr_ipsec {
 };
 
 /*
+ * eip_tr_dtls
+ *	DTLS specific information.
+ */
+struct eip_tr_dtls {
+	struct eip_tr_ops ops;			/* Transformation operation callback */
+	__be32 src_ip[4];			/* Source IP address */
+	__be32 dst_ip[4];			/* Destination IP address */
+	__be16 src_port;			/* Source UDP port */
+	__be16 dst_port;			/* Destination UDP port */
+	__be16 version;				/* version */
+	uint8_t ip_version;			/* v4 or v6 */
+	uint8_t protocol;			/* UDP or UDPlite */
+	uint8_t df;				/* Don't fragment configuration */
+	uint8_t tos;				/* DSCP for transform record */
+	uint8_t ttl;				/* Time-to-live */
+	uint8_t seq_offset;			/* Sequence no offset in context record */
+	uint8_t remove_len;			/* Length of headers to be removed */
+	uint8_t bypass_len;			/* Length of headers to be bypassed (IP/IP+UDP) */
+	uint8_t fixed_len;			/* Per packet fixed length */
+};
+
+/*
  * eip_tr_ipsec_skb_cb
  * 	IPsec sepcific information in skb control block
  */
@@ -134,6 +168,7 @@ struct eip_tr {
 	union {
 		struct eip_tr_crypto crypto;	/* Crypto information */
 		struct eip_tr_ipsec ipsec;	/* IPsec information */
+		struct eip_tr_dtls dtls;	/* DTLS information */
 	};
 
 	uint32_t tr_addr_type;			/* TR address with lower 2-bit representing type */

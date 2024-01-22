@@ -439,9 +439,9 @@ void eip_tr_ipsec_enc_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
          * Update relative information in control words.
          */
         tr_words[0] |= EIP_TR_CTRL_CONTEXT_WORDS(crypt_words - tr_words - 2);
-        tr_words[1] |= EIP_TR_IPSEC_SEQ_NUM_OFFSET_EN;
-        tr_words[1] |= EIP_TR_IPSEC_SEQ_NUM_OFFSET(seq_offset);
-        tr_words[1] |= EIP_TR_IPSEC_SEQ_NUM_STORE;
+	tr_words[1] |= EIP_TR_CTRL_SEQ_NUM_OFFSET_EN;
+	tr_words[1] |= EIP_TR_CTRL_SEQ_NUM_OFFSET(seq_offset);
+	tr_words[1] |= EIP_TR_CTRL_SEQ_NUM_STORE;
 
         /*
          * Store the details to be used during token fill
