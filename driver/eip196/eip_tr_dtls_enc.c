@@ -87,31 +87,13 @@ static void eip_tr_dtls_enc_v4(struct eip_tr *tr, struct sk_buff *skb)
 	struct iphdr *iph;
 	uint16_t udp_len;
 	__be16 tos;
-	__be16 df;
 
 	/*
 	 * Calculate payload length including encrypted data length and fixed encapsulation header length.
 	 * Pad length is update in SKB CB for later use.
 	 */
 	payload_len = eip_tr_dtls_enc_len(tr, skb) + dtls->fixed_len;
-
-	switch (ip_hdr(skb)->version) {
-	case IPVERSION:
-		iph = ip_hdr(skb);
-		tos = (tr->tr_flags & EIP_TR_DTLS_FLAG_CP_TOS) ? ip_hdr(skb)->tos : dtls->tos;
-
-		/*
-		 * Check if Linux has marked the packet to ignore fragmentation mark; in that case
-		 * clear any DF settings inherited for the packet
-		 */
-		df = (tr->tr_flags & EIP_TR_DTLS_FLAG_CP_DF) ? iph->frag_off & htons(IP_DF) : htons(dtls->df);
-		break;
-
-	default:
-		tos = (tr->tr_flags & EIP_TR_DTLS_FLAG_CP_TOS) ? ipv6_get_dsfield(ipv6_hdr(skb)) : dtls->tos;
-		df = htons(dtls->df);
-		break;
-	}
+	tos = (tr->tr_flags & EIP_TR_DTLS_FLAG_CP_TOS) ? skb->priority : dtls->tos;
 
 	if (likely(capwap)) {
 		struct eip_capwap_hdr *capwap_hdr = (struct eip_capwap_hdr *)skb_push(skb, sizeof(*capwap_hdr));
@@ -138,7 +120,7 @@ static void eip_tr_dtls_enc_v4(struct eip_tr *tr, struct sk_buff *skb)
 	iph->tos = tos;
 	iph->tot_len = htons(payload_len);
 	iph->id = htons(ctx->ip_id++);
-	iph->frag_off = df;
+	iph->frag_off = dtls->ip_df;
 	iph->ttl = dtls->ttl;
 	iph->protocol = dtls->protocol;
 	iph->saddr = dtls->src_ip[0];
@@ -169,16 +151,7 @@ static void eip_tr_dtls_enc_v6(struct eip_tr *tr, struct sk_buff *skb)
 	 * Pad length is update in SKB CB for later use.
 	 */
 	payload_len = eip_tr_dtls_enc_len(tr, skb) + dtls->fixed_len;
-
-	switch (ip_hdr(skb)->version) {
-	case IPVERSION:
-		tos = (tr->tr_flags & EIP_TR_DTLS_FLAG_CP_TOS) ? ip_hdr(skb)->tos : dtls->tos;
-		break;
-
-	default:
-		tos = (tr->tr_flags & EIP_TR_DTLS_FLAG_CP_TOS) ? ipv6_get_dsfield(ipv6_hdr(skb)) : dtls->tos;
-		break;
-	}
+	tos = (tr->tr_flags & EIP_TR_DTLS_FLAG_CP_TOS) ? skb->priority : dtls->tos;
 
 	if (likely(capwap)) {
 		struct eip_capwap_hdr *capwap = (struct eip_capwap_hdr *)skb_push(skb, sizeof(struct eip_capwap_hdr));
@@ -416,7 +389,7 @@ void eip_tr_dtls_enc_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, const
 	 * to be used during token fill
 	 */
 	tr_dtls->seq_offset = seq_offset;
-	tr->digest_len = dtls->icv_len;
+	tr->digest_len = algo->auth_digest_len;
 	tr->blk_len = algo->cipher_blk_len;
 	tr->iv_len = algo->iv_len;
 
@@ -425,7 +398,7 @@ void eip_tr_dtls_enc_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, const
 	 */
 	tr_dtls->ip_version = dtls->ip_ver;
 	tr_dtls->tos = dtls->ip_dscp;
-	tr_dtls->df = dtls->ip_df;
+	tr_dtls->ip_df = dtls->ip_df ? htons(IP_DF) : 0;
 	tr_dtls->ttl = dtls->ip_ttl;
 	tr_dtls->src_port = dtls->src_port;
 	tr_dtls->dst_port = dtls->dst_port;

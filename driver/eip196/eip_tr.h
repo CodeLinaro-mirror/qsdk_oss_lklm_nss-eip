@@ -142,9 +142,9 @@ struct eip_tr_dtls {
 	__be16 src_port;			/* Source UDP port */
 	__be16 dst_port;			/* Destination UDP port */
 	__be16 version;				/* version */
+	__be16 ip_df;				/* htons(IP_DF) or 0 */
 	uint8_t ip_version;			/* v4 or v6 */
 	uint8_t protocol;			/* UDP or UDPlite */
-	uint8_t df;				/* Don't fragment configuration */
 	uint8_t tos;				/* DSCP for transform record */
 	uint8_t ttl;				/* Time-to-live */
 	uint8_t seq_offset;			/* Sequence no offset in context record */

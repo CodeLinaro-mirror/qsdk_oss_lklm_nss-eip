@@ -214,9 +214,8 @@ struct eip_tr_info_dtls {
 
 	uint8_t ip_ver;		/* Version 4 or 6 */
 	uint8_t ip_ttl;		/* Default time-to-live */
-	uint8_t ip_df;		/* Default don't fragment bit */
 	uint8_t ip_dscp;	/* Default DSCP value, when copy from inner is disabled */
-	uint8_t icv_len;	/* Part of digest appended/verified in payload */
+	bool ip_df;		/* Default don't fragment bit */
 
 	eip_tr_callback_t cb;		/* Transformation completion callback */
 	eip_tr_err_callback_t err_cb;	/* Transformation error callback */
