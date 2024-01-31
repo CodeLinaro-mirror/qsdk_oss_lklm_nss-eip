@@ -346,6 +346,12 @@ void eip_tr_free(struct eip_tr *tr)
 		xchg(&ops->err_cb, eip_tr_dummy_err);
 		break;
 
+	case EIP_SVC_DTLS:
+		ops = &tr->dtls.ops;
+		xchg(&ops->cb, eip_tr_dummy_cb);
+		xchg(&ops->err_cb, eip_tr_dummy_err);
+		break;
+
 	default:
 		pr_err("%px: Service database not found\n", tr);
 		break;

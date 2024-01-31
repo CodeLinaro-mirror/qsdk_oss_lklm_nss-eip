@@ -36,6 +36,14 @@ static inline uint16_t eip_tr_dtls_enc_len(struct eip_tr *tr, struct sk_buff *sk
 	uint16_t actual_len;
 	uint16_t total_len;
 
+	/*
+	 * No padding required for cipher with block length 1.
+	 */
+	if (tr->blk_len == 1) {
+		total_len = payload_len + tr->digest_len;
+		return total_len;
+	}
+
 	actual_len = payload_len + tr->digest_len + EIP_TR_DTLS_TRAILER;
 	total_len = ALIGN(actual_len, tr->blk_len);
 	EIP_TR_DTLS_SKB_CB(skb)->pad_len = total_len - actual_len + EIP_TR_DTLS_TRAILER;
