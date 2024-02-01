@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -230,7 +230,7 @@ static struct dst_entry *eip_ipsec_dev_get_dst(struct eip_ipsec_sa *sa, struct s
  * eip_ipsec_dev_host_tx()
  *	Transmit packet via host.
  */
-static int eip_ipsec_dev_host_tx(struct eip_ipsec_sa *sa, struct sk_buff *skb, struct dst_entry *dst, uint16_t type)
+static void eip_ipsec_dev_host_tx(struct eip_ipsec_sa *sa, struct sk_buff *skb, struct dst_entry *dst, uint16_t type)
 {
 	struct eip_ipsec_sa_stats *sa_stats;
 
@@ -261,12 +261,13 @@ static int eip_ipsec_dev_host_tx(struct eip_ipsec_sa *sa, struct sk_buff *skb, s
 	if (type == ETH_P_IPV6) {
 		memset(IP6CB(skb), 0, sizeof(*IP6CB(skb)));
 		IP6CB(skb)->flags |= IP6SKB_XFRM_TRANSFORMED;
-		return ip6_local_out(&init_net, NULL, skb);
+		ip6_local_out(&init_net, NULL, skb);
+		return;
 	}
 
 	memset(IPCB(skb), 0, sizeof(*IPCB(skb)));
 	IPCB(skb)->flags |= IPSKB_XFRM_TRANSFORMED;
-	return ip_local_out(&init_net, NULL, skb);
+	ip_local_out(&init_net, NULL, skb);
 }
 
 /*
@@ -316,7 +317,6 @@ void eip_ipsec_dev_enc_done_v6(void *app_data, eip_req_t req)
 	struct eip_ipsec_dev_stats *dev_stats;
 	struct eip_ipsec_dev *eid;
 	struct dst_entry *dst;
-	int err;
 
 	if (unlikely(!sa)) {
 		pr_debug("%px: Failed to take reference on SA\n", sa);
@@ -338,10 +338,7 @@ void eip_ipsec_dev_enc_done_v6(void *app_data, eip_req_t req)
 	/*
 	 * Send packet via host
 	 */
-	err = eip_ipsec_dev_host_tx(sa, skb, dst, ETH_P_IPV6);
-	if (unlikely(err)) {
-		goto consume;
-	}
+	eip_ipsec_dev_host_tx(sa, skb, dst, ETH_P_IPV6);
 
 	/*
 	 * Update device statistics.
@@ -368,7 +365,6 @@ void eip_ipsec_dev_enc_done_v4(void *app_data, eip_req_t req)
 	struct eip_ipsec_dev_stats *dev_stats;
 	struct eip_ipsec_dev *eid;
 	struct dst_entry *dst;
-	int err;
 
 	if (unlikely(!sa)) {
 		pr_debug("%px: Failed to take reference on SA\n", sa);
@@ -390,10 +386,7 @@ void eip_ipsec_dev_enc_done_v4(void *app_data, eip_req_t req)
 	/*
 	 * Send packet via host
 	 */
-	err = eip_ipsec_dev_host_tx(sa, skb, dst, ETH_P_IP);
-	if (unlikely(err)) {
-		goto consume;
-	}
+	eip_ipsec_dev_host_tx(sa, skb, dst, ETH_P_IP);
 
 	/*
 	 * Update device statistics.
@@ -472,7 +465,6 @@ bool eip_ipsec_dev_vp_except(struct net_device *ndev, struct sk_buff *skb, void 
 	struct eip_ipsec_sa *sa;
 	struct dst_entry *dst;
 	uint16_t type;
-	int err;
 
 	dev_stats = this_cpu_ptr(eid->stats_pcpu);
 	skb_reset_network_header(skb);
@@ -503,10 +495,7 @@ bool eip_ipsec_dev_vp_except(struct net_device *ndev, struct sk_buff *skb, void 
 	 * skb->protocol is not set properly at this point
 	 */
 	type = (ip_hdr(skb)->version == IPVERSION) ? ETH_P_IP : ETH_P_IPV6;
-	err = eip_ipsec_dev_host_tx(sa, skb, dst, type);
-	if (unlikely(err)) {
-		goto consume;
-	}
+	eip_ipsec_dev_host_tx(sa, skb, dst, type);
 
 	/*
 	 * Update device statistics.
