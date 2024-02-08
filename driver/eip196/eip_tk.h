@@ -42,6 +42,7 @@ enum eip_tk_ctrl_op {
 	EIP_TK_CTRL_OP_DEC_HMAC = 0x00000007,	/* Decrypt followed by hmac inbound */
 	EIP_TK_CTRL_OP_HMAC_ENC = 0x0000000E,	/* Hmac followed by encrypt outbound */
 	EIP_TK_CTRL_OP_HMAC_DEC = 0x0000000F,	/* Hmac followed by decrypt inbound */
+	EIP_TK_CTRL_OP_MASK = 0x0000000F,	/* Maximum Bit mask */
 };
 
 /*
@@ -111,24 +112,29 @@ enum eip_tk_inst {
 	EIP_TK_INST_FRAG_LEN_OUT = 0x21D80002,	/* Write fragment length to output */
 	EIP_TK_INST_IV_OUT = 0x21A00000,	/* Write IV used for operation to output */
 	EIP_TK_INST_DATA_HMAC_ENC_OUT = 0x07020000,	/* Hash, encrypt and write to output */
+	EIP_TK_INST_DATA_ENC_HMAC_OUT = 0x0F020000,	/* Hash, encrypt (Last bit set for CTR) */
 	EIP_TK_INST_HMAC_OUT = 0x25E20000,	/* Write generated MAC to output */
 	EIP_TK_INST_PAD_ENC_OUT = 0x252E0000,	/* Encrypt padding and write result to output */
 	EIP_TK_INST_SEQ64_NO_UPDT = 0xE2561800,	/* Update sequence number in context */
 	EIP_TK_INST_REM_OUT_WORD = 0xA0220000,	/* Remove last 1 word of output data when available */
 	EIP_TK_INST_2BLK_DEC = 0x24D80000,	/* Insert len bytes to cipher */
 	EIP_TK_INST_WORD_DEC_OUT = 0x25D80004,	/* Insert last 4 byte to cipher and output */
-	EIP_TK_INST_TYPE_N_VER_UPDT = 0x48900003,	/* Read type & version from input and store in context */
+	EIP_TK_INST_TYPE_N_VER_UPDT = 0x40900003,	/* Read type & version from input and store in context */
 	EIP_TK_INST_EPOCH_N_HSEQ_HMAC = 0x42480004,	/* Read & hash epoch & hi sequence number */
 	EIP_TK_INST_LSEQ_HMAC = 0x42400004,	/* Read and hash lo sequence number */
 	EIP_TK_INST_TYPE_N_VER_HMAC = 0x22C00003,	/* Hash type & version from context */
 	EIP_TK_INST_ENC_LEN_UPDT = 0x22780000,	/* Hash encrypted Payload length */
-	EIP_TK_INST_FRAG_LEN_REM = 0x40000002,	/* Remove fragment length field from input */
+	EIP_TK_INST_FRAG_LEN_REM_STORE = 0x40000002,	/* Remove fragment length field from input */
+	EIP_TK_INST_FRAG_LEN_REM = 0x40D80002,	/* Remove fragment length field from input */
 	EIP_TK_INST_IV_UPDT = 0x42A00000,	/* Read IV from packet & store in context */
 	EIP_TK_INST_INPUT_HMAC = 0xA0A20000,	/* Pointer to start of HMAC */
 	EIP_TK_INST_DATA_DEC_HMAC_N_OUT = 0x077A0000,	/* Decrypt payload and write to hash & output */
+	EIP_TK_INST_DATA_LAST_DEC_HMAC_N_OUT = 0x0F020000,	/* Decrypt payload and write to hash & output */
 	EIP_TK_INST_HMAC_DEC_N_OUT = 0x0D7E0000,	/* Decrypt MAC-Padding bytes and write to output */
 	EIP_TK_INST_SEQ_PAD_HMAC_CHK = 0xD9070000,	/* Verify sequence, padding & HMAC */
+	EIP_TK_INST_SEQ_HMAC_CHK = 0xD8070000,	/* Verify sequence & HMAC */
 	EIP_TK_INST_SEQ_UPDT = 0xE4561800,	/* Update sequence number in context */
+	EIP_TK_INST_LAST_BIT = 0x08000000,	/* End of current auth or crypto operation */
 };
 
 /*

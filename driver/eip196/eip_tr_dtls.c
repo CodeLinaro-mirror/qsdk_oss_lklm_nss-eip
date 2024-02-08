@@ -111,10 +111,10 @@ static const struct eip_svc_entry dtls_algo_list[] = {
 		.auth_state_len = 0,
 		.ctrl_words_0 = EIP_HW_CTX_WITH_KEY | EIP_HW_CTX_ALGO_GHASH |
 			EIP_HW_CTX_AUTH_MODE_GMAC | EIP_TR_IPSEC_SPI | EIP_TR_DTLS_CTX0_SEQNO,
-		.ctrl_words_1 = EIP_HW_CTX_CIPHER_MODE_GCM | EIP_TR_DTLS_CTX1_PAD_TLS | EIP_TR_CTRL_SEQ_NUM_STORE | EIP_TR_DTLS_CTX1_HASH_STORE |
+		.ctrl_words_1 = EIP_HW_CTX_CIPHER_MODE_GCM | EIP_TR_CTRL_SEQ_NUM_STORE | EIP_TR_DTLS_CTX1_HASH_STORE |
 			EIP_TR_DTLS_CONTROL_IV(1) | EIP_TR_DTLS_IV_FORMAT(1),	/* GCM uses nonce and CTR mode */
 		.iv_len = 8,
-		.cipher_blk_len = 4 /* To align DTLS headers at word boundary */
+		.cipher_blk_len = 1 /* GCM doesn't require block alignment */
 	}
 };
 
@@ -243,6 +243,7 @@ static bool eip_tr_dtls_des_cbc_init(struct eip_tr *tr, struct eip_tr_info *info
  */
 static bool eip_tr_dtls_aes_gcm_init(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo)
 {
+	struct eip_tr_info_dtls *dtls = &info->dtls;
 	struct eip_tr_base *crypto = &info->base;
 	uint8_t authkey[AES_BLOCK_SIZE] = {0};
 	uint32_t *tr_words = tr->hw_words;
@@ -256,23 +257,39 @@ static bool eip_tr_dtls_aes_gcm_init(struct eip_tr *tr, struct eip_tr_info *info
 	 */
 	eip_tr_dtls_cmn_init(tr, info, algo);
 
+	/*
+	 * Overide ToP, GCM uses Encrypt-Hash & hash-decrypt.
+	 * Also, Decap doesn't require preprocessing.
+	 */
+	if (dtls->flags & EIP_TR_DTLS_FLAG_ENC) {
+		tr_words[0] &= ~EIP_TK_CTRL_OP_MASK;
+		tr_words[0] |= EIP_TK_CTRL_OP_ENC_HMAC;
+	} else {
+		tr_words[0] &= ~EIP_TK_CTRL_OP_MASK;
+		tr_words[0] |= EIP_TK_CTRL_OP_HMAC_DEC;
+		tr_words[1] &= ~EIP_TR_DTLS_CTX1_PRE_CRYPTO_DECAP;
+	}
+
 	switch (crypto->cipher.key_len) {
 	case AES_KEYSIZE_128:
 		tr_words[0] |= EIP_HW_CTX_ALGO_AES128;
-		tr->ctrl_words[0] |= EIP_HW_CTX_ALGO_AES128;
 		break;
 	case AES_KEYSIZE_192:
 		tr_words[0] |= EIP_HW_CTX_ALGO_AES192;
-		tr->ctrl_words[0] |= EIP_HW_CTX_ALGO_AES192;
 		break;
 	case AES_KEYSIZE_256:
 		tr_words[0] |= EIP_HW_CTX_ALGO_AES256;
-		tr->ctrl_words[0] |= EIP_HW_CTX_ALGO_AES256;
 		break;
 	default:
 		pr_err("%px: Invalid key length(%u)\n", tr, crypto->cipher.key_len);
 		return false;
 	}
+
+	/*
+	 * Reload cached control word.
+	 */
+	tr->ctrl_words[0] = tr_words[0];
+	tr->ctrl_words[1] = tr_words[1];
 
 	/*
 	 * Generate and fill ghash key.
