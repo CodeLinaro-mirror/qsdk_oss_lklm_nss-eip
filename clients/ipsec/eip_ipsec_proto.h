@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -25,5 +25,5 @@ bool eip_ipsec_proto_esp_init(void);
 void eip_ipsec_proto_esp_deinit(void);
 void eip_ipsec_proto_dec_done(void *app_data, eip_req_t req);
 void eip_ipsec_proto_dec_err(void *app_data, eip_req_t req, int err);
-bool eip_ipsec_proto_vp_rx(struct net_device *ndev, struct sk_buff *skb, void *cb_data);
+bool eip_ipsec_proto_vp_rx(struct ppe_vp_cb_info *info, void *cb_data);
 #endif /* !__EIP_IPSEC_PROTO_H */
