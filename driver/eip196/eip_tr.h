@@ -20,7 +20,7 @@
 /*
  * TODO: Set timeout equal to processing time for max queue reap.
  */
-#define EIP_TR_INVAL_TIMEOUT msecs_to_jiffies(10)
+#define EIP_TR_INVAL_TIMEOUT msecs_to_jiffies(1000)
 #define EIP_TR_SIZE (sizeof(struct eip_tr) + EIP_HW_CTX_SIZE_LARGE_BYTES + L1_CACHE_BYTES)
 #define EIP_TR_FILL_TOKEN(tr, ops, tk, req, tk_hdr) ((ops)->tk_fill(tk, tr, req, tk_hdr)) /* Call Token fill function */
 #define EIP_TR_PRE_PROCESS(tr, ops, skb) ((ops)->pre(tr, skb)) /* Call pre processing function */
