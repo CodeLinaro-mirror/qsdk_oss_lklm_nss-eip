@@ -458,8 +458,11 @@ consume:
  * eip_ipsec_dev_vp_except()
  *	VP callback for outer exception.
  */
-bool eip_ipsec_dev_vp_except(struct net_device *ndev, struct sk_buff *skb, void *cb_data)
+bool eip_ipsec_dev_vp_except(struct ppe_vp_cb_info *info, void *cb_data)
 {
+	struct sk_buff *skb = info->skb;
+	struct net_device *ndev = skb->dev;
+
 	struct eip_ipsec_dev_stats *dev_stats;
 	struct eip_ipsec_dev *eid = cb_data;
 	struct eip_ipsec_sa *sa;
