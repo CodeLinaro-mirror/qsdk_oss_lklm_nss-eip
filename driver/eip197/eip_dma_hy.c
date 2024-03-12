@@ -493,7 +493,7 @@ deliver:
 		}
 
 		/*
-		 * Pull the fake mac added by PPE. 
+		 * Pull the fake mac added by PPE.
                  * token[3] contains offset to start of network header.
 		 */
 		skb_pull(head_skb, EIP_HW_RES_OFFST(res->token[3]));

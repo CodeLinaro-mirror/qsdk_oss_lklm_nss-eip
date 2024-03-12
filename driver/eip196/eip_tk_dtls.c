@@ -123,7 +123,9 @@ uint8_t eip_tk_dtls_authdec_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t 
 	*tk_word++ = EIP_TK_INST_HMAC_DEC_N_OUT | (digest_len + EIP_TK_DTLS_PAD_LEN_SZ);
 								/* Decrypt MAC */
 	*tk_word++ = EIP_TK_INST_SEQ_PAD_HMAC_CHK | digest_len;	/* inbound checks */
-	*tk_word++ = EIP_TK_INST_SEQ_UPDT | dtls->seq_offset;	/* Update sequence number */
+
+	if (dtls->seq_offset)
+		*tk_word++ = EIP_TK_INST_SEQ_UPDT | dtls->seq_offset;	/* Update sequence number */
 
 	/*
 	 * Fill token header
@@ -221,7 +223,9 @@ uint8_t eip_tk_dtls_authdec_gcm(struct eip_tk *tk, struct eip_tr *tr, eip_req_t 
 	*tk_word++ = EIP_TK_INST_HMAC_DEC | dlen;		/* hmac-decrypt payload and write to output */
         *tk_word++ = EIP_TK_INST_HMAC_GET_IPSEC | digest_len;	/* Retrieve ICV */
 	*tk_word++ = EIP_TK_INST_SEQ_HMAC_CHK | digest_len;	/* inbound checks */
-	*tk_word++ = EIP_TK_INST_SEQ_UPDT | dtls->seq_offset;	/* Update sequence number */
+
+	if (dtls->seq_offset)
+		*tk_word++ = EIP_TK_INST_SEQ_UPDT | dtls->seq_offset;	/* Update sequence number */
 
 	/*
 	 * Fill token header
