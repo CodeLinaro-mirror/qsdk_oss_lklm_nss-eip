@@ -321,7 +321,7 @@ static bool eip_ipsec_sa_exist(struct net_device *ndev, __be32 spi, bool encap)
 	return exist;
 }
 
-#if defined(EIP_IPSEC_HYBRID)
+#if defined(EIP_IPSEC_VP_SUPP)
 
 /*
  * eip_ipsec_ppe_mdata_set()
@@ -661,7 +661,7 @@ int eip_ipsec_sa_add(struct net_device *ndev, struct eip_ipsec_data *data, struc
 	/*
 	 * Override enc callback and fill PPE metadata for hybrid inline channel.
 	 */
-#if defined(EIP_IPSEC_HYBRID)
+#if defined(EIP_IPSEC_VP_SUPP)
 	if (encap) {
 		tr_info.ipsec.cb = eip_ipsec_dev_enc_done_hy;
 	}
