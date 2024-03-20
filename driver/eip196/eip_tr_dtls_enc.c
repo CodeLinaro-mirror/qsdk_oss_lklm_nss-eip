@@ -67,7 +67,6 @@ static inline void eip_tr_dtls_enc_udp(struct eip_tr *tr, struct sk_buff *skb, _
 	is_udplite = (dtls->protocol != IPPROTO_UDP);
 	if (is_udplite) {
 		len = (tr->tr_flags & EIP_TR_DTLS_FLAG_UDPLITE_CSUM) ? htons(sizeof(struct udphdr)) : 0;
-		skb->ip_summed = CHECKSUM_PARTIAL;
 	}
 
 	/*
@@ -80,6 +79,7 @@ static inline void eip_tr_dtls_enc_udp(struct eip_tr *tr, struct sk_buff *skb, _
 	udph->dest = dtls->dst_port;
 	udph->len = len;
 	udph->check = 0;
+	skb->ip_summed = CHECKSUM_PARTIAL;
 }
 
 /*
@@ -107,6 +107,7 @@ static void eip_tr_dtls_enc_v4(struct eip_tr *tr, struct sk_buff *skb)
 		struct eip_capwap_hdr *capwap_hdr = (struct eip_capwap_hdr *)skb_push(skb, sizeof(*capwap_hdr));
 
 		capwap_hdr->preamble = 0x1;
+		capwap_hdr->reseved[0] = capwap_hdr->reseved[1] = capwap_hdr->reseved[2] = 0;
 	}
 
 	/*
@@ -165,6 +166,7 @@ static void eip_tr_dtls_enc_v6(struct eip_tr *tr, struct sk_buff *skb)
 		struct eip_capwap_hdr *capwap = (struct eip_capwap_hdr *)skb_push(skb, sizeof(struct eip_capwap_hdr));
 
 		capwap->preamble = 0x1;
+		capwap->reseved[0] = capwap->reseved[1] = capwap->reseved[2] = 0;
 	}
 
 	/*
@@ -181,7 +183,7 @@ static void eip_tr_dtls_enc_v6(struct eip_tr *tr, struct sk_buff *skb)
 	skb->protocol = htons(ETH_P_IPV6);
 
 	ip6_flow_hdr(ip6h, tos, 0);
-	ip6h->payload_len = htons(payload_len);
+	ip6h->payload_len = htons(udp_len);
 	ip6h->nexthdr = dtls->protocol;
 	ip6h->hop_limit = dtls->ttl;
 
@@ -430,14 +432,14 @@ void eip_tr_dtls_enc_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, const
 		bypass_len = sizeof(struct ipv6hdr) + sizeof(struct udphdr) + sizeof(struct eip_capwap_hdr);
 		tr_dtls->ops.pre = eip_tr_dtls_enc_v6;
 		tr_dtls->protocol = IPPROTO_UDPLITE;
-		addr_len = sizeof(uint32_t);
+		addr_len = sizeof(struct in6_addr);
 		break;
 
 	case (EIP_TR_DTLS_FLAG_CAPWAP | EIP_TR_DTLS_FLAG_IPV6):
 		bypass_len = sizeof(struct ipv6hdr) + sizeof(struct udphdr) + sizeof(struct eip_capwap_hdr);
 		tr_dtls->ops.pre = eip_tr_dtls_enc_v6;
 		tr_dtls->protocol = IPPROTO_UDP;
-		addr_len = sizeof(uint32_t);
+		addr_len = sizeof(struct in6_addr);
 		break;
 
 	case (EIP_TR_DTLS_FLAG_CAPWAP | EIP_TR_DTLS_FLAG_UDPLITE):

@@ -88,7 +88,7 @@ static const struct eip_svc_entry dtls_algo_list[] = {
 		.cipher_blk_len = DES3_EDE_BLOCK_SIZE
 	},
 	{
-		.name = "eip-3des-cbc-sha1-hmac",
+		.name = "eip-3des-cbc-sha256-hmac",
 		.enc_tk_fill = &eip_tk_dtls_encauth_cbc,
 		.dec_tk_fill = &eip_tk_dtls_authdec_cbc,
 		.tr_init = eip_tr_dtls_des_cbc_init,
@@ -102,7 +102,7 @@ static const struct eip_svc_entry dtls_algo_list[] = {
 		.cipher_blk_len = DES3_EDE_BLOCK_SIZE
 	},
 	{
-		.name = "eip-aes-gcm-rfc5289",
+		.name = "eip-aes-gcm",
 		.enc_tk_fill = &eip_tk_dtls_encauth_gcm,
 		.dec_tk_fill = &eip_tk_dtls_authdec_gcm,
 		.tr_init = eip_tr_dtls_aes_gcm_init,
