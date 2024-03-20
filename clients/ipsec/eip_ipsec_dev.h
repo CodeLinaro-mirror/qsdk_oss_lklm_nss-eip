@@ -65,7 +65,7 @@ struct eip_ipsec_dev {
 	struct eip_ipsec_dev_stats __percpu *stats_pcpu;	/* Device statistics */
 	struct dentry *dentry;		/* Driver debugfs dentry */
 
-#if defined(EIP_IPSEC_HYBRID)
+#if defined(EIP_IPSEC_VP_SUPP)
 	ppe_vp_num_t vp_num;		/* VP number associated with this netdevice. */
 #endif
 };
@@ -73,7 +73,7 @@ struct eip_ipsec_dev {
 void eip_ipsec_dev_enc_err(void *app_data, eip_req_t req, int err);
 void eip_ipsec_dev_enc_done_v4(void *app_data, eip_req_t req);
 void eip_ipsec_dev_enc_done_v6(void *app_data, eip_req_t req);
-#if defined(EIP_IPSEC_HYBRID)
+#if defined(EIP_IPSEC_VP_SUPP)
 void eip_ipsec_dev_enc_done_hy(void *app_data, eip_req_t req);
 #endif
 
