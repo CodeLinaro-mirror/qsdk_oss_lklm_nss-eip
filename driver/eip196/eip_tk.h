@@ -27,6 +27,7 @@ struct eip_tr;
 
 #define EIP_TK_DTLS_PAD_LEN_SZ 1	/* 1 Byte Pad length field */
 #define EIP_TK_PKT_TYPE(t) ((t) << 9)	/* Packet type for type instruction */
+#define EIP_TK_IRR_LEN(l) ((l) << 19)	/* Length in IRR instruction */
 
 /*
  * eip_tk_ctrl_op
@@ -126,8 +127,8 @@ enum eip_tk_inst {
 	EIP_TK_INST_ENC_LEN_UPDT = 0x22780000,	/* Hash encrypted Payload length */
 	EIP_TK_INST_FRAG_LEN_REM_STORE = 0x40000002,	/* Remove fragment length field from input */
 	EIP_TK_INST_FRAG_LEN_REM = 0x40D80002,	/* Remove fragment length field from input */
-	EIP_TK_INST_IV_UPDT = 0x42A00000,	/* Read IV from packet & store in context */
-	EIP_TK_INST_INPUT_HMAC = 0xA0A20000,	/* Pointer to start of HMAC */
+	EIP_TK_INST_IV_UPDT = 0x40A00000,	/* Read IV from packet & store in context */
+	EIP_TK_INST_INPUT_HMAC = 0xA0020000,	/* Pointer to start of HMAC */
 	EIP_TK_INST_DATA_DEC_HMAC_N_OUT = 0x077A0000,	/* Decrypt payload and write to hash & output */
 	EIP_TK_INST_DATA_LAST_DEC_HMAC_N_OUT = 0x0F020000,	/* Decrypt payload and write to hash & output */
 	EIP_TK_INST_HMAC_DEC_N_OUT = 0x0D7E0000,	/* Decrypt MAC-Padding bytes and write to output */
