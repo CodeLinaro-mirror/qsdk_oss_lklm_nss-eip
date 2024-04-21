@@ -41,6 +41,7 @@ struct eip_crypto_tfm_stats {
 	uint64_t mem_alloc_err;		/* Memory allocation error. */
 	uint64_t tr_alloc_err;		/* TR allocation error. */
 	uint64_t inactive_tfm;		/* TFM is inactive. */
+	uint64_t invalid_len;		/* Invalid supported len. */
 };
 
 /*

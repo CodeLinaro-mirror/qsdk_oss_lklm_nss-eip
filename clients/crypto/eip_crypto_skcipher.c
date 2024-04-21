@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -280,6 +280,7 @@ static ssize_t eip_crypto_skcipher_stats_read(struct file *fp, char __user *ubuf
 	size_wr += scnprintf(buf + size_wr, stats_sz - size_wr, "%s\t = %llu\n", "tr_alloc_err", stats.tr_alloc_err);
 	size_wr += scnprintf(buf + size_wr, stats_sz - size_wr, "%s\t = %llu\n", "inactive_tfm", stats.inactive_tfm);
 	size_wr += scnprintf(buf + size_wr, stats_sz - size_wr, "%s\t = %llu\n", "tfm_count", tfm_count);
+	size_wr += scnprintf(buf + size_wr, stats_sz - size_wr, "%s\t = %llu\n", "invalid_len", stats.invalid_len);
 	size_wr += scnprintf(buf + size_wr, stats_sz - size_wr, "SKCipher service stats end.\n");
 
 	/*
@@ -306,6 +307,7 @@ static ssize_t eip_crypto_skcipher_stats_read(struct file *fp, char __user *ubuf
 		size_wr += scnprintf(buf + size_wr, stats_sz - size_wr, "%s\t = %llu\n", "tr_alloc_err", stats.tr_alloc_err);
 		size_wr += scnprintf(buf + size_wr, stats_sz - size_wr, "%s\t = %llu\n", "inactive_tfm", stats.inactive_tfm);
 		size_wr += scnprintf(buf + size_wr, stats_sz - size_wr, "%s\t = %llu\n", "tfm_usage_count", tfm_usage_count);
+		size_wr += scnprintf(buf + size_wr, stats_sz - size_wr, "%s\t = %llu\n", "invalid_len", stats.invalid_len);
 		size_wr += scnprintf(buf + size_wr, stats_sz - size_wr, "TFM(%d) stats end.\n", count);
 		count++;
 	}
@@ -605,6 +607,16 @@ static int eip_crypto_skcipher_encrypt(struct skcipher_request *req)
 	}
 
 	/*
+	 * We only support (2^16 - 1) length
+	 */
+	if (req->cryptlen > U16_MAX) {
+		pr_warn("%px: Invalid length %u, not supported.\n", tfm_ctx, req->cryptlen);
+		tfm_stats->invalid_len++;
+		sk_stats->invalid_len++;
+		return -EFBIG;
+	}
+
+	/*
 	 * We take RCU lock to synchronize encrypt/decrypt and setkey operation.
 	 */
 	rcu_read_lock();
@@ -663,6 +675,16 @@ static int eip_crypto_skcipher_decrypt(struct skcipher_request *req)
 		tfm_stats->inactive_tfm++;
 		sk_stats->inactive_tfm++;
 		return -EPERM;
+	}
+
+	/*
+	 * We only support (2^16 - 1) length
+	 */
+	if (req->cryptlen > U16_MAX) {
+		pr_warn("%px: Invalid length %u, not supported.\n", tfm_ctx, req->cryptlen);
+		tfm_stats->invalid_len++;
+		sk_stats->invalid_len++;
+		return -EFBIG;
 	}
 
 	/*
