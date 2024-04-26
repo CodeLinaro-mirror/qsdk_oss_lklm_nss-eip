@@ -204,7 +204,7 @@ void eip_tr_dtls_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, const
 	struct eip_tr_base *crypto = &info->base;
 	uint32_t *crypt_words = tr->hw_words;
 	uint32_t *tr_words = tr->hw_words;
-	uint8_t seq_offset;
+	uint8_t seq_offset = 0;
 	uint8_t mask_sz;
 	uint32_t size;
 	uint32_t mode;
@@ -251,7 +251,12 @@ void eip_tr_dtls_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, const
 	*crypt_words++ = EIP_TR_DTLS_VERSION(dtls->version);	/* Version */
 	*crypt_words++ = EIP_TR_DTLS_EPOCH(dtls->epoch); /* b0-15 is epoch & B16-31 is Sequence */
 	*crypt_words++ = 0x0;	/* Sequence number */
-	seq_offset = crypt_words - tr_words - 2;
+
+	/*
+	 * Sequence update should not be done when window check is disabled.
+	 */
+	if (dtls->replay != EIP_DTLS_REPLAY_NONE)
+		seq_offset = crypt_words - tr_words - 2;
 
 	/*
 	 * Set all bits to '1' in mask.

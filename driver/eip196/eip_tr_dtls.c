@@ -25,7 +25,12 @@
 #include <asm/cacheflush.h>
 
 #include <crypto/md5.h>
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 #include <crypto/sha.h>
+#else
+#include <crypto/sha1.h>
+#include <crypto/sha2.h>
+#endif
 #include <crypto/sha3.h>
 #include <crypto/aes.h>
 #include <crypto/des.h>
@@ -55,7 +60,7 @@ static const struct eip_svc_entry dtls_algo_list[] = {
 		.auth_state_len = EIP_HW_PAD_KEYSZ_SHA1,
 		.ctrl_words_0 = EIP_HW_CTX_WITH_KEY | EIP_HW_CTX_ALGO_SHA1 |
 			EIP_HW_CTX_AUTH_MODE_HMAC | EIP_TR_IPSEC_SPI | EIP_TR_DTLS_CTX0_SEQNO,
-		.ctrl_words_1 = EIP_HW_CTX_CIPHER_MODE_CBC | EIP_TR_DTLS_CTX1_PAD_TLS | EIP_TR_CTRL_SEQ_NUM_STORE | EIP_TR_DTLS_CTX1_HASH_STORE,
+		.ctrl_words_1 = EIP_HW_CTX_CIPHER_MODE_CBC | EIP_TR_DTLS_CTX1_PAD_TLS | EIP_TR_CTRL_SEQ_NUM_STORE,
 		.iv_len = AES_BLOCK_SIZE,
 		.cipher_blk_len = AES_BLOCK_SIZE
 	},
@@ -69,7 +74,7 @@ static const struct eip_svc_entry dtls_algo_list[] = {
 		.auth_state_len = EIP_HW_PAD_KEYSZ_SHA256,
 		.ctrl_words_0 = EIP_HW_CTX_WITH_KEY | EIP_HW_CTX_ALGO_SHA256 |
 			EIP_HW_CTX_AUTH_MODE_HMAC | EIP_TR_IPSEC_SPI | EIP_TR_DTLS_CTX0_SEQNO,
-		.ctrl_words_1 = EIP_HW_CTX_CIPHER_MODE_CBC | EIP_TR_DTLS_CTX1_PAD_TLS | EIP_TR_CTRL_SEQ_NUM_STORE | EIP_TR_DTLS_CTX1_HASH_STORE,
+		.ctrl_words_1 = EIP_HW_CTX_CIPHER_MODE_CBC | EIP_TR_DTLS_CTX1_PAD_TLS | EIP_TR_CTRL_SEQ_NUM_STORE,
 		.iv_len = AES_BLOCK_SIZE,
 		.cipher_blk_len = AES_BLOCK_SIZE
 	},
@@ -83,12 +88,12 @@ static const struct eip_svc_entry dtls_algo_list[] = {
 		.auth_state_len = EIP_HW_PAD_KEYSZ_SHA1,
 		.ctrl_words_0 = EIP_HW_CTX_WITH_KEY | EIP_HW_CTX_ALGO_SHA1 |
 			EIP_HW_CTX_AUTH_MODE_HMAC | EIP_TR_IPSEC_SPI | EIP_TR_DTLS_CTX0_SEQNO,
-		.ctrl_words_1 = EIP_HW_CTX_CIPHER_MODE_CBC | EIP_TR_DTLS_CTX1_PAD_TLS | EIP_TR_CTRL_SEQ_NUM_STORE | EIP_TR_DTLS_CTX1_HASH_STORE,
+		.ctrl_words_1 = EIP_HW_CTX_CIPHER_MODE_CBC | EIP_TR_DTLS_CTX1_PAD_TLS | EIP_TR_CTRL_SEQ_NUM_STORE,
 		.iv_len = DES3_EDE_BLOCK_SIZE,
 		.cipher_blk_len = DES3_EDE_BLOCK_SIZE
 	},
 	{
-		.name = "eip-3des-cbc-sha1-hmac",
+		.name = "eip-3des-cbc-sha256-hmac",
 		.enc_tk_fill = &eip_tk_dtls_encauth_cbc,
 		.dec_tk_fill = &eip_tk_dtls_authdec_cbc,
 		.tr_init = eip_tr_dtls_des_cbc_init,
@@ -97,12 +102,12 @@ static const struct eip_svc_entry dtls_algo_list[] = {
 		.auth_state_len = EIP_HW_PAD_KEYSZ_SHA256,
 		.ctrl_words_0 = EIP_HW_CTX_WITH_KEY | EIP_HW_CTX_ALGO_SHA256 |
 			EIP_HW_CTX_AUTH_MODE_HMAC | EIP_TR_IPSEC_SPI | EIP_TR_DTLS_CTX0_SEQNO,
-		.ctrl_words_1 = EIP_HW_CTX_CIPHER_MODE_CBC | EIP_TR_DTLS_CTX1_PAD_TLS | EIP_TR_CTRL_SEQ_NUM_STORE | EIP_TR_DTLS_CTX1_HASH_STORE,
+		.ctrl_words_1 = EIP_HW_CTX_CIPHER_MODE_CBC | EIP_TR_DTLS_CTX1_PAD_TLS | EIP_TR_CTRL_SEQ_NUM_STORE,
 		.iv_len = DES3_EDE_BLOCK_SIZE,
 		.cipher_blk_len = DES3_EDE_BLOCK_SIZE
 	},
 	{
-		.name = "eip-aes-gcm-rfc5289",
+		.name = "eip-aes-gcm",
 		.enc_tk_fill = &eip_tk_dtls_encauth_gcm,
 		.dec_tk_fill = &eip_tk_dtls_authdec_gcm,
 		.tr_init = eip_tr_dtls_aes_gcm_init,
@@ -111,7 +116,7 @@ static const struct eip_svc_entry dtls_algo_list[] = {
 		.auth_state_len = 0,
 		.ctrl_words_0 = EIP_HW_CTX_WITH_KEY | EIP_HW_CTX_ALGO_GHASH |
 			EIP_HW_CTX_AUTH_MODE_GMAC | EIP_TR_IPSEC_SPI | EIP_TR_DTLS_CTX0_SEQNO,
-		.ctrl_words_1 = EIP_HW_CTX_CIPHER_MODE_GCM | EIP_TR_CTRL_SEQ_NUM_STORE | EIP_TR_DTLS_CTX1_HASH_STORE |
+		.ctrl_words_1 = EIP_HW_CTX_CIPHER_MODE_GCM | EIP_TR_CTRL_SEQ_NUM_STORE |
 			EIP_TR_DTLS_CONTROL_IV(1) | EIP_TR_DTLS_IV_FORMAT(1),	/* GCM uses nonce and CTR mode */
 		.iv_len = 8,
 		.cipher_blk_len = 1 /* GCM doesn't require block alignment */
