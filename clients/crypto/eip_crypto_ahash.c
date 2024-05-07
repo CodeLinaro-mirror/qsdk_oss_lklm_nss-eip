@@ -1041,7 +1041,7 @@ int eip_crypto_ahash_export(struct ahash_request *req, void *out)
 {
 	struct eip_crypto_tfm_ctx *tfm_ctx __attribute__((unused)) = crypto_tfm_ctx(req->base.tfm);
 
-	pr_info("%px: ahash .export is not supported", tfm_ctx);
+	pr_debug("%px: ahash .export is not supported", tfm_ctx);
 	return -ENOSYS;
 };
 
@@ -1056,7 +1056,7 @@ int eip_crypto_ahash_import(struct ahash_request *req, const void *in)
 {
 	struct eip_crypto_tfm_ctx *tfm_ctx __attribute__((unused)) = crypto_tfm_ctx(req->base.tfm);
 
-	pr_info("%px: ahash .import is not supported", tfm_ctx);
+	pr_debug("%px: ahash .import is not supported", tfm_ctx);
 	return -ENOSYS;
 }
 
