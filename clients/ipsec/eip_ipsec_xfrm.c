@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -236,7 +236,7 @@ static struct net_device *eip_ipsec_xfrm_get_dev(struct net_device *kdev, struct
 		 * check if the xfrm state is offloaded or not.
 		 */
 		if (!eip_ipsec_xfrm_check_state(xs)) {
-			pr_warn("%p: Outbound Plain text packet(%px); not offloaded\n", xs, skb);
+			pr_debug("%p: Outbound Plain text packet(%px); not offloaded\n", xs, skb);
 			return NULL;
 		}
 
@@ -256,6 +256,12 @@ static struct net_device *eip_ipsec_xfrm_get_dev(struct net_device *kdev, struct
 	 */
 	dev = dev_get_by_index(&init_net, skb->skb_iif);
 	if (!dev) {
+		return NULL;
+	}
+
+	if (!eip_ipsec_dev_is_nss(dev)) {
+		pr_debug("%p: Transform packet not managed by NSS\n", xs);
+		dev_put(dev);
 		return NULL;
 	}
 
@@ -872,7 +878,9 @@ int eip_ipsec_xfrm_init(void)
 	/*
 	 * overide the xfrm_state afinfo.
 	 */
-	eip_ipsec_xfrm_override_afinfo(AF_INET);
+	if (!disable_v4_offload)
+		eip_ipsec_xfrm_override_afinfo(AF_INET);
+
 	eip_ipsec_xfrm_override_afinfo(AF_INET6);
 
 	ecm_interface_ipsec_register_callbacks(&xfrm_ecm_ipsec_cb);
@@ -890,7 +898,9 @@ void eip_ipsec_xfrm_exit(void)
 	/*
 	 * Restore the xfrm_state afinfo.
 	 */
-	eip_ipsec_xfrm_restore_afinfo(AF_INET);
+	if (!disable_v4_offload)
+		eip_ipsec_xfrm_restore_afinfo(AF_INET);
+
 	eip_ipsec_xfrm_restore_afinfo(AF_INET6);
 
 	ecm_interface_ipsec_unregister_callbacks();
