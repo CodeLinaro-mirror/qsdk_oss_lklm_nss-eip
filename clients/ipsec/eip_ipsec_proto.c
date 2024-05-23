@@ -356,7 +356,19 @@ bool eip_ipsec_proto_vp_rx(struct ppe_vp_cb_info *info, void *cb_data)
 	skb_reset_transport_header(skb);
 
 	if (iph->protocol == IPPROTO_UDP) {
-		eip_ipsec_proto_udp_rx(drv->sk, skb);
+		int ret;
+
+		ret = eip_ipsec_proto_udp_rx(drv->sk, skb);
+
+		/*
+		 * Send the NONESP packet to Linux
+		 */
+		if (unlikely(ret)) {
+			skb_push(skb, sizeof(struct iphdr));
+			skb->ip_summed = CHECKSUM_NONE;
+			netif_receive_skb(skb);
+		}
+
 		return true;
 	}
 
