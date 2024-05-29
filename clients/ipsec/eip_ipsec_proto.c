@@ -391,7 +391,7 @@ bool eip_ipsec_proto_esp_init(void)
 {
 	const struct net_protocol *ip_prot = &esp_protocol;
 
-	if (inet_update_protocol(&esp_protocol, IPPROTO_ESP, &linux_esp_handler) < 0) {
+	if (!disable_v4_offload && inet_update_protocol(&esp_protocol, IPPROTO_ESP, &linux_esp_handler) < 0) {
 		pr_err("Failed to update ESP protocol handler for IPv4\n");
 		return false;
 	}
@@ -402,6 +402,9 @@ bool eip_ipsec_proto_esp_init(void)
 		 * Revert v4 ESP handler to original handler.
 		 */
 		xchg(&linux_esp6_handler, NULL);
+		if (disable_v4_offload)
+			return false;
+
 		inet_update_protocol(linux_esp_handler, IPPROTO_ESP, &ip_prot);
 		xchg(&linux_esp_handler, NULL);
 		return false;
@@ -475,8 +478,10 @@ void eip_ipsec_proto_esp_deinit(void)
 	/*
 	 * Revert v4 ESP handler to original handler.
 	 */
-	inet_update_protocol(linux_esp_handler, IPPROTO_ESP, &ip_prot);
-	xchg(&linux_esp_handler, NULL);
+	if (!disable_v4_offload) {
+		inet_update_protocol(linux_esp_handler, IPPROTO_ESP, &ip_prot);
+		xchg(&linux_esp_handler, NULL);
+	}
 
 	inet6_update_protocol(linux_esp6_handler, IPPROTO_ESP, &ip6_prot);
 	xchg(&linux_esp6_handler, NULL);

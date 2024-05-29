@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -42,6 +42,10 @@ struct eip_ipsec_drv eip_ipsec_drv_g;
 uint8_t eip_ipsec_core_id = 0x2;
 module_param(eip_ipsec_core_id, byte, S_IRUSR | S_IWUSR | S_IRGRP);
 MODULE_PARM_DESC(eip_ipsec_core_id, "CPU id for IPsec processing");
+
+bool disable_v4_offload = false;
+module_param(disable_v4_offload, bool, S_IRUSR | S_IWUSR | S_IRGRP);
+MODULE_PARM_DESC(disable_v4_offload, "Disable ipv4 acceleration");
 
 /*
  * eip_ipsec_ppe_init()

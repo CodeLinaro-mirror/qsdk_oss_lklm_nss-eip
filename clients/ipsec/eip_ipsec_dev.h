@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -69,6 +69,15 @@ struct eip_ipsec_dev {
 	ppe_vp_num_t vp_num;		/* VP number associated with this netdevice. */
 #endif
 };
+
+/*
+ * eip_ipsec_dev_is_nss()
+ *	Check if its nss ipsec offloaded dev
+ */
+static inline bool eip_ipsec_dev_is_nss(struct net_device *ndev)
+{
+	return (ndev->type == EIP_IPSEC_DEV_ARPHRD);
+}
 
 void eip_ipsec_dev_enc_err(void *app_data, eip_req_t req, int err);
 void eip_ipsec_dev_enc_done_v4(void *app_data, eip_req_t req);
