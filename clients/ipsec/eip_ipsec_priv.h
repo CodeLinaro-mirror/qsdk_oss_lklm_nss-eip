@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -85,6 +85,7 @@ struct eip_ipsec_ppe_mdata {
 extern struct eip_ipsec_drv eip_ipsec_drv_g;	/* Global Driver object */
 extern uint8_t eip_ipsec_core_id;		/* Global ipsec core id */
 extern void eip_ipsec_drv_final(struct kref *kref);
+extern bool disable_v4_offload;
 
 /*
  * Increment driver object reference
