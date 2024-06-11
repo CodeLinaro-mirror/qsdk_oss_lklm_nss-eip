@@ -561,6 +561,7 @@ static ssize_t eip_crypto_ahash_stats_read(struct file *fp, char __user *ubuf, s
 	size_wr += scnprintf(buf + size_wr, stats_sz - size_wr, "%s\t = %llu\n", "tr_alloc_err", stats.tr_alloc_err);
 	size_wr += scnprintf(buf + size_wr, stats_sz - size_wr, "%s\t = %llu\n", "inactive_tfm", stats.inactive_tfm);
 	size_wr += scnprintf(buf + size_wr, stats_sz - size_wr, "%s\t = %llu\n", "tfm_count", tfm_count);
+	size_wr += scnprintf(buf + size_wr, stats_sz - size_wr, "%s\t = %llu\n", "invalid_len", stats.invalid_len);
 	size_wr += scnprintf(buf + size_wr, stats_sz - size_wr, "AHASH service stats end.\n");
 
 	/*
@@ -588,6 +589,7 @@ static ssize_t eip_crypto_ahash_stats_read(struct file *fp, char __user *ubuf, s
 		size_wr += scnprintf(buf + size_wr, stats_sz - size_wr, "%s\t = %llu\n", "tr_alloc_err", stats.tr_alloc_err);
 		size_wr += scnprintf(buf + size_wr, stats_sz - size_wr, "%s\t = %llu\n", "inactive_tfm", stats.inactive_tfm);
 		size_wr += scnprintf(buf + size_wr, stats_sz - size_wr, "%s\t = %llu\n", "tfm_usage_count", tfm_usage_count);
+		size_wr += scnprintf(buf + size_wr, stats_sz - size_wr, "%s\t = %llu\n", "invalid_len", stats.invalid_len);
 		size_wr += scnprintf(buf + size_wr, stats_sz - size_wr, "TFM(%d) stats end.\n", count);
 		count++;
 	}
@@ -851,6 +853,7 @@ int eip_crypto_ahash_update(struct ahash_request *req)
 	struct eip_crypto_tfm_stats *ahash_stats = this_cpu_ptr(ahash.stats);
 	struct eip_crypto_ahash_req_ctx *rctx = ahash_request_ctx(req);
 	struct eip_tr *tr = NULL;
+	uint32_t tot_len = 0;
 	uint16_t nbytes = 0;
 	int ret = 0;
 
@@ -880,6 +883,17 @@ int eip_crypto_ahash_update(struct ahash_request *req)
 	 * Initialize data scatterlist for hash result.
 	 */
 	sg_init_one(&rctx->res, rctx->digest, rctx->diglen);
+
+	/*
+	 * We only support (2^16 - 1) length.
+	 */
+	tot_len = req->nbytes;
+	if (tot_len > U16_MAX) {
+		pr_warn("%px: Invalid length %u, not supported.\n", tfm_ctx, tot_len);
+		tfm_stats->invalid_len++;
+		ahash_stats->invalid_len++;
+		return -EFBIG;
+	}
 
 	/*
 	 * We take RCU lock to synchronize encrypt/decrypt and setkey operation.
