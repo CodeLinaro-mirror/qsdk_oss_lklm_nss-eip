@@ -552,8 +552,8 @@ static void eip_tr_ahash_err(struct eip_tr *tr, struct eip_hw_desc *hw, struct e
  */
 int eip_tr_ahash_auth(struct eip_tr *tr, struct ahash_request *req, struct scatterlist *res)
 {
+	struct eip_tk_params tk_params = {0};
 	struct eip_ctx *ctx = tr->ctx;
-	uint32_t tk_hdr = 0;
 	struct eip_sw_desc *sw;
 	struct eip_dma *dma;
 	struct eip_tk *tk;
@@ -570,9 +570,15 @@ int eip_tr_ahash_auth(struct eip_tr *tr, struct ahash_request *req, struct scatt
 	}
 
 	/*
+	 * Fill TK params
+	 */
+	tk_params.tr = tr;
+	tk_params.eip_req = req;
+
+	/*
 	 * Fill token for hmac and decryption.
 	 */
-	tk_words = EIP_TR_FILL_TOKEN(tr, &tr->crypto.auth, tk, req, &tk_hdr);
+	tk_words = eip_tr_fill_token(tk, &tr->crypto.auth, &tk_params);
 
 	dmac_clean_range(tk, tk + 1);
 
@@ -593,7 +599,7 @@ int eip_tr_ahash_auth(struct eip_tr *tr, struct ahash_request *req, struct scatt
 	sw->tk = tk;
 	sw->comp = &eip_tr_ahash_done;
 	sw->err_comp = &eip_tr_ahash_err;
-	sw->tk_hdr = tk_hdr;
+	sw->tk_hdr = tk_params.tk_hdr;
 	sw->tk_addr = virt_to_phys(tk);
 	sw->tr_addr_type = tr->tr_addr_type;
 	sw->tk_words = tk_words;

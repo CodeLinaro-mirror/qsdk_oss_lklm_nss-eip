@@ -246,8 +246,8 @@ void eip_tr_dtls_enc_done(struct eip_tr *tr, struct eip_hw_desc *hw, struct eip_
 int eip_tr_dtls_enc(struct eip_tr *tr, struct sk_buff *skb)
 {
 	int (*dma_tx)(struct eip_dma *dma, struct eip_sw_desc *sw, struct sk_buff *skb);
+	struct eip_tk_params tk_params = {0};
 	struct eip_ctx *ctx = tr->ctx;
-	uint32_t tk_hdr = 0;
 	struct eip_sw_desc *sw;
 	struct eip_dma *dma;
 	struct eip_tk *tk;
@@ -276,9 +276,15 @@ int eip_tr_dtls_enc(struct eip_tr *tr, struct sk_buff *skb)
 	EIP_TR_PRE_PROCESS(tr, &tr->dtls.ops, skb);
 
 	/*
+	 * Fill TK params
+	 */
+	tk_params.tr = tr;
+	tk_params.eip_req = (eip_req_t)skb;
+
+	/*
 	 * Fill DTLS encapsulation token for hardware.
 	 */
-	tk_words = EIP_TR_FILL_TOKEN(tr, &tr->dtls.ops, tk, skb, &tk_hdr);
+	tk_words = eip_tr_fill_token(tk, &tr->dtls.ops, &tk_params);
 	WARN_ON(tk_words > sizeof(*tk));
 	dmac_clean_range(tk, tk + 1);
 
@@ -291,7 +297,7 @@ int eip_tr_dtls_enc(struct eip_tr *tr, struct sk_buff *skb)
 	sw->tr = eip_tr_ref(tr);
 
 	sw->tk = tk;
-	sw->tk_hdr = tk_hdr;
+	sw->tk_hdr = tk_params.tk_hdr;
 	sw->tk_words = tk_words;
 	sw->tk_addr = virt_to_phys(tk);
 	sw->tr_addr_type = tr->tr_addr_type;

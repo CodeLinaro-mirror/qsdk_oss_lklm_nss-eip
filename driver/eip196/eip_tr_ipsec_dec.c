@@ -148,9 +148,9 @@ void eip_tr_ipsec_dec_done(struct eip_tr *tr, struct eip_hw_desc *hw, struct eip
 int eip_tr_ipsec_dec(struct eip_tr *tr, struct sk_buff *skb)
 {
 	int (*dma_tx)(struct eip_dma *dma, struct eip_sw_desc *sw, struct sk_buff *skb);
+	struct eip_tk_params tk_params = {0};
 	struct eip_ctx *ctx = tr->ctx;
 	struct eip_sw_desc *sw;
-	uint32_t tk_hdr = 0;
 	struct eip_dma *dma;
 	struct eip_tk *tk;
 	uint32_t tk_words;
@@ -178,9 +178,15 @@ int eip_tr_ipsec_dec(struct eip_tr *tr, struct sk_buff *skb)
 	skb_pull(skb, tr->ipsec.remove_len);
 
 	/*
+	 * Fill TK params
+	 */
+	tk_params.tr = tr;
+	tk_params.eip_req = (eip_req_t)skb;
+
+	/*
 	 * Fill token for decryption and hash for ipsec
 	 */
-	tk_words = EIP_TR_FILL_TOKEN(tr, &tr->ipsec.ops, tk, skb, &tk_hdr);
+	tk_words = eip_tr_fill_token(tk, &tr->ipsec.ops, &tk_params);
 	dmac_clean_range(tk, tk + 1);
 
 	dma_tx = skb_is_nonlinear(skb) ? eip_dma_tx_nonlinear_skb : eip_dma_tx_linear_skb;
@@ -192,7 +198,7 @@ int eip_tr_ipsec_dec(struct eip_tr *tr, struct sk_buff *skb)
 	sw->tr = eip_tr_ref(tr);
 
 	sw->tk = tk;
-	sw->tk_hdr = tk_hdr;
+	sw->tk_hdr = tk_params.tk_hdr;
 	sw->tk_words = tk_words;
 	sw->tk_addr = virt_to_phys(tk);
 	sw->tr_addr_type = tr->tr_addr_type;
