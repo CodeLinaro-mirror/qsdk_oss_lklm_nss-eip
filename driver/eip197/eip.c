@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -45,6 +45,17 @@ static const struct of_device_id eip_dev_dt_id[] = {
 	{ .compatible =  "qcom,eip" },
 	{},
 };
+
+/*
+ * Module params
+ */
+uint32_t eip_dma_rx_napi_weight = 64;
+module_param(eip_dma_rx_napi_weight, uint, S_IRUSR | S_IWUSR | S_IRGRP);
+MODULE_PARM_DESC(eip_dma_rx_napi_weight, "EIP dma rx budget");
+
+uint32_t eip_dma_tx_compl_napi_weight = 128;
+module_param(eip_dma_tx_compl_napi_weight, uint, S_IRUSR | S_IWUSR | S_IRGRP);
+MODULE_PARM_DESC(eip_dma_tx_compl_napi_weight, "EIP dma tx completion budget");
 
 /*
  * eip_device_probe()
