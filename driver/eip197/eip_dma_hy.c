@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -881,10 +881,10 @@ int eip_dma_hy_init(struct eip_dma *dma, struct platform_device *pdev, uint8_t t
 	 */
 	init_dummy_netdev(&dma->in.ndev);
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
-	netif_napi_add(&dma->in.ndev, &dma->in.napi, eip_dma_hy_napi_tx_poll, EIP_DMA_TX_COMPL_NAPI_WEIGHT);
+	netif_napi_add(&dma->in.ndev, &dma->in.napi, eip_dma_hy_napi_tx_poll, eip_dma_tx_compl_napi_weight);
 #else
 	netif_napi_add_weight(&dma->in.ndev, &dma->in.napi, eip_dma_hy_napi_tx_poll,
-			EIP_DMA_TX_COMPL_NAPI_WEIGHT);
+			eip_dma_tx_compl_napi_weight);
 #endif
 	napi_enable(&dma->in.napi);
 
@@ -893,10 +893,10 @@ int eip_dma_hy_init(struct eip_dma *dma, struct platform_device *pdev, uint8_t t
 	 */
 	init_dummy_netdev(&dma->out.ndev);
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
-	netif_napi_add(&dma->out.ndev, &dma->out.napi, eip_dma_hy_napi_rx_poll, EIP_DMA_RX_HY_NAPI_WEIGHT);
+	netif_napi_add(&dma->out.ndev, &dma->out.napi, eip_dma_hy_napi_rx_poll, eip_dma_rx_napi_weight);
 #else
 	netif_napi_add_weight(&dma->out.ndev, &dma->out.napi, eip_dma_hy_napi_rx_poll,
-			EIP_DMA_RX_HY_NAPI_WEIGHT);
+			eip_dma_rx_napi_weight);
 #endif
 	napi_enable(&dma->out.napi);
 	ep->dma_refill_req = true;
