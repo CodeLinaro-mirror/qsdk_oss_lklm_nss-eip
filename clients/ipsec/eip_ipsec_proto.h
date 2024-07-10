@@ -19,6 +19,11 @@
 
 #define EIP_IPSEC_PROTO_NON_ESP_MARKER 0x0000
 
+/*
+ * SFE hook for the receive processing.
+ */
+extern int (*athrs_fast_nat_recv)(struct sk_buff *skb);
+
 void eip_ipsec_proto_udp_sock_restore(void);
 bool eip_ipsec_proto_udp_sock_override(struct eip_ipsec_tuple *sa_tuple);
 bool eip_ipsec_proto_esp_init(void);
