@@ -80,7 +80,10 @@ void eip_ipsec_proto_dec_done(void *app_data, eip_req_t req)
 	struct eip_ipsec_sa *sa = eip_ipsec_sa_ref_unless_zero((struct eip_ipsec_sa *)app_data);
 	struct sk_buff *skb = eip_req2skb(req);
 	struct eip_ipsec_dev_stats *dev_stats;
+	int (*fast_recv)(struct sk_buff *skb);
+	int ip_hdr_sz = sizeof(struct iphdr);
 	struct eip_ipsec_sa_stats *sa_stats;
+	uint16_t proto = htons(ETH_P_IP);
 	struct eip_ipsec_dev *eid;
 
 	if (unlikely(!sa)) {
@@ -94,16 +97,51 @@ void eip_ipsec_proto_dec_done(void *app_data, eip_req_t req)
 	sa_stats = this_cpu_ptr(sa->stats_pcpu);
 
 	/*
-	 * Update SA statistics.
+	 * Update SA & dev statistics.
 	 */
 	sa_stats->rx_pkts++;
 	sa_stats->rx_bytes += skb->len;
-
-	skb_scrub_packet(skb, false);
+	dev_stats->rx_pkts++;
+	dev_stats->rx_bytes += skb->len;
 
 	/*
+	 * Reset General SKB fields for further processing.
+	 */
+	skb_scrub_packet(skb, false);
+	skb_reset_mac_header(skb);
+	skb_reset_network_header(skb);
+	skb->dev = sa->ndev;
+	skb->skb_iif = sa->ndev->ifindex;
+	skb->ip_summed = CHECKSUM_NONE;
+
+	if (unlikely(ip_hdr(skb)->version != IPVERSION)) {
+		ip_hdr_sz = sizeof(struct ipv6hdr);
+		proto = htons(ETH_P_IPV6);
+	}
+
+	skb->protocol = proto;
+	skb_set_transport_header(skb, ip_hdr_sz);
+
+	/*
+	 * Try to send packet via SFE
+	 */
+	rcu_read_lock_bh();
+
+	fast_recv = rcu_dereference(athrs_fast_nat_recv);
+	if (likely(fast_recv) && likely(fast_recv(skb))) {
+		eip_ipsec_sa_deref(sa);
+		rcu_read_unlock_bh();
+		return;
+	}
+
+	rcu_read_unlock_bh();
+
+	/*
+	 * Forwarding with SFE failed, possibly connection does not exist yet.
+	 * We should not come here very often, update and send packet to Linux stack.
 	 * Linux requires sp in SKB when xfrm is enabled.
 	 */
+	sa_stats->fast_recv_miss++;
 	if (sa->xs) {
 		struct xfrm_state *x = sa->xs;
 		struct sec_path *sp;
@@ -124,29 +162,6 @@ void eip_ipsec_proto_dec_done(void *app_data, eip_req_t req)
 
 		sp->xvec[sp->len++] = x;
 	}
-
-	/*
-	 * Reset General SKB fields for further processing.
-	 */
-	skb_reset_mac_header(skb);
-	skb_reset_network_header(skb);
-	skb->dev = sa->ndev;
-	skb->skb_iif = sa->ndev->ifindex;
-	skb->ip_summed = CHECKSUM_NONE;
-
-	if (ip_hdr(skb)->version == IPVERSION) {
-		skb->protocol = htons(ETH_P_IP);
-		skb_set_transport_header(skb, sizeof(struct iphdr));
-	} else {
-		skb->protocol = htons(ETH_P_IPV6);
-		skb_set_transport_header(skb, sizeof(struct ipv6hdr));
-	}
-
-	/*
-	 * Update device statistics.
-	 */
-	dev_stats->rx_pkts++;
-	dev_stats->rx_bytes += skb->len;
 
 	netif_receive_skb(skb);
 	eip_ipsec_sa_deref(sa);
