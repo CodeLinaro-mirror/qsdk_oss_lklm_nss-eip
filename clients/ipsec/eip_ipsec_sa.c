@@ -457,6 +457,7 @@ ssize_t eip_ipsec_sa_read(struct net_device *ndev, bool encap, char *buf, ssize_
 		len += snprintf(buf + len, max_len - len, "\tTransformation error: %llu\n", stats.fail_transform);
 		len += snprintf(buf + len, max_len - len, "\tRoute error: %llu\n", stats.fail_route);
 		len += snprintf(buf + len, max_len - len, "\tSP allocation error: %llu\n", stats.fail_sp_alloc);
+		len += snprintf(buf + len, max_len - len, "\tFast recv miss: %llu\n", stats.fast_recv_miss);
 	}
 
 	rcu_read_unlock_bh();
