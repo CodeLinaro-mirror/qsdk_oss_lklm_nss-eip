@@ -403,7 +403,7 @@ consume:
 }
 
 
-#if defined(EIP_IPSEC_HYBRID)
+#if defined(EIP_IPSEC_VP_SUPP)
 
 /*
  * eip_ipsec_dev_enc_done_hy()
@@ -828,7 +828,7 @@ void eip_ipsec_dev_del(struct net_device *ndev)
 		pr_warn("%px: Device is being deleted with active SA\n", ndev);
 	}
 
-#if defined(EIP_IPSEC_HYBRID)
+#if defined(EIP_IPSEC_VP_SUPP)
 	if (eid->vp_num >= 0)
 		ppe_vp_free(eid->vp_num);
 #endif
@@ -911,7 +911,7 @@ struct net_device *eip_ipsec_dev_add(void)
 
 	rtnl_unlock();
 
-#if defined(EIP_IPSEC_HYBRID)
+#if defined(EIP_IPSEC_VP_SUPP)
 	/*
 	 * Device will be only used after SA addition; So there wont be any race condition.
 	 * Allocate VP. On Failure IPsec outer flow will be via SFE.
