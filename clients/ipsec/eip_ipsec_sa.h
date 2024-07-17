@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -38,6 +38,7 @@ struct eip_ipsec_sa_stats {
 	uint64_t fail_transform;	/* transformation error */
 	uint64_t fail_sp_alloc;		/* transformation error */
 	uint64_t dst_cache_miss;	/* DST cache not present */
+	uint64_t fast_recv_miss;	/* Packet sent via slow path */
 };
 
 /*
