@@ -33,6 +33,25 @@
 
 #include "eip_ipsec_priv.h"
 
+#if defined(EIP_IPSEC_VP_SUPP)
+
+/*
+ * eip_ipsec_dev_vp_stats_cb()
+ *	Update the netdevice stats.
+ */
+static bool eip_ipsec_dev_vp_stats_cb(struct net_device *ndev, ppe_vp_hw_stats_t *stats) {
+	struct eip_ipsec_dev *eid = netdev_priv(ndev);
+	struct eip_ipsec_dev_stats *dev_stats;
+
+	dev_stats = this_cpu_ptr(eid->stats_pcpu);
+	dev_stats->tx_pkts += stats->rx_pkt_cnt;
+	dev_stats->tx_bytes += stats->rx_byte_cnt;
+
+	return true;
+}
+
+#endif
+
 /*
  * eip_ipsec_dev_get_summary_stats()
  *	Update the summary stats.
@@ -344,6 +363,8 @@ void eip_ipsec_dev_enc_done_v6(void *app_data, eip_req_t req)
 	 * Update device statistics.
 	 */
 	dev_stats->tx_host++;
+	dev_stats->tx_pkts++;
+	dev_stats->tx_bytes += skb->len;
 
 	eip_ipsec_sa_deref(sa);
 	return;
@@ -392,6 +413,8 @@ void eip_ipsec_dev_enc_done_v4(void *app_data, eip_req_t req)
 	 * Update device statistics.
 	 */
 	dev_stats->tx_host++;
+	dev_stats->tx_pkts++;
+	dev_stats->tx_bytes += skb->len;
 
 	eip_ipsec_sa_deref(sa);
 	return;
@@ -403,7 +426,7 @@ consume:
 }
 
 
-#if defined(EIP_IPSEC_HYBRID)
+#if defined(EIP_IPSEC_VP_SUPP)
 
 /*
  * eip_ipsec_dev_enc_done_hy()
@@ -536,6 +559,7 @@ static ppe_vp_num_t eip_ipsec_dev_alloc_vp(struct net_device *ndev)
 	vpai.dst_cb_data = netdev_priv(ndev);
 	vpai.src_cb = eip_ipsec_dev_vp_except;
 	vpai.src_cb_data = netdev_priv(ndev);
+	vpai.stats_cb = eip_ipsec_dev_vp_stats_cb;
 	vpai.flags |= PPE_VP_FLAG_DISABLE_TTL_DEC;
 	vpai.xmit_port = PPE_DRV_PORT_EIP197;
 
@@ -627,13 +651,10 @@ static netdev_tx_t eip_ipsec_dev_tx(struct sk_buff *skb, struct net_device *ndev
 	}
 
 	/*
-	 * Update statistics.
-	 * TODO: Move this to done and Update this using VP callback.
+	 * Update SA statistics.
 	 */
 	sa_stats->tx_pkts++;
 	sa_stats->tx_bytes += len;
-	dev_stats->tx_pkts++;
-	dev_stats->tx_bytes += len;
 
 	eip_ipsec_sa_deref(sa);
 	return NETDEV_TX_OK;
@@ -828,7 +849,7 @@ void eip_ipsec_dev_del(struct net_device *ndev)
 		pr_warn("%px: Device is being deleted with active SA\n", ndev);
 	}
 
-#if defined(EIP_IPSEC_HYBRID)
+#if defined(EIP_IPSEC_VP_SUPP)
 	if (eid->vp_num >= 0)
 		ppe_vp_free(eid->vp_num);
 #endif
@@ -911,7 +932,7 @@ struct net_device *eip_ipsec_dev_add(void)
 
 	rtnl_unlock();
 
-#if defined(EIP_IPSEC_HYBRID)
+#if defined(EIP_IPSEC_VP_SUPP)
 	/*
 	 * Device will be only used after SA addition; So there wont be any race condition.
 	 * Allocate VP. On Failure IPsec outer flow will be via SFE.

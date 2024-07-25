@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -24,10 +24,6 @@
 #define EIP_DMA_AVAIL_COUNT(head, tail) EIP_IDX_SUB(head, tail, EIP_DMA_DESC_MAX)
 #define EIP_DMA_IDX_ADD(i, val) EIP_IDX_ADD((i), (val), EIP_DMA_DESC_MAX)
 #define EIP_DMA_IDX_INC(i) EIP_DMA_IDX_ADD((i), 1)
-
-#define EIP_DMA_TX_COMPL_NAPI_WEIGHT 128U
-#define EIP_DMA_RX_HY_NAPI_WEIGHT 64U
-#define EIP_DMA_RX_LA_NAPI_WEIGHT 64U
 
 
 struct eip_sw_desc;

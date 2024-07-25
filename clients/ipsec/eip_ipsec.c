@@ -53,7 +53,7 @@ MODULE_PARM_DESC(disable_v4_offload, "Disable ipv4 acceleration");
  */
 static int eip_ipsec_ppe_init(void)
 {
-#if defined(EIP_IPSEC_HYBRID)
+#if defined(EIP_IPSEC_VP_SUPP)
 	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
 	struct ppe_drv_iface *iface;
 	ppe_drv_ret_t ret;
@@ -92,7 +92,7 @@ static int eip_ipsec_ppe_init(void)
  */
 static void eip_ipsec_ppe_deinit(void)
 {
-#if defined(EIP_IPSEC_HYBRID)
+#if defined(EIP_IPSEC_VP_SUPP)
 	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
 	ppe_drv_ret_t ret;
 

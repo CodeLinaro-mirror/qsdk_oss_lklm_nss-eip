@@ -19,7 +19,7 @@
 
 #include <linux/kref.h>
 #include <eip.h>
-#if defined(EIP_IPSEC_HYBRID)
+#if defined(EIP_IPSEC_VP_SUPP)
 	#include <ppe_drv.h>
 	#include <ppe_drv_vp.h>
 	#include <ppe_vp_public.h>
@@ -58,7 +58,7 @@ struct eip_ipsec_drv {
 	struct eip_ctx *ctx;		/* DMA context to use for transformation request */
 	struct dentry *dentry;		/* Driver debugfs dentry */
 	struct platform_device *pdev;	/* Device associated with the driver */
-#if defined(EIP_IPSEC_HYBRID)
+#if defined(EIP_IPSEC_VP_SUPP)
 	struct ppe_drv_iface *iface;	/* PPE interface for inline port */
 #endif
 };

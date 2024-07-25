@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -321,7 +321,7 @@ static bool eip_ipsec_sa_exist(struct net_device *ndev, __be32 spi, bool encap)
 	return exist;
 }
 
-#if defined(EIP_IPSEC_HYBRID)
+#if defined(EIP_IPSEC_VP_SUPP)
 
 /*
  * eip_ipsec_ppe_mdata_set()
@@ -353,7 +353,7 @@ static void eip_ipsec_sa_set_mtu(struct eip_ipsec_sa *sa, struct eip_ipsec_data 
 	uint32_t mtu_overhead = 0;
 	uint32_t mode;
 
-	mtu_overhead = sizeof(struct ip_esp_hdr) + EIP_IPSEC_SA_ESP_TRAILER_LEN;
+	mtu_overhead = sizeof(struct ip_esp_hdr);
 	mode = base->flags & (EIP_IPSEC_FLAG_TUNNEL | EIP_IPSEC_FLAG_UDP | EIP_IPSEC_FLAG_IPV6);
 
 	switch (mode) {
@@ -661,7 +661,7 @@ int eip_ipsec_sa_add(struct net_device *ndev, struct eip_ipsec_data *data, struc
 	/*
 	 * Override enc callback and fill PPE metadata for hybrid inline channel.
 	 */
-#if defined(EIP_IPSEC_HYBRID)
+#if defined(EIP_IPSEC_VP_SUPP)
 	if (encap) {
 		tr_info.ipsec.cb = eip_ipsec_dev_enc_done_hy;
 	}
