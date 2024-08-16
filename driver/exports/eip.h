@@ -335,6 +335,7 @@ static inline bool eip_is_enabled(void)
  */
 static inline bool eip_is_enabled(void)
 {
+#if 0
 	uint32_t soc_id;
 
 	if (qcom_smem_get_soc_id(&soc_id))
@@ -344,6 +345,8 @@ static inline bool eip_is_enabled(void)
 			soc_id == QCOM_ID_IPQ9550 || soc_id == QCOM_ID_IPQ9574 ||
 			soc_id == QCOM_ID_IPQ9554 || soc_id == QCOM_ID_IPQ5332 ||
 			soc_id == QCOM_ID_IPQ5300);
+#endif
+	return true;
 }
 #endif
 
