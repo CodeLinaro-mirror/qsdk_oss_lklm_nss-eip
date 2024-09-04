@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -76,7 +76,7 @@ enum eip_tk_inst {
 	EIP_TK_INST_DEL_DATA = 0xa0800000,	/* Used for removing data */
 	EIP_TK_INST_ADD_DATA = 0x25000000,	/* Used for inserting data */
 	EIP_TK_INST_HMAC_ADD = 0x21E60000,	/* Insert generated hash */
-	EIP_TK_INST_HMAC_GET = 0x41E60000,	/* Retrieve hash */
+	EIP_TK_INST_HMAC_GET = 0x40E60000,	/* Retrieve hash */
 	EIP_TK_INST_HMAC_CHK = 0xD0070000,	/* Disable pad verification */
 
 	/*
