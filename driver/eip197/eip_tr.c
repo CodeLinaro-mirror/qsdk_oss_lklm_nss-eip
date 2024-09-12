@@ -351,12 +351,12 @@ fail_stats:
 EXPORT_SYMBOL(eip_tr_alloc);
 
 /*
- * eip_tr_free()
- *	Free the Transform record.
+ * eip_tr_disable()
+ *	disable the Transform record.
  *
- * Caller need to make sure to not schedule any new tranformation request on this tr.
+ * Disable TR to avoid any Driver to Client communication.
  */
-void eip_tr_free(struct eip_tr *tr)
+void eip_tr_disable(struct eip_tr *tr)
 {
 	struct eip_tr_ops *ops;
 
@@ -402,6 +402,23 @@ void eip_tr_free(struct eip_tr *tr)
 	default:
 		pr_err("%px: Service database not found\n", tr);
 		break;
+	}
+}
+EXPORT_SYMBOL(eip_tr_disable);
+
+/*
+ * eip_tr_free()
+ *	Free the Transform record.
+ *
+ * Caller need to make sure to not schedule any new tranformation request on this tr.
+ */
+void eip_tr_free(struct eip_tr *tr)
+{
+	/*
+	 * Disable if not already done.
+	 */
+	if (atomic_read(&tr->active)) {
+		eip_tr_disable(tr);
 	}
 
 	/*
