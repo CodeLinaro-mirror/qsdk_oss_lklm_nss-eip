@@ -85,9 +85,11 @@ static inline uint8_t eip_tk_authdec_gcm_cmn(uint32_t *tk_word, uint8_t auth_len
  * eip_tk_enc_3des()
  *     Fill encryption tokens.
  */
-uint8_t eip_tk_enc_3des(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr)
+uint8_t eip_tk_enc_3des(struct eip_tk *tk, struct eip_tk_params *tk_params)
 {
-	struct skcipher_request *req = eip_req2skcipher_request(eip_req);
+	struct skcipher_request *req = eip_req2skcipher_request(tk_params->eip_req);
+	struct eip_tr *tr = tk_params->tr;
+	uint32_t *tk_hdr = &tk_params->tk_hdr;
 	uint32_t *iv_word = (uint32_t *)req->iv;
 	uint32_t *tk_word = tk->words;
 
@@ -126,9 +128,11 @@ EXPORT_SYMBOL(eip_tk_enc_3des);
  * eip_tk_dec_3des()
  *     Fill decryption tokens.
  */
-uint8_t eip_tk_dec_3des(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr)
+uint8_t eip_tk_dec_3des(struct eip_tk *tk, struct eip_tk_params *tk_params)
 {
-	struct skcipher_request *req = eip_req2skcipher_request(eip_req);
+	struct skcipher_request *req = eip_req2skcipher_request(tk_params->eip_req);
+	struct eip_tr *tr = tk_params->tr;
+	uint32_t *tk_hdr = &tk_params->tk_hdr;
 	uint32_t *iv_word = (uint32_t *)req->iv;
 	uint32_t *tk_word = tk->words;
 
@@ -167,9 +171,11 @@ EXPORT_SYMBOL(eip_tk_dec_3des);
  * eip_tk_enc()
  *	Fill encryption tokens.
  */
-uint8_t eip_tk_enc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr)
+uint8_t eip_tk_enc(struct eip_tk *tk, struct eip_tk_params *tk_params)
 {
-	struct skcipher_request *req = eip_req2skcipher_request(eip_req);
+	struct skcipher_request *req = eip_req2skcipher_request(tk_params->eip_req);
+	struct eip_tr *tr = tk_params->tr;
+	uint32_t *tk_hdr = &tk_params->tk_hdr;
 	uint32_t *iv_word = (uint32_t *)req->iv;
 	uint32_t *tk_word = tk->words;
 
@@ -210,9 +216,11 @@ EXPORT_SYMBOL(eip_tk_enc);
  * eip_tk_dec()
  *	Fill decryption tokens.
  */
-uint8_t eip_tk_dec(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr)
+uint8_t eip_tk_dec(struct eip_tk *tk, struct eip_tk_params *tk_params)
 {
-	struct skcipher_request *req = eip_req2skcipher_request(eip_req);
+	struct skcipher_request *req = eip_req2skcipher_request(tk_params->eip_req);
+	struct eip_tr *tr = tk_params->tr;
+	uint32_t *tk_hdr = &tk_params->tk_hdr;
 	uint32_t *iv_word = (uint32_t *)req->iv;
 	uint32_t *tk_word = tk->words;
 
@@ -253,9 +261,11 @@ EXPORT_SYMBOL(eip_tk_dec);
  * eip_tk_enc_ctr_rfc()
  *	Fill encryption tokens.
  */
-uint8_t eip_tk_enc_ctr_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr)
+uint8_t eip_tk_enc_ctr_rfc(struct eip_tk *tk, struct eip_tk_params *tk_params)
 {
-	struct skcipher_request *req = eip_req2skcipher_request(eip_req);
+	struct skcipher_request *req = eip_req2skcipher_request(tk_params->eip_req);
+	struct eip_tr *tr = tk_params->tr;
+	uint32_t *tk_hdr = &tk_params->tk_hdr;
 	uint32_t *iv_word = (uint32_t *)req->iv;
 	uint32_t *tk_word = tk->words;
 
@@ -300,9 +310,11 @@ EXPORT_SYMBOL(eip_tk_enc_ctr_rfc);
  * eip_tk_dec_ctr_rfc()
  *	Fill decryption tokens.
  */
-uint8_t eip_tk_dec_ctr_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr)
+uint8_t eip_tk_dec_ctr_rfc(struct eip_tk *tk, struct eip_tk_params *tk_params)
 {
-	struct skcipher_request *req = eip_req2skcipher_request(eip_req);
+	struct skcipher_request *req = eip_req2skcipher_request(tk_params->eip_req);
+	struct eip_tr *tr = tk_params->tr;
+	uint32_t *tk_hdr = &tk_params->tk_hdr;
 	uint32_t *iv_word = (uint32_t *)req->iv;
 	uint32_t *tk_word = tk->words;
 
@@ -347,10 +359,12 @@ EXPORT_SYMBOL(eip_tk_dec_ctr_rfc);
  * eip_tk_auth()
  *	Fill auth tokens.
  */
-uint8_t eip_tk_auth(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr)
+uint8_t eip_tk_auth(struct eip_tk *tk, struct eip_tk_params *tk_params)
 {
-	struct ahash_request *req = eip_req2ahash_request(eip_req);
+	struct ahash_request *req = eip_req2ahash_request(tk_params->eip_req);
 	struct crypto_ahash *tfm = crypto_ahash_reqtfm(req);
+	struct eip_tr *tr = tk_params->tr;
+	uint32_t *tk_hdr = &tk_params->tk_hdr;
 	unsigned int hmac_len = crypto_ahash_digestsize(tfm);
 	uint32_t *tk_word = tk->words;
 
@@ -383,10 +397,12 @@ EXPORT_SYMBOL(eip_tk_auth);
  * eip_tk_encauth_cbc()
  *	Fill tokens for AEAD outbound traffic.
  */
-uint8_t eip_tk_encauth_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr)
+uint8_t eip_tk_encauth_cbc(struct eip_tk *tk, struct eip_tk_params *tk_params)
 {
-	struct aead_request *req = eip_req2aead_request(eip_req);
+	struct aead_request *req = eip_req2aead_request(tk_params->eip_req);
 	struct crypto_aead *tfm = crypto_aead_reqtfm(req);
+	struct eip_tr *tr = tk_params->tr;
+	uint32_t *tk_hdr = &tk_params->tk_hdr;
 	uint16_t data_len = req->cryptlen + req->assoclen;
 	uint16_t digest_len = crypto_aead_authsize(tfm);
 	uint32_t *iv_word = (uint32_t *)req->iv;
@@ -432,10 +448,12 @@ EXPORT_SYMBOL(eip_tk_encauth_cbc);
  * eip_tk_authdec_cbc()
  *	Fill tokens for AEAD inbound traffic.
  */
-uint8_t eip_tk_authdec_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr)
+uint8_t eip_tk_authdec_cbc(struct eip_tk *tk, struct eip_tk_params *tk_params)
 {
-	struct aead_request *req = eip_req2aead_request(eip_req);
+	struct aead_request *req = eip_req2aead_request(tk_params->eip_req);
 	struct crypto_aead *tfm = crypto_aead_reqtfm(req);
+	struct eip_tr *tr = tk_params->tr;
+	uint32_t *tk_hdr = &tk_params->tk_hdr;
 	uint16_t data_len = req->cryptlen + req->assoclen;
 	uint16_t digest_len = crypto_aead_authsize(tfm);
 	uint32_t *iv_word = (uint32_t *)req->iv;
@@ -481,10 +499,12 @@ EXPORT_SYMBOL(eip_tk_authdec_cbc);
  * eip_tk_encauth_ctr_rfc()
  *	Fill tokens for AEAD outbound traffic.
  */
-uint8_t eip_tk_encauth_ctr_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr)
+uint8_t eip_tk_encauth_ctr_rfc(struct eip_tk *tk, struct eip_tk_params *tk_params)
 {
-	struct aead_request *req = eip_req2aead_request(eip_req);
+	struct aead_request *req = eip_req2aead_request(tk_params->eip_req);
 	struct crypto_aead *tfm = crypto_aead_reqtfm(req);
+	struct eip_tr *tr = tk_params->tr;
+	uint32_t *tk_hdr = &tk_params->tk_hdr;
 	uint16_t data_len = req->cryptlen + req->assoclen;
 	uint16_t digest_len = crypto_aead_authsize(tfm);
 	uint32_t *iv_word = (uint32_t *)req->iv;
@@ -534,10 +554,12 @@ EXPORT_SYMBOL(eip_tk_encauth_ctr_rfc);
  * eip_tk_authdec_ctr_rfc()
  *	Fill tokens for AEAD inbound traffic.
  */
-uint8_t eip_tk_authdec_ctr_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr)
+uint8_t eip_tk_authdec_ctr_rfc(struct eip_tk *tk, struct eip_tk_params *tk_params)
 {
-	struct aead_request *req = eip_req2aead_request(eip_req);
+	struct aead_request *req = eip_req2aead_request(tk_params->eip_req);
 	struct crypto_aead *tfm = crypto_aead_reqtfm(req);
+	struct eip_tr *tr = tk_params->tr;
+	uint32_t *tk_hdr = &tk_params->tk_hdr;
 	uint16_t data_len = req->cryptlen + req->assoclen;
 	uint16_t digest_len = crypto_aead_authsize(tfm);
 	uint32_t *iv_word = (uint32_t *)req->iv;
@@ -638,10 +660,12 @@ uint8_t eip_tk_digest(struct eip_tk *tk, struct eip_tr *tr, struct scatterlist *
  * eip_tk_encauth_gcm()
  *	Fill tokens for AEAD outbound traffic.
  */
-uint8_t eip_tk_encauth_gcm(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr)
+uint8_t eip_tk_encauth_gcm(struct eip_tk *tk, struct eip_tk_params *tk_params)
 {
-	struct aead_request *req = eip_req2aead_request(eip_req);
+	struct aead_request *req = eip_req2aead_request(tk_params->eip_req);
 	struct crypto_aead *tfm = crypto_aead_reqtfm(req);
+	struct eip_tr *tr = tk_params->tr;
+	uint32_t *tk_hdr = &tk_params->tk_hdr;
 	uint16_t data_len = req->cryptlen + req->assoclen;
 	uint16_t digest_len = crypto_aead_authsize(tfm);
 	uint32_t *iv_word = (uint32_t *)req->iv;
@@ -683,10 +707,12 @@ EXPORT_SYMBOL(eip_tk_encauth_gcm);
  * eip_tk_authdec_gcm()
  *	Fill tokens for AEAD inbound traffic.
  */
-uint8_t eip_tk_authdec_gcm(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr)
+uint8_t eip_tk_authdec_gcm(struct eip_tk *tk, struct eip_tk_params *tk_params)
 {
-	struct aead_request *req = eip_req2aead_request(eip_req);
+	struct aead_request *req = eip_req2aead_request(tk_params->eip_req);
 	struct crypto_aead *tfm = crypto_aead_reqtfm(req);
+	struct eip_tr *tr = tk_params->tr;
+	uint32_t *tk_hdr = &tk_params->tk_hdr;
 	uint16_t data_len = req->cryptlen + req->assoclen;
 	uint16_t digest_len = crypto_aead_authsize(tfm);
 	uint32_t *iv_word = (uint32_t *)req->iv;
@@ -728,10 +754,12 @@ EXPORT_SYMBOL(eip_tk_authdec_gcm);
  * eip_tk_encauth_gcm_rfc()
  *	Fill encryption tokens followed by gmac tokens.
  */
-uint8_t eip_tk_encauth_gcm_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr)
+uint8_t eip_tk_encauth_gcm_rfc(struct eip_tk *tk, struct eip_tk_params *tk_params)
 {
-	struct aead_request *req = eip_req2aead_request(eip_req);
+	struct aead_request *req = eip_req2aead_request(tk_params->eip_req);
 	struct crypto_aead *tfm = crypto_aead_reqtfm(req);
+	struct eip_tr *tr = tk_params->tr;
+	uint32_t *tk_hdr = &tk_params->tk_hdr;
 	uint16_t data_len = req->cryptlen + req->assoclen;
 	uint16_t digest_len = crypto_aead_authsize(tfm);
 	uint32_t *iv_word = (uint32_t *)req->iv;
@@ -774,10 +802,12 @@ EXPORT_SYMBOL(eip_tk_encauth_gcm_rfc);
  * eip_tk_authdec_gcm_rfc()
  *	Fill gmac tokens followed by decryption tokens.
  */
-uint8_t eip_tk_authdec_gcm_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr)
+uint8_t eip_tk_authdec_gcm_rfc(struct eip_tk *tk, struct eip_tk_params *tk_params)
 {
-	struct aead_request *req = eip_req2aead_request(eip_req);
+	struct aead_request *req = eip_req2aead_request(tk_params->eip_req);
 	struct crypto_aead *tfm = crypto_aead_reqtfm(req);
+	struct eip_tr *tr = tk_params->tr;
+	uint32_t *tk_hdr = &tk_params->tk_hdr;
 	uint16_t data_len = req->cryptlen + req->assoclen;
 	uint16_t digest_len = crypto_aead_authsize(tfm);
 	uint32_t *iv_word = (uint32_t *)req->iv;

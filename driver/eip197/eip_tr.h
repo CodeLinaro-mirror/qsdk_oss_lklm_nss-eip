@@ -25,7 +25,6 @@
 #define EIP_TR_CTRL_CONTEXT_WORDS(x) (((x) & 0x3FU) << 8)
 #define EIP_TR_REDIR_EN (0x1U << 11) /* Redirect enable */
 #define EIP_TR_REDIR_IFACE(i) (((i) & 0xFU) << 12) /* Redirect destination interface */
-#define EIP_TR_FILL_TOKEN(tr, ops, tk, req, tk_hdr) ((ops)->tk_fill(tk, tr, req, tk_hdr)) /* Call Token fill function */
 #define EIP_MAX_PKT_LEN	9216 /* Bytes */
 
 struct eip_svc_entry;
@@ -237,5 +236,16 @@ static inline void eip_tr_deref(struct eip_tr *tr)
 {
 	kref_put(&tr->ref, eip_tr_final);
 }
+
+/*
+ * eip_tr_fill_token()
+ *	Fill Tokens from transform record by calling token fill callback.
+ */
+static inline uint8_t eip_tr_fill_token(struct eip_tk *tk, struct eip_tr_ops *ops,
+		struct eip_tk_params *tk_params)
+{
+	return ops->tk_fill(tk, tk_params);
+}
+
 
 #endif /* __EIP_TR_H */
