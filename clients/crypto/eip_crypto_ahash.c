@@ -27,10 +27,9 @@
 #include <crypto/md5.h>
 #include <crypto/algapi.h>
 #include <crypto/internal/hash.h>
+#include <crypto/scatterwalk.h>
+#include "eip_crypto_ahash.h"
 
-#include "eip_crypto.h"
-
-#define EIP_CRYPTO_AHASH_UPDATE_RES_BIT	(0)
 #define EIP_CRYPTO_AHASH_IN_PROG_BIT 	(1)
 
 /*
@@ -99,7 +98,7 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 				.cra_priority    = 1000,
 				.cra_flags       = CRYPTO_ALG_TYPE_AHASH | CRYPTO_ALG_ASYNC,
 				.cra_blocksize   = MD5_HMAC_BLOCK_SIZE,
-				.cra_ctxsize     = sizeof(struct eip_crypto_tfm_ctx),
+				.cra_ctxsize     = sizeof(struct eip_crypto_ahash_tfm_ctx),
 				.cra_alignmask   = 0,
 				.cra_module      = THIS_MODULE,
 				.cra_init        = eip_crypto_ahash_cra_init,
@@ -127,7 +126,7 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 				.cra_priority    = 1000,
 				.cra_flags       = CRYPTO_ALG_TYPE_AHASH | CRYPTO_ALG_ASYNC,
 				.cra_blocksize   = SHA1_BLOCK_SIZE,
-				.cra_ctxsize     = sizeof(struct eip_crypto_tfm_ctx),
+				.cra_ctxsize     = sizeof(struct eip_crypto_ahash_tfm_ctx),
 				.cra_alignmask   = 0,
 				.cra_module      = THIS_MODULE,
 				.cra_init        = eip_crypto_ahash_cra_init,
@@ -155,7 +154,7 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 				.cra_priority    = 1000,
 				.cra_flags       = CRYPTO_ALG_TYPE_AHASH | CRYPTO_ALG_ASYNC,
 				.cra_blocksize   = SHA224_BLOCK_SIZE,
-				.cra_ctxsize     = sizeof(struct eip_crypto_tfm_ctx),
+				.cra_ctxsize     = sizeof(struct eip_crypto_ahash_tfm_ctx),
 				.cra_alignmask   = 0,
 				.cra_module      = THIS_MODULE,
 				.cra_init        = eip_crypto_ahash_cra_init,
@@ -183,7 +182,7 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 				.cra_priority    = 1000,
 				.cra_flags       = CRYPTO_ALG_TYPE_AHASH | CRYPTO_ALG_ASYNC,
 				.cra_blocksize   = SHA256_BLOCK_SIZE,
-				.cra_ctxsize     = sizeof(struct eip_crypto_tfm_ctx),
+				.cra_ctxsize     = sizeof(struct eip_crypto_ahash_tfm_ctx),
 				.cra_alignmask   = 0,
 				.cra_module      = THIS_MODULE,
 				.cra_init        = eip_crypto_ahash_cra_init,
@@ -211,7 +210,7 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 				.cra_priority    = 1000,
 				.cra_flags       = CRYPTO_ALG_TYPE_AHASH | CRYPTO_ALG_ASYNC,
 				.cra_blocksize   = SHA384_BLOCK_SIZE,
-				.cra_ctxsize     = sizeof(struct eip_crypto_tfm_ctx),
+				.cra_ctxsize     = sizeof(struct eip_crypto_ahash_tfm_ctx),
 				.cra_alignmask   = 0,
 				.cra_module      = THIS_MODULE,
 				.cra_init        = eip_crypto_ahash_cra_init,
@@ -239,7 +238,7 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 				.cra_priority    = 1000,
 				.cra_flags       = CRYPTO_ALG_TYPE_AHASH | CRYPTO_ALG_ASYNC,
 				.cra_blocksize   = SHA512_BLOCK_SIZE,
-				.cra_ctxsize     = sizeof(struct eip_crypto_tfm_ctx),
+				.cra_ctxsize     = sizeof(struct eip_crypto_ahash_tfm_ctx),
 				.cra_alignmask   = 0,
 				.cra_module      = THIS_MODULE,
 				.cra_init        = eip_crypto_ahash_cra_init,
@@ -271,7 +270,7 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 				.cra_priority    = 1000,
 				.cra_flags       = CRYPTO_ALG_TYPE_AHASH | CRYPTO_ALG_ASYNC,
 				.cra_blocksize   = MD5_HMAC_BLOCK_SIZE,
-				.cra_ctxsize     = sizeof(struct eip_crypto_tfm_ctx),
+				.cra_ctxsize     = sizeof(struct eip_crypto_ahash_tfm_ctx),
 				.cra_alignmask   = 0,
 				.cra_module      = THIS_MODULE,
 				.cra_init        = eip_crypto_ahash_cra_init,
@@ -299,7 +298,7 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 				.cra_priority    = 1000,
 				.cra_flags       = CRYPTO_ALG_TYPE_AHASH | CRYPTO_ALG_ASYNC,
 				.cra_blocksize   = SHA1_BLOCK_SIZE,
-				.cra_ctxsize     = sizeof(struct eip_crypto_tfm_ctx),
+				.cra_ctxsize     = sizeof(struct eip_crypto_ahash_tfm_ctx),
 				.cra_alignmask   = 0,
 				.cra_module      = THIS_MODULE,
 				.cra_init        = eip_crypto_ahash_cra_init,
@@ -327,7 +326,7 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 				.cra_priority    = 1000,
 				.cra_flags       = CRYPTO_ALG_TYPE_AHASH | CRYPTO_ALG_ASYNC,
 				.cra_blocksize   = SHA224_BLOCK_SIZE,
-				.cra_ctxsize     = sizeof(struct eip_crypto_tfm_ctx),
+				.cra_ctxsize     = sizeof(struct eip_crypto_ahash_tfm_ctx),
 				.cra_alignmask   = 0,
 				.cra_module      = THIS_MODULE,
 				.cra_init        = eip_crypto_ahash_cra_init,
@@ -355,7 +354,7 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 				.cra_priority    = 1000,
 				.cra_flags       = CRYPTO_ALG_TYPE_AHASH | CRYPTO_ALG_ASYNC,
 				.cra_blocksize   = SHA256_BLOCK_SIZE,
-				.cra_ctxsize     = sizeof(struct eip_crypto_tfm_ctx),
+				.cra_ctxsize     = sizeof(struct eip_crypto_ahash_tfm_ctx),
 				.cra_alignmask   = 0,
 				.cra_module      = THIS_MODULE,
 				.cra_init        = eip_crypto_ahash_cra_init,
@@ -383,7 +382,7 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 				.cra_priority    = 1000,
 				.cra_flags       = CRYPTO_ALG_TYPE_AHASH | CRYPTO_ALG_ASYNC,
 				.cra_blocksize   = SHA384_BLOCK_SIZE,
-				.cra_ctxsize     = sizeof(struct eip_crypto_tfm_ctx),
+				.cra_ctxsize     = sizeof(struct eip_crypto_ahash_tfm_ctx),
 				.cra_alignmask   = 0,
 				.cra_module      = THIS_MODULE,
 				.cra_init        = eip_crypto_ahash_cra_init,
@@ -411,7 +410,7 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 				.cra_priority    = 1000,
 				.cra_flags       = CRYPTO_ALG_TYPE_AHASH | CRYPTO_ALG_ASYNC,
 				.cra_blocksize   = SHA512_BLOCK_SIZE,
-				.cra_ctxsize     = sizeof(struct eip_crypto_tfm_ctx),
+				.cra_ctxsize     = sizeof(struct eip_crypto_ahash_tfm_ctx),
 				.cra_alignmask   = 0,
 				.cra_module      = THIS_MODULE,
 				.cra_init        = eip_crypto_ahash_cra_init,
@@ -422,12 +421,31 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 };
 
 /*
+ * eip_crypto_ahash_map_sg()
+ *	Init and set pages to sg table from buffer.
+ */
+static inline int eip_crypto_ahash_map_sg(struct eip_crypto_ahash_tfm_ctx *actx)
+{
+	struct page *pages[EIP_CRYPTO_AHASH_MAX_PAGES];
+	uint32_t data_len = actx->data_len;
+	void *start = actx->data;
+	int pg_cnt, len;
+
+	for (pg_cnt = 0, len = 0; len < data_len; len += PAGE_SIZE, pg_cnt++)
+		pages[pg_cnt] = vmalloc_to_page(start + len);
+
+	return sg_alloc_table_from_pages(&actx->sgt, pages, pg_cnt, 0,
+			actx->data_len, GFP_KERNEL);
+}
+
+/*
  * eip_crypto_ahash_cra_init()
  *	Crypto ahash init
  */
 int eip_crypto_ahash_cra_init(struct crypto_tfm *base)
 {
-	struct eip_crypto_tfm_ctx *tfm_ctx = crypto_tfm_ctx(base);
+	struct eip_crypto_ahash_tfm_ctx *actx = crypto_tfm_ctx(base);
+	struct eip_crypto_tfm_ctx *tfm_ctx = &actx->ctx;
 	struct crypto_ahash *tfm = __crypto_ahash_cast(base);
 
 	BUG_ON(!tfm_ctx);
@@ -440,9 +458,13 @@ int eip_crypto_ahash_cra_init(struct crypto_tfm *base)
 	INIT_LIST_HEAD(&tfm_ctx->entry);
 
 	/*
-	 * eip_crypto_ahash_cra_exit()
+	 * Allocate buffer to store ahash data
 	 */
-	atomic_inc(&tfm_ctx->usage_count);
+	actx->data = vzalloc(EIP_CRYPTO_AHASH_MAX_SIZE);
+	if (!actx->data) {
+		pr_err("%px: AHASH unable to allocate memory for ahash data.\n", tfm_ctx);
+		return -ENOMEM;
+	}
 
 	/*
 	 * Allocate memory for per cpu stats.
@@ -450,6 +472,7 @@ int eip_crypto_ahash_cra_init(struct crypto_tfm *base)
 	tfm_ctx->stats = alloc_percpu_gfp(struct eip_crypto_tfm_stats, GFP_KERNEL | __GFP_ZERO);
 	if (!tfm_ctx->stats) {
 		pr_err("%px: AHASH unable to allocate memory for tfm stats.\n", tfm_ctx);
+		vfree(actx->data);
 		return -ENOMEM;
 	}
 
@@ -457,6 +480,11 @@ int eip_crypto_ahash_cra_init(struct crypto_tfm *base)
 	 * Add TFM to list of TFMs.
 	 */
 	eip_crypto_add_tfmctx(&ahash, tfm_ctx);
+
+	/*
+	 * eip_crypto_ahash_cra_exit()
+	 */
+	atomic_inc(&tfm_ctx->usage_count);
 
 	/*
 	 * set this tfm reqsize to the transform specific structure
@@ -472,7 +500,8 @@ int eip_crypto_ahash_cra_init(struct crypto_tfm *base)
  */
 void eip_crypto_ahash_cra_exit(struct crypto_tfm *tfm)
 {
-	struct eip_crypto_tfm_ctx *tfm_ctx = crypto_tfm_ctx(tfm);
+	struct eip_crypto_ahash_tfm_ctx *actx = crypto_tfm_ctx(tfm);
+	struct eip_crypto_tfm_ctx *tfm_ctx = &actx->ctx;
 
 	BUG_ON(!tfm_ctx);
 
@@ -502,6 +531,14 @@ void eip_crypto_ahash_cra_exit(struct crypto_tfm *tfm)
 
 	BUG_ON(!tfm_ctx->stats);
 	free_percpu(tfm_ctx->stats);
+
+	/*
+	 * If any buffer or SG is allocated and not freed we free it here.
+	 */
+	sg_free_table(&actx->sgt);
+	vfree(actx->data);
+	actx->data_len = 0;
+	actx->data = NULL;
 
 	/*
 	 * Remove the TFM from list of TFMs.
@@ -615,22 +652,33 @@ static const struct file_operations file_ops = {
  */
 void eip_crypto_ahash_done(void *app_data, eip_req_t eip_req)
 {
-	struct eip_crypto_tfm_ctx *tfm_ctx = (struct eip_crypto_tfm_ctx *)app_data;
+	struct eip_crypto_ahash_tfm_ctx *actx = (struct eip_crypto_ahash_tfm_ctx *)app_data;
+	struct eip_crypto_tfm_ctx *tfm_ctx = &actx->ctx;
+
 	struct eip_crypto_tfm_stats *tfm_stats = this_cpu_ptr(tfm_ctx->stats);
 	struct eip_crypto_tfm_stats *ahash_stats = this_cpu_ptr(ahash.stats);
 	struct ahash_request *req = eip_req2ahash_request(eip_req);
 	struct eip_crypto_ahash_req_ctx *rctx = ahash_request_ctx(req);
+	uint32_t data_len = 0;
 
 	BUG_ON(!tfm_ctx);
 
-	/*
-	 * This completion callback may get called for an update or digest operation
-	 * We need to copy the result for digest operation only
-	 */
-	if (test_bit(EIP_CRYPTO_AHASH_UPDATE_RES_BIT, &rctx->flags)){
-		memcpy(req->result, rctx->digest, rctx->diglen);
-	}
+	memcpy(req->result, rctx->digest, rctx->diglen);
 
+	/*
+	 * Restore original src and nbytes in request
+	 */
+	req->src = actx->sg_user;
+	req->nbytes = actx->sg_user_len;
+	data_len = actx->data_len;
+
+	/*
+	 * free sg table and reset data length.
+	 */
+	if (data_len) {
+		sg_free_table(&actx->sgt);
+		actx->data_len = 0;
+	}
 	/*
 	 * Clear the in progress flag
 	 */
@@ -641,8 +689,8 @@ void eip_crypto_ahash_done(void *app_data, eip_req_t eip_req)
 	 */
 	tfm_stats->rx_reqs++;
 	ahash_stats->rx_reqs++;
-	tfm_stats->rx_bytes += req->nbytes;
-	ahash_stats->rx_bytes += req->nbytes;
+	tfm_stats->rx_bytes += data_len;
+	ahash_stats->rx_bytes += data_len;
 
 	/*
 	 * Signal linux about completion.
@@ -665,11 +713,11 @@ void eip_crypto_ahash_done(void *app_data, eip_req_t eip_req)
  */
 void eip_crypto_ahash_err_done(void *app_data, eip_req_t eip_req, int err)
 {
-	struct eip_crypto_tfm_ctx *tfm_ctx = (struct eip_crypto_tfm_ctx *)app_data;
-	struct eip_crypto_tfm_stats *tfm_stats = this_cpu_ptr(tfm_ctx->stats);
+	struct eip_crypto_ahash_tfm_ctx *actx = (struct eip_crypto_ahash_tfm_ctx *)app_data;
+	struct eip_crypto_tfm_stats *tfm_stats = this_cpu_ptr(actx->ctx.stats);
 	struct eip_crypto_tfm_stats *ahash_stats = this_cpu_ptr(ahash.stats);
 
-	BUG_ON(!tfm_ctx);
+	BUG_ON(!actx);
 
 	/*
 	 * Increment hardware stats.
@@ -688,8 +736,10 @@ void eip_crypto_ahash_err_done(void *app_data, eip_req_t eip_req, int err)
  */
 int eip_crypto_ahash_setkey(struct crypto_ahash *tfm, const u8 *key, unsigned int keylen)
 {
+	struct eip_crypto_ahash_tfm_ctx *actx = crypto_tfm_ctx(crypto_ahash_tfm(tfm));
 	char *alg_name = (char *)crypto_tfm_alg_driver_name(crypto_ahash_tfm(tfm));
-	struct eip_crypto_tfm_ctx *tfm_ctx = crypto_tfm_ctx(crypto_ahash_tfm(tfm));
+	struct eip_crypto_tfm_ctx *tfm_ctx = &actx->ctx;
+
 	struct eip_crypto_tfm_stats *tfm_stats = this_cpu_ptr(tfm_ctx->stats);
 	struct eip_crypto_tfm_stats *ahash_stats = this_cpu_ptr(ahash.stats);
 	struct eip_tr_info_crypto *crypto;
@@ -713,7 +763,7 @@ int eip_crypto_ahash_setkey(struct crypto_ahash *tfm, const u8 *key, unsigned in
 	 */
 	crypto->auth_cb = eip_crypto_ahash_done;
 	crypto->auth_err_cb = eip_crypto_ahash_err_done;
-	crypto->app_data = tfm_ctx;
+	crypto->app_data = actx;
 	crypto->enc_cb = NULL;
 	crypto->dec_cb = NULL;
 
@@ -759,8 +809,9 @@ int eip_crypto_ahash_setkey(struct crypto_ahash *tfm, const u8 *key, unsigned in
 int eip_crypto_ahash_tfm_init(struct ahash_request *req)
 {
 	struct crypto_tfm *tfm = crypto_ahash_tfm(crypto_ahash_reqtfm(req));
+	struct eip_crypto_ahash_tfm_ctx *actx = crypto_tfm_ctx(tfm);
 	struct eip_crypto_ahash_req_ctx *rctx = ahash_request_ctx(req);
-	struct eip_crypto_tfm_ctx *tfm_ctx = crypto_tfm_ctx(tfm);
+	struct eip_crypto_tfm_ctx *tfm_ctx = &actx->ctx;
 	char *alg_name = (char *)crypto_tfm_alg_driver_name(tfm);
 	struct eip_crypto_tfm_stats *ahash_stats;
 	struct eip_crypto_tfm_stats *tfm_stats;
@@ -793,7 +844,7 @@ int eip_crypto_ahash_tfm_init(struct ahash_request *req)
 	 */
 	crypto->auth_cb = eip_crypto_ahash_done;
 	crypto->auth_err_cb = eip_crypto_ahash_err_done;
-	crypto->app_data = tfm_ctx;
+	crypto->app_data = actx;
 	crypto->enc_cb = NULL;
 	crypto->dec_cb = NULL;
 
@@ -833,72 +884,32 @@ tr_allocated:
 	 */
 	rctx->buf_count = 0;
 	rctx->diglen = crypto_ahash_digestsize(crypto_ahash_reqtfm(req));
-	clear_bit(EIP_CRYPTO_AHASH_UPDATE_RES_BIT, &rctx->flags);
 	clear_bit(EIP_CRYPTO_AHASH_IN_PROG_BIT, &rctx->flags);
 	memset(rctx->digest, 0, ARRAY_SIZE(rctx->digest));
+	actx->data_len = 0;
 
 	return 0;
 };
 
 /*
- * eip_crypto_ahash_update()
- *	Ahash .update operation for a specific request.
- *	Accept user's data and post the data to EIP HW for transformation.
- *	Do not return the hash result to user.
+ * eip_crypto_ahash_send()
+ *	Set request and send stored data to HW for processing.
  */
-int eip_crypto_ahash_update(struct ahash_request *req)
+static int eip_crypto_ahash_send(struct ahash_request *req)
 {
-	struct eip_crypto_tfm_ctx *tfm_ctx = crypto_ahash_ctx(crypto_ahash_reqtfm(req));
+	struct eip_crypto_ahash_tfm_ctx *actx = crypto_ahash_ctx(crypto_ahash_reqtfm(req));
+	struct eip_crypto_ahash_req_ctx *rctx = ahash_request_ctx(req);
+	struct eip_crypto_tfm_ctx *tfm_ctx = &actx->ctx;
+
 	struct eip_crypto_tfm_stats *tfm_stats = this_cpu_ptr(tfm_ctx->stats);
 	struct eip_crypto_tfm_stats *ahash_stats = this_cpu_ptr(ahash.stats);
-	struct eip_crypto_ahash_req_ctx *rctx = ahash_request_ctx(req);
 	struct eip_tr *tr = NULL;
-	uint32_t tot_len = 0;
-	uint16_t nbytes = 0;
-	int ret = 0;
-
-	/*
-	 * Check if tfm is active or not.
-	 */
-	if (!atomic_read(&tfm_ctx->active)) {
-		pr_warn("%px: Tfm is not active.\n", tfm_ctx);
-		tfm_stats->inactive_tfm++;
-		ahash_stats->inactive_tfm++;
-		return -EPERM;
-	}
-
-	/*
-	 * TODO: Add support for Multiple updates per request.
-	 */
-	if (rctx->buf_count > 0) {
-		pr_warn("%px: Only 1 update supported per request.\n", tfm_ctx);
-		tfm_stats->tx_failures++;
-		ahash_stats->tx_failures++;
-		return -EPERM;
-	}
-
-	rctx->buf_count = 1;
-
-	/*
-	 * Initialize data scatterlist for hash result.
-	 */
-	sg_init_one(&rctx->res, rctx->digest, rctx->diglen);
-
-	/*
-	 * We only support (2^16 - 1) length.
-	 */
-	tot_len = req->nbytes;
-	if (tot_len > U16_MAX) {
-		pr_warn("%px: Invalid length %u, not supported.\n", tfm_ctx, tot_len);
-		tfm_stats->invalid_len++;
-		ahash_stats->invalid_len++;
-		return -EFBIG;
-	}
+	int ret;
 
 	/*
 	 * We take RCU lock to synchronize encrypt/decrypt and setkey operation.
 	 */
-	rcu_read_lock();
+	rcu_read_lock_bh();
 	tr = rcu_dereference(tfm_ctx->tr);
 
 	/*
@@ -915,23 +926,79 @@ int eip_crypto_ahash_update(struct ahash_request *req)
 		pr_debug("%px: Authentication error: %d\n", rctx, ret);
 		atomic_dec(&tfm_ctx->usage_count);
 		clear_bit(EIP_CRYPTO_AHASH_IN_PROG_BIT, &rctx->flags);
-		rcu_read_unlock();
+		rcu_read_unlock_bh();
 		tfm_stats->tx_failures++;
 		ahash_stats->tx_failures++;
 		return ret;
 	}
 
-	rcu_read_unlock();
+	rcu_read_unlock_bh();
 
 	/*
 	 * Update stats.
 	 */
 	tfm_stats->tx_reqs++;
 	ahash_stats->tx_reqs++;
-	tfm_stats->tx_bytes += nbytes;
-	ahash_stats->tx_bytes += nbytes;
+	tfm_stats->tx_bytes += actx->data_len;
+	ahash_stats->tx_bytes += actx->data_len;
 
 	return -EINPROGRESS;
+}
+
+/*
+ * eip_crypto_ahash_update()
+ *	Ahash .update operation for a specific request.
+ *
+ * Buffering the data to sg_list.
+ * Do not return the hash result to user.
+ */
+int eip_crypto_ahash_update(struct ahash_request *req)
+{
+	struct eip_crypto_ahash_tfm_ctx *actx = crypto_ahash_ctx(crypto_ahash_reqtfm(req));
+	struct eip_crypto_tfm_ctx *tfm_ctx = &actx->ctx;
+
+	struct eip_crypto_tfm_stats *tfm_stats = this_cpu_ptr(tfm_ctx->stats);
+	struct eip_crypto_tfm_stats *ahash_stats = this_cpu_ptr(ahash.stats);
+	uint32_t data_len = actx->data_len;
+	uint32_t req_len = req->nbytes;
+	int ret = 0;
+
+	/*
+	 * Check if tfm is active or not.
+	 */
+	if (!atomic_read(&tfm_ctx->active)) {
+		pr_warn("%px: Tfm is not active.\n", tfm_ctx);
+		tfm_stats->inactive_tfm++;
+		ahash_stats->inactive_tfm++;
+		ret = -EPERM;
+		goto fail;
+	}
+
+	if (req->nbytes == 0) {
+		return 0;
+	}
+
+	if (data_len + req_len > EIP_CRYPTO_AHASH_MAX_SIZE) {
+		pr_warn("%p: Unable to handle data length more then 64Kb\n", tfm_ctx);
+		tfm_stats->invalid_len++;
+		ahash_stats->invalid_len++;
+
+		ret = -EFBIG;
+		goto fail;
+	}
+
+	scatterwalk_map_and_copy(actx->data + data_len, req->src, 0, req_len, 0);
+	actx->data_len += req_len;
+
+	return 0;
+
+fail:
+	/*
+	 * Reset data len.
+	 */
+	actx->data_len = 0;
+
+	return ret;
 }
 
 /*
@@ -941,12 +1008,46 @@ int eip_crypto_ahash_update(struct ahash_request *req)
  */
 int eip_crypto_ahash_final(struct ahash_request *req)
 {
+	struct eip_crypto_ahash_tfm_ctx *actx = crypto_ahash_ctx(crypto_ahash_reqtfm(req));
 	struct eip_crypto_ahash_req_ctx *rctx = ahash_request_ctx(req);
+	struct scatterlist *src = &rctx->res;
+	int err;
 
-	WARN_ON(test_bit(EIP_CRYPTO_AHASH_IN_PROG_BIT, &rctx->flags));
-	memcpy(req->result, rctx->digest, rctx->diglen);
+	/*
+	 * store original src and nbytes from req.
+	 */
+	actx->sg_user = req->src;
+	actx->sg_user_len = req->nbytes;
 
-	return 0;
+	/*
+	 * if eip_crypto_ahash_map_sg returns error same error return to user
+	 */
+	if (actx->data_len) {
+		err = eip_crypto_ahash_map_sg(actx);
+		if (err) {
+			goto fail;
+		}
+
+		src = actx->sgt.sgl;
+	}
+
+	/*
+	 * Initialize scatterlist for hash result and data.
+	 */
+	sg_init_one(&rctx->res, rctx->digest, rctx->diglen);
+	req->src = src;
+	req->nbytes = actx->data_len;
+
+	return eip_crypto_ahash_send(req);
+
+fail:
+	/*
+	 * Reset data length.
+	 */
+	actx->data_len = 0;
+
+
+	return err;
 }
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0))
@@ -961,12 +1062,6 @@ static void eip_crypto_ahash_finup_done(void *data, int err)
 
 	/*
 	 * Call final if there are no errors
-	 */
-	if (!err) {
-		err = eip_crypto_ahash_final(req);
-	}
-
-	/*
 	 * Restore the original complete callback and data in the req
 	 */
 	req->base.complete = rctx->complete;
@@ -995,9 +1090,16 @@ int eip_crypto_ahash_finup(struct ahash_request *req)
 	req->base.data = req;
 
 	/*
-	 * If update returns -EINPROGRESS, return the same to user
+	 * If update returns 0, call final.
 	 */
 	err = eip_crypto_ahash_update(req);
+	if (!err) {
+		err = eip_crypto_ahash_final(req);
+	}
+
+	/*
+	 * If final returns -EINPROGRESS, return the same to user
+	 */
 	if (err == -EINPROGRESS) {
 		return err;
 	}
@@ -1018,30 +1120,31 @@ int eip_crypto_ahash_finup(struct ahash_request *req)
  */
 int eip_crypto_ahash_digest(struct ahash_request *req)
 {
-	struct eip_crypto_tfm_ctx *tfm_ctx = crypto_ahash_ctx(crypto_ahash_reqtfm(req));
+	struct eip_crypto_ahash_tfm_ctx *actx = crypto_ahash_ctx(crypto_ahash_reqtfm(req));
+	struct eip_crypto_tfm_ctx *tfm_ctx = &actx->ctx;
+
 	struct eip_crypto_tfm_stats *tfm_stats = this_cpu_ptr(tfm_ctx->stats);
 	struct eip_crypto_tfm_stats *ahash_stats = this_cpu_ptr(ahash.stats);
-	struct eip_crypto_ahash_req_ctx *rctx = ahash_request_ctx(req);
-	int ret = 0;
+	int err = 0;
 
 	/*
 	 * Init followed by update and final.
 	 */
-	ret = eip_crypto_ahash_tfm_init(req);
-	if (ret) {
+	err = eip_crypto_ahash_tfm_init(req);
+	if (err) {
 		pr_warn("%px: Tfm init failed with error(%d) for digest operation.\n",
-				tfm_ctx, ret);
+				tfm_ctx, err);
 		tfm_stats->tx_failures++;
 		ahash_stats->tx_failures++;
 		return -EINVAL;
 	}
 
-	/*
-	 * Set the flag to update the result from completion callback
-	 */
-	set_bit(EIP_CRYPTO_AHASH_UPDATE_RES_BIT, &rctx->flags);
+	err = eip_crypto_ahash_update(req);
+	if (!err)  {
+		err = eip_crypto_ahash_final(req);
+	}
 
-	return eip_crypto_ahash_update(req);
+	return err;
 }
 
 /*
@@ -1053,7 +1156,7 @@ int eip_crypto_ahash_digest(struct ahash_request *req)
  */
 int eip_crypto_ahash_export(struct ahash_request *req, void *out)
 {
-	struct eip_crypto_tfm_ctx *tfm_ctx __attribute__((unused)) = crypto_tfm_ctx(req->base.tfm);
+	struct eip_crypto_ahash_tfm_ctx *tfm_ctx __attribute__((unused)) = crypto_tfm_ctx(req->base.tfm);
 
 	pr_debug("%px: ahash .export is not supported", tfm_ctx);
 	return -ENOSYS;
@@ -1068,7 +1171,7 @@ int eip_crypto_ahash_export(struct ahash_request *req, void *out)
  */
 int eip_crypto_ahash_import(struct ahash_request *req, const void *in)
 {
-	struct eip_crypto_tfm_ctx *tfm_ctx __attribute__((unused)) = crypto_tfm_ctx(req->base.tfm);
+	struct eip_crypto_ahash_tfm_ctx *tfm_ctx __attribute__((unused)) = crypto_tfm_ctx(req->base.tfm);
 
 	pr_debug("%px: ahash .import is not supported", tfm_ctx);
 	return -ENOSYS;
