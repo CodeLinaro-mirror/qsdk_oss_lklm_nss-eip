@@ -392,6 +392,17 @@ void eip_ctx_free(struct eip_ctx *ctx);
 struct eip_tr *eip_tr_alloc(struct eip_ctx *ctx, struct eip_tr_info *info);
 
 /*
+ * eip_tr_disable
+ *	Disable transformation record.
+ *
+ * @datatypes
+ * struct eip_tr
+ *
+ * @param[in] tr	Pointer to the transformation record.
+ */
+void eip_tr_disable(struct eip_tr *tr);
+
+/*
  * eip_tr_free
  *	Free transformation record.
  *

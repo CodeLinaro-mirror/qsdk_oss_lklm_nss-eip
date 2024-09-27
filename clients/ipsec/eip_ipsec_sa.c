@@ -727,14 +727,19 @@ void eip_ipsec_sa_del(struct net_device *ndev, struct eip_ipsec_tuple *t)
 	}
 
 	/*
-	 * Release the TR. This also ensure no new packet being sent by driver.
+	 * Disable TR. This also ensure no new packet being sent by driver.
 	 */
-	eip_tr_free(sa->tr);
+	eip_tr_disable(sa->tr);
 
 	/*
 	 * Wait for all outstanding SA operation.
 	 */
 	wait_for_completion(&sa->completion);
+
+	/*
+	 * Release the TR and other SA resources
+	 */
+	eip_tr_free(sa->tr);
 	sa->xs = NULL;
 	dev_put(sa->ndev);
 	dst_cache_destroy(&sa->dst_cache);
