@@ -148,6 +148,11 @@ static void eip_tr_inval(struct work_struct *work)
 	ctx = tr->ctx;
 
 	/*
+	 * Disable Record, To avoid any unanticipated record read.
+	 */
+	iowrite32(0x1, &tr->hw_words[65]);
+
+	/*
 	 * Initialize scatterlist with dummy data address.
 	 * Although Invalidation does not use any data buffer. We do it for DMA.
 	 */

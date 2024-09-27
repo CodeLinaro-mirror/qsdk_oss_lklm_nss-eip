@@ -20,7 +20,7 @@
 /*
  * TODO: Set timeout equal to processing time for max queue reap.
  */
-#define EIP_TR_INVAL_TIMEOUT msecs_to_jiffies(10)
+#define EIP_TR_INVAL_TIMEOUT msecs_to_jiffies(1000)
 #define EIP_TR_SIZE (sizeof(struct eip_tr) + EIP_HW_CTX_SIZE_LARGE_BYTES + L1_CACHE_BYTES)
 #define EIP_TR_CTRL_CONTEXT_WORDS(x) (((x) & 0x3FU) << 8)
 #define EIP_TR_REDIR_EN (0x1U << 11) /* Redirect enable */
