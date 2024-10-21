@@ -25,15 +25,17 @@
  * eip_tk_dtls_encauth_cbc()
  *      Fill tokens for dtls outbound traffic.
  */
-uint8_t eip_tk_dtls_encauth_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr)
+uint8_t eip_tk_dtls_encauth_cbc(struct eip_tk *tk, struct eip_tk_params *tk_params)
 {
-	struct sk_buff *skb = eip_req2skb(eip_req);
+	struct eip_tr *tr = tk_params->tr;
+	struct sk_buff *skb = eip_req2skb(tk_params->eip_req);
 	struct eip_tr_dtls *dtls = &tr->dtls;
 
 	/*
 	 * TODO: Remove use of CB. Instead use structure in param to accommodate extra info.
 	 */
 	struct eip_tr_dtls_skb_cb *cb = EIP_TR_DTLS_SKB_CB(skb);
+	uint32_t *tk_hdr = &tk_params->tk_hdr;
 	uint8_t bypass_len = dtls->bypass_len;
 	uint8_t digest_len = tr->digest_len;
 	uint8_t pad_len = cb->pad_len;
@@ -80,10 +82,12 @@ uint8_t eip_tk_dtls_encauth_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t 
  * eip_tk_dtls_authdec_cbc()
  *      Fill tokens for dtls inbound traffic.
  */
-uint8_t eip_tk_dtls_authdec_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr)
+uint8_t eip_tk_dtls_authdec_cbc(struct eip_tk *tk, struct eip_tk_params *tk_params)
 {
-	struct sk_buff *skb = eip_req2skb(eip_req);
+	struct eip_tr *tr = tk_params->tr;
+	struct sk_buff *skb = eip_req2skb(tk_params->eip_req);
 	struct eip_tr_dtls *dtls = &tr->dtls;
+	uint32_t *tk_hdr = &tk_params->tk_hdr;
 	void *tail = skb->data + skb->len;
 	uint8_t digest_len = tr->digest_len;
 	uint8_t blk_len = tr->blk_len;
@@ -144,10 +148,12 @@ uint8_t eip_tk_dtls_authdec_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t 
  * eip_tk_dtls_encauth_gcm()
  *      Fill tokens for dtls outbound traffic.
  */
-uint8_t eip_tk_dtls_encauth_gcm(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr)
+uint8_t eip_tk_dtls_encauth_gcm(struct eip_tk *tk, struct eip_tk_params *tk_params)
 {
-	struct sk_buff *skb = eip_req2skb(eip_req);
+	struct eip_tr *tr = tk_params->tr;
+	struct sk_buff *skb = eip_req2skb(tk_params->eip_req);
 	struct eip_tr_dtls *dtls = &tr->dtls;
+	uint32_t *tk_hdr = &tk_params->tk_hdr;
 
 	uint8_t bypass_len = dtls->bypass_len;
 	uint8_t digest_len = tr->digest_len;
@@ -200,10 +206,12 @@ uint8_t eip_tk_dtls_encauth_gcm(struct eip_tk *tk, struct eip_tr *tr, eip_req_t 
  * eip_tk_dtls_authdec_gcm()
  *      Fill tokens for dtls inbound traffic.
  */
-uint8_t eip_tk_dtls_authdec_gcm(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr)
+uint8_t eip_tk_dtls_authdec_gcm(struct eip_tk *tk, struct eip_tk_params *tk_params)
 {
-	struct sk_buff *skb = eip_req2skb(eip_req);
+	struct eip_tr *tr = tk_params->tr;
+	struct sk_buff *skb = eip_req2skb(tk_params->eip_req);
 	struct eip_tr_dtls *dtls = &tr->dtls;
+	uint32_t *tk_hdr = &tk_params->tk_hdr;
 	uint8_t digest_len = tr->digest_len;
 	uint32_t *tk_word = tk->words;
 	uint16_t len, dlen;

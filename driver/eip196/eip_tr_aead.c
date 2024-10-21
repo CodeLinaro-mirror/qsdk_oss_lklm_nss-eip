@@ -528,13 +528,19 @@ size_t eip_tr_aead_get_svc_len(void)
  */
 int eip_tr_aead_encauth(struct eip_tr *tr, struct aead_request *req)
 {
+	struct eip_tk_params tk_params = {0};
 	struct eip_ctx *ctx = tr->ctx;
-	uint32_t tk_hdr = 0;
 	struct eip_sw_desc *sw;
 	struct eip_dma *dma;
 	struct eip_tk *tk;
 	uint32_t tk_words;
 	int status = 0;
+
+	/*
+	 * Fill TK params
+	 */
+	tk_params.tr = tr;
+	tk_params.eip_req = req;
 
 	/*
 	 * Allocate HW token.
@@ -548,7 +554,7 @@ int eip_tr_aead_encauth(struct eip_tr *tr, struct aead_request *req)
 	/*
 	 * Fill token for encryption and hmac.
 	 */
-	tk_words = EIP_TR_FILL_TOKEN(tr, &tr->crypto.enc, tk, req, &tk_hdr);
+	tk_words = eip_tr_fill_token(tk, &tr->crypto.enc, &tk_params);
 
 	dmac_clean_range(tk, tk + 1);
 
@@ -569,7 +575,7 @@ int eip_tr_aead_encauth(struct eip_tr *tr, struct aead_request *req)
 	sw->tk = tk;
 	sw->comp = &eip_tr_aead_enc_done;
 	sw->err_comp = &eip_tr_aead_enc_err;
-	sw->tk_hdr = tk_hdr;
+	sw->tk_hdr = tk_params.tk_hdr;
 	sw->tk_addr = virt_to_phys(tk);
 	sw->tr_addr_type = tr->tr_addr_type;
 	sw->tk_words = tk_words;
@@ -600,8 +606,8 @@ EXPORT_SYMBOL(eip_tr_aead_encauth);
  */
 int eip_tr_aead_authdec(struct eip_tr *tr, struct aead_request *req)
 {
+	struct eip_tk_params tk_params = {0};
 	struct eip_ctx *ctx = tr->ctx;
-	uint32_t tk_hdr = 0;
 	struct eip_sw_desc *sw;
 	struct eip_dma *dma;
 	struct eip_tk *tk;
@@ -618,9 +624,15 @@ int eip_tr_aead_authdec(struct eip_tr *tr, struct aead_request *req)
 	}
 
 	/*
+	 * Fill TK params
+	 */
+	tk_params.tr = tr;
+	tk_params.eip_req = req;
+
+	/*
 	 * Fill token for hmac and decryption.
 	 */
-	tk_words = EIP_TR_FILL_TOKEN(tr, &tr->crypto.dec, tk, req, &tk_hdr);
+	tk_words = eip_tr_fill_token(tk, &tr->crypto.dec, &tk_params);
 
 	dmac_clean_range(tk, tk + 1);
 
@@ -641,7 +653,7 @@ int eip_tr_aead_authdec(struct eip_tr *tr, struct aead_request *req)
 	sw->tk = tk;
 	sw->comp = &eip_tr_aead_dec_done;
 	sw->err_comp = &eip_tr_aead_dec_err;
-	sw->tk_hdr = tk_hdr;
+	sw->tk_hdr = tk_params.tk_hdr;
 	sw->tk_addr = virt_to_phys(tk);
 	sw->tr_addr_type = tr->tr_addr_type;
 	sw->tk_words = tk_words;

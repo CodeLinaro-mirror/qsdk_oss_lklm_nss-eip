@@ -20,9 +20,8 @@
 /*
  * TODO: Set timeout equal to processing time for max queue reap.
  */
-#define EIP_TR_INVAL_TIMEOUT msecs_to_jiffies(10)
+#define EIP_TR_INVAL_TIMEOUT msecs_to_jiffies(1000)
 #define EIP_TR_SIZE (sizeof(struct eip_tr) + EIP_HW_CTX_SIZE_LARGE_BYTES + L1_CACHE_BYTES)
-#define EIP_TR_FILL_TOKEN(tr, ops, tk, req, tk_hdr) ((ops)->tk_fill(tk, tr, req, tk_hdr)) /* Call Token fill function */
 #define EIP_TR_PRE_PROCESS(tr, ops, skb) ((ops)->pre(tr, skb)) /* Call pre processing function */
 #define EIP_TR_POST_PROCESS(tr, ops, skb) ((ops)->post(tr, skb)) /* Call post processing function */
 
@@ -240,6 +239,16 @@ static inline struct eip_tr *eip_tr_ref_unless_zero(struct eip_tr *tr)
 static inline void eip_tr_deref(struct eip_tr *tr)
 {
 	kref_put(&tr->ref, eip_tr_final);
+}
+
+/*
+ * eip_tr_fill_token()
+ *	Fill Tokens from transform record by calling token fill callback.
+ */
+static inline uint8_t eip_tr_fill_token(struct eip_tk *tk, struct eip_tr_ops *ops,
+		struct eip_tk_params *tk_params)
+{
+	return ops->tk_fill(tk, tk_params);
 }
 
 #endif /* __EIP_TR_H */

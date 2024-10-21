@@ -343,7 +343,8 @@ static inline bool eip_is_enabled(void)
 	return (soc_id == QCOM_ID_IPQ5321 || soc_id == QCOM_ID_IPQ5322 || soc_id == QCOM_ID_IPQ9570 ||
 			soc_id == QCOM_ID_IPQ9550 || soc_id == QCOM_ID_IPQ9574 ||
 			soc_id == QCOM_ID_IPQ9554 || soc_id == QCOM_ID_IPQ5332 ||
-			soc_id == QCOM_ID_IPQ5300);
+			soc_id == QCOM_ID_IPQ5300 || soc_id == QCOM_ID_IPQ5424 ||
+			soc_id == QCOM_ID_IPQ5404);
 }
 #endif
 
@@ -389,6 +390,17 @@ void eip_ctx_free(struct eip_ctx *ctx);
  * eip_tr
  */
 struct eip_tr *eip_tr_alloc(struct eip_ctx *ctx, struct eip_tr_info *info);
+
+/*
+ * eip_tr_disable
+ *	Disable transformation record.
+ *
+ * @datatypes
+ * struct eip_tr
+ *
+ * @param[in] tr	Pointer to the transformation record.
+ */
+void eip_tr_disable(struct eip_tr *tr);
 
 /*
  * eip_tr_free

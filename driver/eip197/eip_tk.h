@@ -80,28 +80,38 @@ struct eip_tk {
 	uint32_t words[16];                 /* Maximum Space for Control, IV and instruction */
 } __attribute__((aligned(L1_CACHE_BYTES)));
 
-typedef uint8_t (*eip_tk_proc_t)(struct eip_tk *tk, struct eip_tr *tr,
-		eip_req_t eip_req, uint32_t *tk_hdr);
+
+/*
+ * struct eip_tk_params
+ */
+struct eip_tk_params {
+	struct eip_tr *tr;	/* transform record */
+	eip_req_t eip_req;	/* request */
+	uint32_t tk_hdr;	/* token header */
+};
+
+typedef uint8_t (*eip_tk_proc_t)(struct eip_tk *tk, struct eip_tk_params *tk_params);
+
 
 /*
  * Fill token APIs.
  */
-uint8_t eip_tk_encauth_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr);
-uint8_t eip_tk_authdec_cbc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr);
-uint8_t eip_tk_encauth_ctr_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr);
-uint8_t eip_tk_authdec_ctr_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr);
+uint8_t eip_tk_encauth_cbc(struct eip_tk *tk, struct eip_tk_params *tk_params);
+uint8_t eip_tk_authdec_cbc(struct eip_tk *tk, struct eip_tk_params *tk_params);
+uint8_t eip_tk_encauth_ctr_rfc(struct eip_tk *tk, struct eip_tk_params *tk_params);
+uint8_t eip_tk_authdec_ctr_rfc(struct eip_tk *tk, struct eip_tk_params *tk_params);
 uint8_t eip_tk_digest(struct eip_tk *tk, struct eip_tr *tr, struct scatterlist *sg, uint32_t *tk_hdr,
 		uint8_t ipad_offst, uint8_t opad_offst);
-uint8_t eip_tk_auth(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr);
-uint8_t eip_tk_enc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr);
-uint8_t eip_tk_dec(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr);
-uint8_t eip_tk_enc_3des(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr);
-uint8_t eip_tk_dec_3des(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr);
-uint8_t eip_tk_enc_ctr_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr);
-uint8_t eip_tk_dec_ctr_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr);
-uint8_t eip_tk_encauth_gcm(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr);
-uint8_t eip_tk_authdec_gcm(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr);
-uint8_t eip_tk_encauth_gcm_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr);
-uint8_t eip_tk_authdec_gcm_rfc(struct eip_tk *tk, struct eip_tr *tr, eip_req_t eip_req, uint32_t *tk_hdr);
+uint8_t eip_tk_auth(struct eip_tk *tk, struct eip_tk_params *tk_params);
+uint8_t eip_tk_enc(struct eip_tk *tk, struct eip_tk_params *tk_params);
+uint8_t eip_tk_dec(struct eip_tk *tk, struct eip_tk_params *tk_params);
+uint8_t eip_tk_enc_3des(struct eip_tk *tk, struct eip_tk_params *tk_params);
+uint8_t eip_tk_dec_3des(struct eip_tk *tk, struct eip_tk_params *tk_params);
+uint8_t eip_tk_enc_ctr_rfc(struct eip_tk *tk, struct eip_tk_params *tk_params);
+uint8_t eip_tk_dec_ctr_rfc(struct eip_tk *tk, struct eip_tk_params *tk_params);
+uint8_t eip_tk_encauth_gcm(struct eip_tk *tk, struct eip_tk_params *tk_params);
+uint8_t eip_tk_authdec_gcm(struct eip_tk *tk, struct eip_tk_params *tk_params);
+uint8_t eip_tk_encauth_gcm_rfc(struct eip_tk *tk, struct eip_tk_params *tk_params);
+uint8_t eip_tk_authdec_gcm_rfc(struct eip_tk *tk, struct eip_tk_params *tk_params);
 
 #endif /* __EIP_TK_H */
