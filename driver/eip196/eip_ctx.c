@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -32,6 +32,40 @@ static const char *svcname[EIP_SVC_MAX] = {
 	[EIP_SVC_IPSEC] = "eip_ipsec",
 	[EIP_SVC_DTLS] = "eip_dtls",
 };
+
+/*
+ * eip_ctx_write_tr_stats()
+ *	Reset ctx & TR statistics.
+ */
+static ssize_t eip_ctx_write_tr_stats(struct file *filep, const char __user *ubuf, size_t count, loff_t *ppos)
+{
+	struct eip_ctx *ctx = filep->private_data;
+	struct eip_tr *tr;
+	uint32_t reset;
+
+	if (kstrtou32_from_user(ubuf, count, 0, &reset)) {
+		return -EINVAL;
+	}
+
+	if (reset != 0) {
+		return -EINVAL;
+	}
+
+	/*
+	 * Take write lock for TR stats
+	 */
+	write_lock_bh(&ctx->tr.lock);
+
+	memset(&ctx->tr.stats, 0, sizeof(ctx->tr.stats));
+
+	list_for_each_entry(tr, &ctx->tr.head, node) {
+		eip_tr_reset_stats(tr);
+	}
+
+	write_unlock_bh(&ctx->tr.lock);
+
+	return count;
+}
 
 /*
  * eip_ctx_read_tr_stats()
@@ -167,7 +201,8 @@ static struct file_operations ctx_stats_ops = {
 	.owner = THIS_MODULE,
 	.open = simple_open,
 	.llseek = default_llseek,
-	.read = eip_ctx_read_tr_stats
+	.read = eip_ctx_read_tr_stats,
+	.write = eip_ctx_write_tr_stats
 };
 
 /*

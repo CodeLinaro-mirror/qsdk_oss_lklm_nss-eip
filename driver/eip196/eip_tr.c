@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -183,6 +183,25 @@ static void eip_tr_inval(struct work_struct *work)
 }
 
 /*
+ * eip_tr_reset_stats()
+ *	Reset the summary stats.
+ *
+ * This funciton must be called with a write lock held
+ */
+void eip_tr_reset_stats(struct eip_tr *tr)
+{
+	int cpu;
+
+	/*
+	 * Iterate over each cpu statistics and reset to 0.
+	 */
+	for_each_possible_cpu(cpu) {
+		struct eip_tr_stats *sp = per_cpu_ptr(tr->stats_pcpu, cpu);
+		memset(sp, 0, sizeof(struct eip_tr_stats));
+	}
+}
+
+/*
  * eip_tr_get_stats()
  *	Update the summary stats.
  */
@@ -193,7 +212,7 @@ void eip_tr_get_stats(struct eip_tr *tr, struct eip_tr_stats *stats)
 	memset(stats, 0, sizeof(*stats));
 
 	/*
-	 * Interate over each cpu statistics and add it into the output stats.
+	 * Iterate over each cpu statistics and add it into the output stats.
 	 */
 	for_each_possible_cpu(cpu) {
 		const struct eip_tr_stats *sp = per_cpu_ptr(tr->stats_pcpu, cpu);
