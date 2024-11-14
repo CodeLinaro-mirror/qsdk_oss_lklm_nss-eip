@@ -283,20 +283,14 @@ drop:
  */
 static int eip_ipsec_proto_udp_rx(struct sock *sk, struct sk_buff *skb)
 {
-	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
 	size_t hdr_len = sizeof(struct udphdr) +  sizeof(struct ip_esp_hdr);
 	struct ip_esp_hdr *esph;
-
-	/*
-	 * Socket has to be of type UDP_ENCAP_ESPINUDP .
-	 */
-	BUG_ON(udp_sk(sk)->encap_type != UDP_ENCAP_ESPINUDP);
 
 	/*
 	 * NAT-keepalive packet has udphdr & one byte payload (rfc3948).
 	 */
 	if (skb->len < hdr_len) {
-		goto non_esp_pkt;
+		return 1;
 	}
 
 	/*
@@ -321,7 +315,7 @@ static int eip_ipsec_proto_udp_rx(struct sock *sk, struct sk_buff *skb)
 	 */
 	esph = (struct ip_esp_hdr *)(skb_transport_header(skb) + sizeof(struct udphdr));
 	if (ntohl(esph->spi) == EIP_IPSEC_PROTO_NON_ESP_MARKER) {
-		goto non_esp_pkt;
+		return 1;
 	}
 
 	/*
@@ -329,10 +323,6 @@ static int eip_ipsec_proto_udp_rx(struct sock *sk, struct sk_buff *skb)
 	 */
 	skb_set_transport_header(skb, sizeof(struct udphdr));
 	return eip_ipsec_proto_esp4_rx(skb);
-
-non_esp_pkt:
-	BUG_ON(!drv->sk_encap_rcv);
-	return drv->sk_encap_rcv(sk, skb);
 }
 
 /*
@@ -342,7 +332,6 @@ non_esp_pkt:
 bool eip_ipsec_proto_vp_rx(struct ppe_vp_cb_info *info, void *cb_data)
 {
 	struct sk_buff *skb = info->skb;
-	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
 	struct eip_ipsec_dev *eid = cb_data;
 	struct eip_ipsec_dev_stats *dev_stats;
 	struct iphdr *iph;
@@ -373,7 +362,7 @@ bool eip_ipsec_proto_vp_rx(struct ppe_vp_cb_info *info, void *cb_data)
 	if (iph->protocol == IPPROTO_UDP) {
 		int ret;
 
-		ret = eip_ipsec_proto_udp_rx(drv->sk, skb);
+		ret = eip_ipsec_proto_udp_rx(NULL, skb);
 
 		/*
 		 * Send the NONESP packet to Linux
@@ -467,30 +456,13 @@ bool eip_ipsec_proto_udp_sock_override(struct eip_ipsec_tuple *sa_tuple)
 	}
 
 	if (READ_ONCE(up->encap_rcv) != eip_ipsec_proto_udp_rx) {
-		drv->sk_encap_rcv = xchg(&up->encap_rcv, eip_ipsec_proto_udp_rx);
-		drv->sk = sk;
+		xchg(&up->encap_rcv, eip_ipsec_proto_udp_rx);
 		pr_debug("%px: Overriden socket encap handler\n", up);
 	}
 
 	rcu_read_unlock();
 
 	return true;
-}
-
-/*
- * eip_ipsec_proto_udp_sock_restore()
- */
-void eip_ipsec_proto_udp_sock_restore(void)
-{
-	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
-
-	if (drv->sk) {
-		struct udp_sock *up = udp_sk(drv->sk);
-		xchg(&up->encap_rcv, drv->sk_encap_rcv);
-		drv->sk_encap_rcv = NULL;
-		drv->sk = NULL;
-		pr_debug("%px: Released socket encap handler\n", up);
-	}
 }
 
 /*

@@ -248,7 +248,6 @@ void __exit eip_ipsec_exit_module(void)
 	/*
 	 * Restore protocol handler.
 	 */
-	eip_ipsec_proto_udp_sock_restore();
 	eip_ipsec_proto_esp_deinit();
 
 	eip_ctx_free(drv->ctx);
