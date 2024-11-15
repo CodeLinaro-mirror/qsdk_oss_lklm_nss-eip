@@ -435,7 +435,7 @@ static inline int eip_crypto_ahash_map_sg(struct eip_crypto_ahash_tfm_ctx *actx)
 		pages[pg_cnt] = vmalloc_to_page(start + len);
 
 	return sg_alloc_table_from_pages(&actx->sgt, pages, pg_cnt, 0,
-			actx->data_len, GFP_KERNEL);
+			actx->data_len, GFP_ATOMIC);
 }
 
 /*
