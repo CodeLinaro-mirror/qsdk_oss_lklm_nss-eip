@@ -280,6 +280,7 @@ static void eip_ipsec_dev_host_tx(struct eip_ipsec_sa *sa, struct sk_buff *skb, 
 	if (type == ETH_P_IPV6) {
 		memset(IP6CB(skb), 0, sizeof(*IP6CB(skb)));
 		IP6CB(skb)->flags |= IP6SKB_XFRM_TRANSFORMED;
+		skb->ignore_df = 1;
 		ip6_local_out(&init_net, NULL, skb);
 		return;
 	}
