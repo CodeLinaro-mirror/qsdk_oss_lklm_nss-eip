@@ -249,8 +249,8 @@ void eip_tr_dtls_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, const
 	 * DTLS specific fields for EIP96.
 	 */
 	*crypt_words++ = EIP_TR_DTLS_VERSION(dtls->version);	/* Version */
-	*crypt_words++ = EIP_TR_DTLS_EPOCH(dtls->epoch); /* b0-15 is epoch & B16-31 is Sequence */
 	*crypt_words++ = 0x0;	/* Sequence number */
+	*crypt_words++ = EIP_TR_DTLS_EPOCH(ntohs(dtls->epoch)); /* b0-15 is Sequence & B16-31 is epoch */
 
 	/*
 	 * Sequence update should not be done when window check is disabled.

@@ -375,8 +375,8 @@ void eip_tr_dtls_enc_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, const
 	 * - Sequence number start (2 words/48bit sequence)
 	 */
 	*crypt_words++ = EIP_TR_DTLS_VERSION(dtls->version);
-	*crypt_words++ = EIP_TR_DTLS_EPOCH(dtls->epoch) | EIP_TR_DTLS_SEQ_START;
-	*crypt_words++ = 0x0;
+	*crypt_words++ = EIP_TR_DTLS_SEQ_START;
+	*crypt_words++ = EIP_TR_DTLS_EPOCH(ntohs(dtls->epoch));
 	seq_offset = crypt_words - tr_words - 2;
 
 	/*
