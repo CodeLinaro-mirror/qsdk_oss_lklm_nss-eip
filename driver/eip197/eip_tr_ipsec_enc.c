@@ -20,7 +20,6 @@
 #include <linux/kref.h>
 #include <linux/slab.h>
 #include <linux/completion.h>
-#include <asm/cacheflush.h>
 
 #include "eip_priv.h"
 

@@ -22,7 +22,6 @@
 #include <crypto/aead.h>
 #include <linux/slab.h>
 #include <linux/completion.h>
-#include <asm/cacheflush.h>
 
 #include <crypto/md5.h>
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
@@ -313,7 +312,7 @@ static bool eip_tr_ipsec_aes_cbc_init(struct eip_tr *tr, struct eip_tr_info *inf
 	 * Flush record memory.
 	 * Driver must not make any update in transform records words after this.
 	 */
-	dmac_clean_range(tr->hw_words, tr->hw_words + EIP_HW_CTX_SIZE_LARGE_WORDS);
+	eip_dmac_clean_range(tr->hw_words, tr->hw_words + EIP_HW_CTX_SIZE_LARGE_WORDS);
 
 	/*
 	 * HMAC Inner and Outer Digest Precalculation
@@ -368,7 +367,7 @@ static bool eip_tr_ipsec_des_cbc_init(struct eip_tr *tr, struct eip_tr_info *inf
 	 * Flush record memory.
 	 * Driver must not make any update in transform records words after this.
 	 */
-	dmac_clean_range(tr->hw_words, tr->hw_words + EIP_HW_CTX_SIZE_LARGE_WORDS);
+	eip_dmac_clean_range(tr->hw_words, tr->hw_words + EIP_HW_CTX_SIZE_LARGE_WORDS);
 
 	/*
 	 * HMAC Inner and Outer Digest Precalculation
@@ -455,7 +454,7 @@ static bool eip_tr_ipsec_aes_gcm_init(struct eip_tr *tr, struct eip_tr_info *inf
 	 * Flush record memory.
 	 * Driver must not make any update in transform records words after this.
 	 */
-	dmac_clean_range(tr->hw_words, tr->hw_words + EIP_HW_CTX_SIZE_LARGE_WORDS);
+	eip_dmac_clean_range(tr->hw_words, tr->hw_words + EIP_HW_CTX_SIZE_LARGE_WORDS);
 
 	return true;
 }
@@ -500,7 +499,7 @@ static bool eip_tr_ipsec_null_hmac_init(struct eip_tr *tr, struct eip_tr_info *i
 	 * Flush record memory.
 	 * Driver must not make any update in transform records words after this.
 	 */
-	dmac_clean_range(tr->hw_words, tr->hw_words + EIP_HW_CTX_SIZE_LARGE_WORDS);
+	eip_dmac_clean_range(tr->hw_words, tr->hw_words + EIP_HW_CTX_SIZE_LARGE_WORDS);
 
 	/*
 	 * HMAC Inner and Outer Digest Precalculation
