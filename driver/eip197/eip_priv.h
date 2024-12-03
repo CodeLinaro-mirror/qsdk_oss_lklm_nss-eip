@@ -18,6 +18,7 @@
 #define __EIP_PRIV_H
 
 #include <linux/platform_device.h>
+#include <asm/cacheflush.h>
 #include <linux/ip.h>
 #include "eip.h"
 #include "eip_dma.h"
@@ -131,5 +132,50 @@ struct eip_pdev {
 extern struct eip_drv eip_drv_g;		/* Global Driver object */
 extern uint32_t eip_dma_rx_napi_weight;		/* Global dma rx napi budget */
 extern uint32_t eip_dma_tx_compl_napi_weight;	/* Global dma tx completion napi budget */
+
+/*
+ * Wrapper function for cache maintenance API.
+ */
+static inline void eip_dmac_inv_range(const void *start, const void *end)
+{
+#ifndef CONFIG_IO_COHERENCY
+	dmac_inv_range(start, end);
+#endif
+}
+
+static inline void eip_dmac_inv_range_no_dsb(const void *start, const void *end)
+{
+#ifndef CONFIG_IO_COHERENCY
+	dmac_inv_range_no_dsb(start, end);
+#endif
+}
+
+static inline void eip_dmac_clean_range(const void *start, const void *end)
+{
+#ifndef CONFIG_IO_COHERENCY
+	dmac_clean_range(start, end);
+#endif
+}
+
+static inline void eip_dmac_clean_range_no_dsb(const void *start, const void *end)
+{
+#ifndef CONFIG_IO_COHERENCY
+	dmac_clean_range_no_dsb(start, end);
+#endif
+}
+
+static inline void eip_dmac_flush_range_no_dsb(const void *start, const void *end)
+{
+#ifndef CONFIG_IO_COHERENCY
+	dmac_flush_range_no_dsb(start, end);
+#endif
+}
+
+static inline void eip_dsb(void)
+{
+#ifndef CONFIG_IO_COHERENCY
+	dsb(st);
+#endif
+}
 
 #endif /* __EIP_PRIV_H */

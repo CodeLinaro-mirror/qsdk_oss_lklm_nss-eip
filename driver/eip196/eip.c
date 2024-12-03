@@ -25,7 +25,6 @@
 #include <linux/slab.h>
 #include <linux/of_address.h>
 #include <linux/nvmem-consumer.h>
-#include <asm/cacheflush.h>
 
 #include <crypto/md5.h>
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))

@@ -21,7 +21,6 @@
 #include <linux/crypto.h>
 #include <linux/slab.h>
 #include <linux/completion.h>
-#include <asm/cacheflush.h>
 
 #include "eip_priv.h"
 
@@ -187,7 +186,7 @@ int eip_tr_ipsec_dec(struct eip_tr *tr, struct sk_buff *skb)
 	 * Fill token for decryption and hash for ipsec
 	 */
 	tk_words = eip_tr_fill_token(tk, &tr->ipsec.ops, &tk_params);
-	dmac_clean_range(tk, tk + 1);
+	eip_dmac_clean_range(tk, tk + 1);
 
 	dma_tx = skb_is_nonlinear(skb) ? eip_dma_tx_nonlinear_skb : eip_dma_tx_linear_skb;
 

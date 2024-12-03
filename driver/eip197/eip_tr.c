@@ -23,7 +23,6 @@
 #include <linux/cache.h>
 #include <linux/debugfs.h>
 #include <linux/slab.h>
-#include <asm/cacheflush.h>
 #include <crypto/aes.h>
 
 #include "eip_priv.h"

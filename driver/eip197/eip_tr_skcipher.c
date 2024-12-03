@@ -21,7 +21,6 @@
 #include <linux/crypto.h>
 #include <linux/slab.h>
 #include <linux/completion.h>
-#include <asm/cacheflush.h>
 
 #include <crypto/md5.h>
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
@@ -175,7 +174,7 @@ bool eip_tr_skcipher_init(struct eip_tr *tr, struct eip_tr_info *info, const str
 	 * Driver must not make any update in transform records words after this.
 	 * EIP197 will do ipad/opad update.
 	 */
-	dmac_clean_range(tr->hw_words, tr->hw_words+ EIP_HW_CTX_SIZE_SMALL_BYTES);
+	eip_dmac_clean_range(tr->hw_words, tr->hw_words+ EIP_HW_CTX_SIZE_SMALL_BYTES);
 
 	return true;
 }
@@ -356,7 +355,7 @@ int eip_tr_skcipher_enc(struct eip_tr *tr, struct skcipher_request *req)
 	 */
 	tk_words = eip_tr_fill_token(tk, &tr->crypto.enc, &tk_params);
 
-	dmac_clean_range(tk, tk + 1);
+	eip_dmac_clean_range(tk, tk + 1);
 
 	/*
 	 * Allocate SW descriptor.
@@ -434,7 +433,7 @@ int eip_tr_skcipher_dec(struct eip_tr *tr, struct skcipher_request *req)
 	 */
 	tk_words = eip_tr_fill_token(tk, &tr->crypto.dec, &tk_params);
 
-	dmac_clean_range(tk, tk + 1);
+	eip_dmac_clean_range(tk, tk + 1);
 
 	/*
 	 * Allocate SW descriptor.
