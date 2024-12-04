@@ -155,7 +155,7 @@ static int eip_ipsec_xfrm_v6_output(struct net *net, struct sock *sk, struct sk_
 {
 	struct xfrm_state *xs = skb_dst(skb)->xfrm;
 	struct net_device *dev;
-	int ret = 0;
+	int mtu, ret = 0;
 
 	/*
 	 * No xfrm_state associated; Drop
@@ -176,6 +176,16 @@ static int eip_ipsec_xfrm_v6_output(struct net *net, struct sock *sk, struct sk_
 	BUG_ON(!dev);
 
 	skb->dev = dev;
+
+	/*
+         * Reject the packets if greater than MTU.
+         */
+        mtu = READ_ONCE(dev->mtu);
+	if (unlikely(!skb->ignore_df && skb->len > mtu)) {
+		pr_debug("%px: V6 inner packet size(%d) greater than MTU(%d\n)", skb, skb->len, mtu);
+		icmpv6_send(skb, ICMPV6_PKT_TOOBIG, 0, mtu);
+		goto drop;
+        }
 
 	/*
 	 * Call the Post routing hooks.
