@@ -24,6 +24,7 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/of_address.h>
+#include <linux/nvmem-consumer.h>
 #include <asm/cacheflush.h>
 
 #include <crypto/md5.h>
@@ -61,12 +62,42 @@ static int eip_device_probe(struct platform_device *pdev)
 {
 	struct device_node *np = of_node_get(pdev->dev.of_node);
 	struct eip_drv *drv = &eip_drv_g;
+	struct nvmem_cell *eip_nvmem;
 	struct resource res = {0};
 	struct eip_pdev *ep;
 	uint32_t reg_offset;
 	void __iomem *vaddr;
+	u8 *disable_status;
 	phys_addr_t paddr;
+	size_t len;
 	int err;
+
+	/*
+	 * If nvmem-cells is present on eip node in DTSI, check the
+	 * QFPROM fuses to determine if eip is disabled.
+	 */
+	eip_nvmem = of_nvmem_cell_get(pdev->dev.of_node, NULL);
+	if (IS_ERR(eip_nvmem)) {
+		if (PTR_ERR(eip_nvmem) == -EPROBE_DEFER) {
+			pr_err("%px: Failed to read nvmem cell\n", pdev);
+			return -EPROBE_DEFER;
+		}
+	} else {
+		disable_status = nvmem_cell_read(eip_nvmem, &len);
+		nvmem_cell_put(eip_nvmem);
+		if (IS_ERR(disable_status)) {
+			pr_err("%px: Error reading qfprom efuse\n", pdev);
+			return PTR_ERR(disable_status);
+		}
+
+		if ((unsigned int)(*disable_status) == 1) {
+			pr_err("%px: EIP is disabled in qfprom efuse\n", pdev);
+			kfree(disable_status);
+			return -ENODEV;
+		}
+
+		kfree(disable_status);
+	}
 
 	if (of_property_read_u32(np, "reg_offset", &reg_offset) < 0) {
 		pr_err("%px: Failed to read register offset\n", pdev);
