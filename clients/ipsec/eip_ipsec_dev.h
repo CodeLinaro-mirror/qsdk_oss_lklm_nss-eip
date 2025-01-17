@@ -54,6 +54,8 @@ struct eip_ipsec_dev_stats {
 	uint64_t rx_bytes;		/* Decap Bytes received */
 	uint64_t rx_fail;		/* Decapsulation failure */
 	uint64_t rx_fail_sa;		/* sa not found failure */
+	uint64_t bypass_rps;		/* Rx packet steering not required */
+	uint64_t fail_rps;		/* Rx Packet Steering error */
 };
 
 /*
@@ -63,11 +65,14 @@ struct eip_ipsec_dev {
 	struct list_head node;		/* Node in Global device list */
 	struct net_device *ndev;	/* Linux netdevice representation for this device */
 	int64_t devid;			/* Device ID */
+	uint8_t rps_num_cores;		/* Number of cores for Receive Packet Steering */
 	struct list_head enc_sa;	/* Encap SA list protected by RCU read lock and spinlock for modification */
 	struct list_head dec_sa;	/* Decap SA list protected by RCU read lock and spinlock for modification */
 	struct eip_ipsec_dev_stats __percpu *stats_pcpu;	/* Device statistics */
 	struct dentry *dentry;		/* Driver debugfs dentry */
+	uint8_t rps_map[NR_CPUS];	/* Mapping for Receive Packet Steering */
 	struct netfn_pkt_steer tx_steer;	/* Tx data packet steering handle. */
+	struct netfn_pkt_steer rx_steer;	/* Rx data packet steering handle. */
 
 #if defined(EIP_IPSEC_VP_SUPP)
 	ppe_vp_num_t vp_num;		/* VP number associated with this netdevice. */
