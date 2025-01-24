@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -46,6 +46,14 @@ MODULE_PARM_DESC(eip_ipsec_core_id, "CPU id for IPsec processing");
 bool disable_v4_offload = false;
 module_param(disable_v4_offload, bool, S_IRUSR | S_IWUSR | S_IRGRP);
 MODULE_PARM_DESC(disable_v4_offload, "Disable ipv4 acceleration");
+
+ulong eip_fwd_core_mask = 0x7;	/* 0111 represents core 0, 1 & 2 */
+module_param(eip_fwd_core_mask, ulong, S_IRUSR | S_IWUSR | S_IRGRP);
+MODULE_PARM_DESC(eip_fwd_core_mask, "Core mask to be used for receiving plaintext");
+
+int eip_pkt_steer_qlen = EIP_IPSEC_PKT_STEER_FIFO_LEN;
+module_param(eip_pkt_steer_qlen, int, S_IRUSR | S_IWUSR | S_IRGRP);
+MODULE_PARM_DESC(eip_pkt_steer_qlen, "FIFO length required for packet steer queues");
 
 /*
  * eip_ipsec_ppe_init()
@@ -199,6 +207,12 @@ int __init eip_ipsec_init_module(void)
 		pr_err("%px: Failed to initialize xfrm offload, error(%d)\n", drv, err);
 		goto fail_ppe;
 	}
+
+	/*
+	 * Enable transmit steer when ppe-eip inline channel is not available.
+	 * With inline channel hardware supports multi-core receive.
+	 */
+	drv->tx_steer_en = !eip_is_inline_supported();
 
 	/*
 	 * XFRM offload initialization.

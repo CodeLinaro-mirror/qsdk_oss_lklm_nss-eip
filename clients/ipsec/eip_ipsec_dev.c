@@ -124,6 +124,8 @@ static ssize_t eip_ipsec_dev_read(struct file *fp, char __user *ubuf, size_t sz,
 	len += snprintf(buf + len, max_len - len, "\tTx Error: %llu\n", stats.tx_fail);
 	len += snprintf(buf + len, max_len - len, "\tTx Fail SA: %llu\n", stats.tx_fail_sa);
 	len += snprintf(buf + len, max_len - len, "\tTx Fail SA (VP Exception): %llu\n", stats.tx_fail_vp_sa);
+	len += snprintf(buf + len, max_len - len, "\tTPS bypass: %llu\n", stats.bypass_tps);
+	len += snprintf(buf + len, max_len - len, "\tTPS fail: %llu\n", stats.fail_tps);
 
 	len += snprintf(buf + len, max_len - len, "Device Decapsulation Statistics:\n");
 	len += snprintf(buf + len, max_len - len, "\tRx packets: %llu\n", stats.rx_pkts);
@@ -155,8 +157,22 @@ static ssize_t eip_ipsec_dev_read(struct file *fp, char __user *ubuf, size_t sz,
  */
 static int eip_ipsec_dev_open(struct net_device *ndev)
 {
+	struct eip_ipsec_dev *eid = netdev_priv(ndev);
+	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
+
+	/*
+	 * Enable tx pkt steering.
+	 */
+	if (drv->tx_steer_en && !netfn_pkt_steer_enable(&eid->tx_steer)) {
+		pr_warn("%px: Unable to enable tx packet steering.\n", eid);
+		goto fail_tx_steer;
+	}
+
 	netif_start_queue(ndev);
 	return 0;
+
+fail_tx_steer:
+	return -ENOMEM;
 }
 
 /*
@@ -165,7 +181,18 @@ static int eip_ipsec_dev_open(struct net_device *ndev)
  */
 static int eip_ipsec_dev_stop(struct net_device *ndev)
 {
+	struct eip_ipsec_dev *eid = netdev_priv(ndev);
+	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
+
 	netif_stop_queue(ndev);
+
+	/*
+	 * Disable the tx steer.
+	 */
+	if (drv->tx_steer_en) {
+		netfn_pkt_steer_disable(&eid->tx_steer);
+	}
+
 	return 0;
 }
 
@@ -669,6 +696,57 @@ sa_fail:
 }
 
 /*
+ * eip_ipsec_dev_tx_steer_cb()
+ *	Tx packet steering callback
+ */
+static void eip_ipsec_dev_tx_steer_cb(struct netfn_pkt_steer *tx_steer, struct sk_buff_head *q_head)
+{
+	struct eip_ipsec_dev *eid = container_of(tx_steer, struct eip_ipsec_dev, tx_steer);
+	struct net_device *ndev = eid->ndev;
+	struct sk_buff *skb, *nskb;
+
+	skb_queue_walk_safe(q_head, skb, nskb) {
+		__skb_unlink(skb, q_head);
+		eip_ipsec_dev_tx(skb, ndev);
+	}
+}
+
+/*
+ * eip_ipsec_dev_tx_steer()
+ *	Steer plaintext packet to desired core.
+ */
+static netdev_tx_t eip_ipsec_dev_tx_steer(struct sk_buff *skb, struct net_device *ndev)
+{
+	struct eip_ipsec_dev *eid = netdev_priv(ndev);
+	struct eip_ipsec_dev_stats *dev_stats;
+
+	dev_stats = this_cpu_ptr(eid->stats_pcpu);
+
+	/*
+	 * Do not steer flows coming on IPsec core.
+	 */
+	if (smp_processor_id() == eip_ipsec_core_id) {
+		dev_stats->bypass_tps++;
+		return eip_ipsec_dev_tx(skb, ndev);
+	}
+
+	/*
+	 * Map the packet to desired core.
+	 */
+	if (!netfn_pkt_steer_send(&eid->tx_steer, skb, eip_ipsec_core_id)) {
+                dev_stats->fail_tps++;
+                goto steer_fail;
+        }
+
+	return NETDEV_TX_OK;
+
+steer_fail:
+	dev_stats->tx_fail++;
+	consume_skb(skb);
+	return NETDEV_TX_OK;
+}
+
+/*
  * eip_ipsec_dev_free()
  *	Free netdevice memory.
  */
@@ -692,6 +770,13 @@ static void eip_ipsec_dev_free(struct net_device *ndev)
 		debugfs_remove_recursive(eid->dentry);
 	}
 
+	/*
+	 * Deinit pkt steer objects.
+	 */
+	if (drv->tx_steer_en) {
+		netfn_pkt_steer_deinit(&eid->tx_steer);
+	}
+
 	free_netdev(ndev);
 	eip_ipsec_drv_deref(drv);
 	pr_info("%px: IPsec device freed\n", ndev);
@@ -700,7 +785,7 @@ static void eip_ipsec_dev_free(struct net_device *ndev)
 /*
  * IPsec device callbacks.
  */
-static const struct net_device_ops ipsec_dev_ops = {
+static struct net_device_ops ipsec_dev_ops = {
 	.ndo_open = eip_ipsec_dev_open,
 	.ndo_stop = eip_ipsec_dev_stop,
 	.ndo_start_xmit = eip_ipsec_dev_tx,
@@ -723,6 +808,8 @@ const struct file_operations eip_ipsec_dev_file_ops = {
  */
 static void eip_ipsec_dev_setup(struct net_device *ndev)
 {
+	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
+
 	ndev->addr_len = ETH_ALEN;
 	ndev->mtu = ETH_DATA_LEN - EIP_IPSEC_DEV_MAX_HDR_LEN;
 
@@ -732,6 +819,14 @@ static void eip_ipsec_dev_setup(struct net_device *ndev)
 	ndev->type = EIP_IPSEC_DEV_ARPHRD;
 	ndev->ethtool_ops = NULL; /* TODO:  Can we use ethtool interface for device statistics */
 	ndev->header_ops = NULL;
+
+	/*
+	 * Override ndo_start_xmit handler when tx packet steering is enabled.
+	 */
+	if (drv->tx_steer_en) {
+		ipsec_dev_ops.ndo_start_xmit = eip_ipsec_dev_tx_steer;
+	}
+
 	ndev->netdev_ops = &ipsec_dev_ops;
 	ndev->priv_destructor = eip_ipsec_dev_free;
 
@@ -872,6 +967,7 @@ EXPORT_SYMBOL(eip_ipsec_dev_del);
 struct net_device *eip_ipsec_dev_add(void)
 {
 	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
+	struct netfn_pkt_steer_info info = {0};
 	struct eip_ipsec_dev *eid;
 	struct net_device *ndev;
 	int status;
@@ -917,6 +1013,20 @@ struct net_device *eip_ipsec_dev_add(void)
 		pr_err("%px: Failed to register netdevce, error(%d)\n", ndev, status);
 		rtnl_unlock();
 		return NULL;
+	}
+
+	/*
+	 * Allocate tx data pkt steering object.
+	 */
+	if (drv->tx_steer_en) {
+		info.dev = ndev;
+		info.weight = 1;
+		info.fifo_len = eip_pkt_steer_qlen;
+		info.cb = eip_ipsec_dev_tx_steer_cb;
+		info.budget = EIP_IPSEC_TX_STEER_BUDGET;
+		info.sender_mask = *(to_cpumask(&eip_fwd_core_mask));
+		cpumask_set_cpu(eip_ipsec_core_id, &info.receiver_mask);
+		netfn_pkt_steer_init(&eid->tx_steer, &info);
 	}
 
 	/*

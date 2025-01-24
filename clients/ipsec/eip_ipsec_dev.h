@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,6 +16,8 @@
 
 #ifndef __EIP_IPSEC_DEV_H
 #define __EIP_IPSEC_DEV_H
+
+#include <netfn_pkt_steer.h>
 
 #define EIP_IPSEC_DEV_MAX_HDR_LEN 96U
 #define EIP_IPSEC_DEV_MAX_HEADROOM 128U		/* Size of the buffer headroom. */
@@ -40,6 +42,8 @@ struct eip_ipsec_dev_stats {
 	uint64_t tx_fail;		/* Encapsulation failure */
 	uint64_t tx_fail_sa;		/* sa not found failure */
 	uint64_t tx_fail_vp_sa;		/* sa not found failure during VP exception */
+	uint64_t bypass_tps;		/* Tx packet steering not required */
+	uint64_t fail_tps;		/* Tx Packet Steering error */
 
 	/*
 	 * Rx is for decapsulation packets.
@@ -52,7 +56,6 @@ struct eip_ipsec_dev_stats {
 	uint64_t rx_fail_sa;		/* sa not found failure */
 };
 
-
 /*
  * IPsec device object.
  */
@@ -64,6 +67,7 @@ struct eip_ipsec_dev {
 	struct list_head dec_sa;	/* Decap SA list protected by RCU read lock and spinlock for modification */
 	struct eip_ipsec_dev_stats __percpu *stats_pcpu;	/* Device statistics */
 	struct dentry *dentry;		/* Driver debugfs dentry */
+	struct netfn_pkt_steer tx_steer;	/* Tx data packet steering handle. */
 
 #if defined(EIP_IPSEC_VP_SUPP)
 	ppe_vp_num_t vp_num;		/* VP number associated with this netdevice. */
