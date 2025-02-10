@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -449,6 +449,7 @@ int eip_tr_genkey(struct eip_tr *tr, struct eip_tr_info *info, uint8_t *key, uin
         struct skcipher_request *req = NULL;
         uint8_t iv[AES_BLOCK_SIZE] = {0};
         struct scatterlist sg[1];
+	uint8_t *genkey;
         int err = 0;
 
 	/*
@@ -475,7 +476,17 @@ int eip_tr_genkey(struct eip_tr *tr, struct eip_tr_info *info, uint8_t *key, uin
 	err = crypto_sync_skcipher_setkey(sk_tfm, base->cipher.key_data, base->cipher.key_len);
 	if (err) {
 		pr_err("%X: Failed to set the key for skcipher: ctr(aes-generic)\n", err);
-		goto fail2;
+		goto fail3;
+	}
+
+	/*
+	 * Allocate memory for auth key
+	 */
+	genkey = kzalloc(len, GFP_KERNEL);
+	if (!genkey) {
+		pr_warn("%px: Unable to allocate memory for auth key\n", req);
+		err = -ENOMEM;
+		goto fail3;
 	}
 
 	/*
@@ -485,10 +496,10 @@ int eip_tr_genkey(struct eip_tr *tr, struct eip_tr_info *info, uint8_t *key, uin
 	if (!req) {
 		pr_warn("%px: Failed to allocate req\n", req);
 		err = -ENOMEM;
-		goto fail1;
+		goto fail2;
 	}
 
-	sg_init_one(sg, key, len);
+	sg_init_one(sg, genkey, len);
 	skcipher_request_set_sync_tfm(req, sk_tfm);
 	skcipher_request_set_callback(req, 0, NULL, NULL);
 	skcipher_request_set_crypt(req, sg, sg, len, iv);
@@ -499,9 +510,12 @@ int eip_tr_genkey(struct eip_tr *tr, struct eip_tr_info *info, uint8_t *key, uin
 		goto fail1;
 	}
 
+	memcpy(key, genkey, len);
 fail1:
 	kfree(req);
 fail2:
+	kfree(genkey);
+fail3:
 	crypto_free_sync_skcipher(sk_tfm);
         return err;
 }
