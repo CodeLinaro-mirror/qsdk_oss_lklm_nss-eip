@@ -187,7 +187,43 @@ static const struct eip_svc_entry aead_algo_list[] = {
 		.ctrl_words_0 = EIP_HW_CTX_WITH_KEY | EIP_HW_CTX_ALGO_GHASH |
 			EIP_HW_CTX_AUTH_MODE_GMAC,
 		.ctrl_words_1 = EIP_HW_CTX_CIPHER_MODE_GCM,
-	}
+	},
+	{
+		.name = "eip-3des-cbc-md5-hmac",
+		.enc_tk_fill = &eip_tk_encauth_cbc,
+		.dec_tk_fill = &eip_tk_authdec_cbc,
+		.tr_init = eip_tr_aead_init,
+		.auth_block_len = MD5_HMAC_BLOCK_SIZE,
+		.auth_digest_len = MD5_DIGEST_SIZE,
+		.auth_state_len = EIP_HW_PAD_KEYSZ_MD5,
+		.ctrl_words_0 = EIP_HW_CTX_WITH_KEY | EIP_HW_CTX_ALGO_MD5 |
+			EIP_HW_CTX_AUTH_MODE_HMAC | EIP_HW_CTX_ALGO_3DES,
+		.ctrl_words_1 = EIP_HW_CTX_CIPHER_MODE_CBC,
+	},
+	{
+		.name = "eip-3des-cbc-sha1-hmac",
+		.enc_tk_fill = &eip_tk_encauth_cbc,
+		.dec_tk_fill = &eip_tk_authdec_cbc,
+		.tr_init = eip_tr_aead_init,
+		.auth_block_len = SHA1_BLOCK_SIZE,
+		.auth_digest_len = SHA1_DIGEST_SIZE,
+		.auth_state_len = EIP_HW_PAD_KEYSZ_SHA1,
+		.ctrl_words_0 = EIP_HW_CTX_WITH_KEY | EIP_HW_CTX_ALGO_SHA1 |
+			EIP_HW_CTX_AUTH_MODE_HMAC | EIP_HW_CTX_ALGO_3DES,
+		.ctrl_words_1 = EIP_HW_CTX_CIPHER_MODE_CBC,
+	},
+	{
+		.name = "eip-3des-cbc-sha256-hmac",
+		.enc_tk_fill = &eip_tk_encauth_cbc,
+		.dec_tk_fill = &eip_tk_authdec_cbc,
+		.tr_init = eip_tr_aead_init,
+		.auth_block_len = SHA256_BLOCK_SIZE,
+		.auth_digest_len = SHA256_DIGEST_SIZE,
+		.auth_state_len = EIP_HW_PAD_KEYSZ_SHA256,
+		.ctrl_words_0 = EIP_HW_CTX_WITH_KEY | EIP_HW_CTX_ALGO_SHA256 |
+			EIP_HW_CTX_AUTH_MODE_HMAC | EIP_HW_CTX_ALGO_3DES,
+		.ctrl_words_1 = EIP_HW_CTX_CIPHER_MODE_CBC,
+	},
 };
 
 /*
@@ -369,6 +405,11 @@ bool eip_tr_aead_init(struct eip_tr *tr, struct eip_tr_info *info, const struct 
 	tr->ctrl_words[1] = algo->ctrl_words_1;
 	ctx_sz = tr_words - tr->hw_words - EIP_HW_MAX_CTRL;
 
+	if (tr->ctrl_words[0] & EIP_HW_CTX_ALGO_3DES) {
+		tr->ctrl_words[0] |= EIP_TR_CTRL_CONTEXT_WORDS(ctx_sz);
+		goto done;
+	}
+
 	switch(base->cipher.key_len) {
 	case AES_KEYSIZE_128:
 		tr->ctrl_words[0] |= (EIP_HW_CTX_ALGO_AES128 | EIP_TR_CTRL_CONTEXT_WORDS(ctx_sz));
@@ -384,6 +425,7 @@ bool eip_tr_aead_init(struct eip_tr *tr, struct eip_tr_info *info, const struct 
 		return false;
 	}
 
+done:
 	/*
 	 * Flush record memory.
 	 * Driver must not make any update in transform records words after this.
