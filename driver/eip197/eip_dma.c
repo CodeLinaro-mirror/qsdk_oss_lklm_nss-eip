@@ -26,7 +26,6 @@
 #include <linux/slab.h>
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
-#include <asm/cacheflush.h>
 
 #include "eip_priv.h"
 
@@ -51,7 +50,7 @@ static inline void eip_dma_notify(struct eip_dma *dma, uint8_t in_desc, uint8_t 
 	/*
 	 * Add Data barrier to insure all descriptor write operation is done.
 	 */
-	dsb(st);
+	eip_dsb();
 	iowrite32(EIP_HW_PREP_CNT_DESC_SZ(EIP_HW_DESC_WORDS * out_desc), dma->out.prep_cnt);
 	iowrite32(EIP_HW_PREP_CNT_DESC_SZ(EIP_HW_DESC_WORDS * in_desc), dma->in.prep_cnt);
 }
@@ -68,7 +67,7 @@ static inline void eip_dma_tx_res(struct eip_dma *dma, struct eip_sw_desc *sw, s
 	 * Invalidate the all cache line associated with output data to avoid any corruption due to cache eviction.
 	 * We are performing clean as we may be sharing the cache line with others.
 	 */
-	dmac_clean_range_no_dsb(frag->data, frag->data + frag->len);
+	eip_dmac_clean_range_no_dsb(frag->data, frag->data + frag->len);
 
 	/*
 	 * Fill result descriptor for single buffer.
@@ -86,7 +85,7 @@ static inline void eip_dma_tx_res(struct eip_dma *dma, struct eip_sw_desc *sw, s
 	res->token[4] = res->token[5] = res->token[6] = res->token[7] = 0;
 	res->bypass[0] = res->bypass[1] = res->bypass[2] = res->bypass[3] = 0;
 
-	dmac_clean_range_no_dsb(res, res + 1);
+	eip_dmac_clean_range_no_dsb(res, res + 1);
 }
 
 /*
@@ -100,7 +99,7 @@ static inline void eip_dma_tx_cmd(struct eip_dma *dma, struct eip_sw_desc *sw, s
 	/*
 	 * Flush all the data to be read by hardware.
 	 */
-	dmac_clean_range_no_dsb(frag->data, frag->data + frag->len);
+	eip_dmac_clean_range_no_dsb(frag->data, frag->data + frag->len);
 
 	/*
 	 * Fill command descriptor for single buffer.
@@ -132,7 +131,7 @@ static inline void eip_dma_tx_cmd(struct eip_dma *dma, struct eip_sw_desc *sw, s
 		cmd->bypass[0] = cmd->bypass[1] = 0;
 	}
 
-	dmac_clean_range_no_dsb(cmd, cmd + 1);
+	eip_dmac_clean_range_no_dsb(cmd, cmd + 1);
 }
 
 /*
@@ -226,10 +225,10 @@ static int eip_dma_rx(struct eip_dma *dma, int budget)
 	 * We need to invalidate cache line from head and tail when hw index is behind sw index.
 	 */
 	if (hw_prod_idx > out_cons_idx) {
-		dmac_inv_range(dma->out.desc + out_cons_idx, dma->out.desc + hw_prod_idx);
+		eip_dmac_inv_range(dma->out.desc + out_cons_idx, dma->out.desc + hw_prod_idx);
 	} else {
-		dmac_inv_range_no_dsb(dma->out.desc + out_cons_idx, dma->out.desc + EIP_DMA_DESC_MAX);
-		dmac_inv_range(dma->out.desc, dma->out.desc + hw_prod_idx);
+		eip_dmac_inv_range_no_dsb(dma->out.desc + out_cons_idx, dma->out.desc + EIP_DMA_DESC_MAX);
+		eip_dmac_inv_range(dma->out.desc, dma->out.desc + hw_prod_idx);
 	}
 
 	while (avail--) {
@@ -254,7 +253,7 @@ static int eip_dma_rx(struct eip_dma *dma, int budget)
 		frag_len = EIP_HW_RES_FRAG_LEN(res->frag[0]);
 		if (likely(frag_len)) {
 			data = phys_to_virt(res->frag[2]);
-			dmac_inv_range(data, data + frag_len);
+			eip_dmac_inv_range(data, data + frag_len);
 		}
 
 		/*
