@@ -24,8 +24,131 @@
 #include <linux/of_address.h>
 #include <linux/firmware.h>
 #include <linux/clk.h>
+#ifdef CONFIG_IO_COHERENCY
+#include <linux/tmelcom_ipc.h>
+#include <linux/of_platform.h>
+#endif
 
 #include "eip_priv.h"
+
+#ifdef CONFIG_IO_COHERENCY
+/*
+ * eip_hw_noc_reg_write()
+ *	Write the value into EIP196 IO coherency registers
+ */
+static inline int eip_hw_noc_reg_write(uint32_t reg_base, uint32_t *regs_off, int count)
+{
+	int error;
+	int i;
+
+	for (i = 0; i < count; i++, regs_off += 2) {
+		uint32_t reg_addr = reg_base + regs_off[0];
+		uint32_t reg_val = regs_off[1];
+		struct tmel_secure_io nss_noc = {0};
+
+		/*
+		 * Write the value into the registers using secure IO.
+		 */
+		nss_noc.reg_addr = reg_addr;
+		nss_noc.reg_val = reg_val;
+		error = tmelcom_secure_io_write(&nss_noc, sizeof(struct tmel_secure_io));
+		if (error) {
+			pr_err("Failed to configure NSS NOC reg = 0x%x, val=0x%x\n", reg_addr, reg_val);
+			return error;
+		}
+
+		pr_debug("Configuring nss_noc for addr: (0x%x), val: (0x%x)\n", reg_addr, reg_val);
+	}
+
+	return 0;
+}
+
+/*
+ * eip_hw_noc_reg_update()
+ *	Update EIP196 IO coherency settings in NSS NOC register.
+ *
+ * Caller should call this function only after EIP196 clock is
+ * enabled and before starting any transaction with EIP196.
+ */
+int eip_hw_noc_reg_update(struct platform_device *pdev)
+{
+	struct device_node *np = (&pdev->dev)->of_node;
+	struct device_node *child = NULL;
+	bool secure_write = false;
+	uint32_t *regs_off = NULL;
+	uint32_t reg_base;
+	int ret, count;
+
+	for_each_available_child_of_node(np, child) {
+		/*
+		 * Read the registers only if EIP IO coherency property (eip_ioc)
+		 * is defined in the DTSI.
+		 */
+		if (of_property_match_string(child, "prop-name", "eip_ioc") >= 0) {
+			break;
+		}
+	}
+
+	if (!child) {
+		pr_err("%px: Unable to find EIP IO coherency entry in DTSI\n", child);
+		return -EINVAL;
+	}
+
+	/*
+	 * Proceed only if secure write is enabled.
+	 */
+	secure_write = of_property_read_bool(child, "secure-write");
+	if (!secure_write) {
+		pr_err("%px: Secure write is not enabled \n", child);
+		return -EINVAL;
+	}
+
+	/*
+	 * Read the Register base address from the DTSI.
+	 */
+	ret = of_property_read_u32(child, "reg-base", &reg_base);
+	if (ret) {
+		pr_err("%px: Failed to read the Register base address\n", child);
+		return ret;
+	}
+
+	/*
+	 * Read the number of register elements.
+	 */
+	count = of_property_count_u32_elems(child, "reg-offset");
+	if ((count == 0) || (count % 2)) {
+		pr_err("%px: Invalid entries obtained from the DTSI\n", child);
+		return -EINVAL;
+	}
+
+	/*
+	 * Allocate memory for reading NOC register values from DTSI.
+	 */
+	regs_off = vmalloc(sizeof(u32) * count);
+	if (!regs_off) {
+		pr_err("%px: Failed to allocate memory for reading NOC regs\n", child);
+		return -EINVAL;
+	}
+
+	/*
+	 * Read the register address offsets.
+	 */
+	ret = of_property_read_u32_array(child, "reg-offset", regs_off, count);
+	if (ret) {
+		pr_err("%px: Error in fetching the offset address and value for Register\n", child);
+		goto fail;
+	}
+
+	ret = eip_hw_noc_reg_write(reg_base, regs_off, count/2);
+	if (ret) {
+		goto fail;
+	}
+
+fail:
+	vfree(regs_off);
+	return ret;
+}
+#endif
 
 /*
  * eip_hw_reset_status()
@@ -367,6 +490,16 @@ int eip_hw_init(struct platform_device *pdev)
 		goto fail_init;
 	}
 
+#ifdef CONFIG_IO_COHERENCY
+	/*
+	 * Update EIP196 IO coherency registers in NSS NOC.
+	 */
+	status = eip_hw_noc_reg_update(pdev);
+	if (status) {
+		pr_err("%px:Failed to configure IO coherency\n", pdev);
+		goto fail_init;
+	}
+#endif
 	eip_hw_setup(base_addr);
 
 	/*
