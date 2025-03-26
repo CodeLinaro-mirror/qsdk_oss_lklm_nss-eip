@@ -31,6 +31,7 @@
 #include <crypto/ghash.h>
 #include <crypto/authenc.h>
 #include <crypto/internal/aead.h>
+#include <crypto/internal/des.h>
 
 #include "eip_crypto.h"
 
@@ -323,7 +324,76 @@ static struct aead_alg eip_crypto_aead_algs[] = {
 		.setkey 	= eip_crypto_aead_setkey_noauth,
 		.encrypt 	= eip_crypto_aead_encrypt,
 		.decrypt 	= eip_crypto_aead_decrypt,
-	}
+	},
+	{
+		/*
+		 * 3des-cbc, md5
+		 */
+		.base = {
+			.cra_name       = "authenc(hmac(md5),cbc(des3_ede))",
+			.cra_driver_name = "eip-3des-cbc-md5-hmac",
+			.cra_priority   = 10000,
+			.cra_flags      = CRYPTO_ALG_ASYNC,
+			.cra_blocksize  = DES3_EDE_BLOCK_SIZE,
+			.cra_ctxsize    = sizeof(struct eip_crypto_tfm_ctx),
+			.cra_alignmask  = 0,
+			.cra_module     = THIS_MODULE,
+		},
+
+		.init 		= eip_crypto_aead_tfm_init,
+		.exit 		= eip_crypto_aead_tfm_exit,
+		.ivsize 	= DES3_EDE_BLOCK_SIZE,
+		.maxauthsize 	= MD5_DIGEST_SIZE,
+		.setkey 	= eip_crypto_aead_setkey,
+		.encrypt 	= eip_crypto_aead_encrypt,
+		.decrypt 	= eip_crypto_aead_decrypt,
+	},
+	{
+		/*
+		 * 3des-cbc, sha1
+		 */
+		.base = {
+			.cra_name       = "authenc(hmac(sha1),cbc(des3_ede))",
+			.cra_driver_name = "eip-3des-cbc-sha1-hmac",
+			.cra_priority   = 10000,
+			.cra_flags      = CRYPTO_ALG_ASYNC,
+			.cra_blocksize  = DES3_EDE_BLOCK_SIZE,
+			.cra_ctxsize    = sizeof(struct eip_crypto_tfm_ctx),
+			.cra_alignmask  = 0,
+			.cra_module     = THIS_MODULE,
+		},
+
+		.init 		= eip_crypto_aead_tfm_init,
+		.exit 		= eip_crypto_aead_tfm_exit,
+		.ivsize 	= DES3_EDE_BLOCK_SIZE,
+		.maxauthsize 	= SHA1_DIGEST_SIZE,
+		.setkey 	= eip_crypto_aead_setkey,
+		.encrypt 	= eip_crypto_aead_encrypt,
+		.decrypt 	= eip_crypto_aead_decrypt,
+	},
+	{
+		/*
+		 * 3des-cbc, sha256
+		 */
+		.base = {
+			.cra_name       = "authenc(hmac(sha256),cbc(des3_ede))",
+			.cra_driver_name = "eip-3des-cbc-sha256-hmac",
+			.cra_priority   = 10000,
+			.cra_flags      = CRYPTO_ALG_ASYNC,
+			.cra_blocksize  = DES3_EDE_BLOCK_SIZE,
+			.cra_ctxsize    = sizeof(struct eip_crypto_tfm_ctx),
+			.cra_alignmask  = 0,
+			.cra_module     = THIS_MODULE,
+		},
+
+		.init 		= eip_crypto_aead_tfm_init,
+		.exit 		= eip_crypto_aead_tfm_exit,
+		.ivsize 	= DES3_EDE_BLOCK_SIZE,
+		.maxauthsize 	= SHA256_DIGEST_SIZE,
+		.setkey 	= eip_crypto_aead_setkey,
+		.encrypt 	= eip_crypto_aead_encrypt,
+		.decrypt 	= eip_crypto_aead_decrypt,
+	},
 };
 
 /*
