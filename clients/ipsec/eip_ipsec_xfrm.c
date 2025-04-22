@@ -388,12 +388,11 @@ static int eip_ipsec_xfrm_sa_data_init(struct xfrm_state *xs, struct eip_ipsec_d
 	xfrm_address_t remote = {0};
 	size_t ip_addr_len;
 	uint8_t ttl_hop_limit;
-	struct dst_entry *dst;
-	struct rt6_info *rt6;
-	struct rtable *rt;
 	int ret;
 
 	if (xs->props.family == AF_INET) {
+		struct rtable *rt;
+
 		local_dev = ip_dev_find(&init_net, xs->id.daddr.a4);
 
 		/*
@@ -414,15 +413,23 @@ static int eip_ipsec_xfrm_sa_data_init(struct xfrm_state *xs, struct eip_ipsec_d
 			return -1;
 		}
 
-		dst = &rt->dst;
-		ttl_hop_limit = ip4_dst_hoplimit(dst);
+		ttl_hop_limit = ip4_dst_hoplimit(&rt->dst);
+		sa_data->mtu = READ_ONCE(rt->dst.dev->mtu);
+		ip_rt_put(rt);
 	} else {
+		struct rt6_info *rt6;
+
 		sa_data->base.flags |= EIP_IPSEC_FLAG_IPV6;
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 		local_dev = ipv6_dev_find(&init_net, &xs->id.daddr.in6, 1);
 #else
+		rcu_read_lock();
 		local_dev = ipv6_dev_find(&init_net, &xs->id.daddr.in6, NULL);
+		if (local_dev)
+			dev_hold(local_dev);
+
+		rcu_read_unlock();
 #endif
 
 		ip_addr_len = sizeof(remote.in6);
@@ -445,8 +452,9 @@ static int eip_ipsec_xfrm_sa_data_init(struct xfrm_state *xs, struct eip_ipsec_d
 			return -1;
 		}
 
-		dst = &rt6->dst;
-		ttl_hop_limit = ip6_dst_hoplimit(dst);
+		ttl_hop_limit = ip6_dst_hoplimit(&rt6->dst);
+		sa_data->mtu = READ_ONCE(rt6->dst.dev->mtu);
+		ip6_rt_put(rt6);
 	}
 
 	if (xs->props.mode == XFRM_MODE_TUNNEL) {
@@ -464,7 +472,6 @@ static int eip_ipsec_xfrm_sa_data_init(struct xfrm_state *xs, struct eip_ipsec_d
 	}
 
 	sa_data->xs = xs;
-	sa_data->mtu = READ_ONCE(dst->dev->mtu);
 
 	if (sa_data->base.flags & EIP_IPSEC_FLAG_ENC) {
 		sa_data->base.flags |= EIP_IPSEC_FLAG_CP_DF;
