@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -42,6 +42,7 @@ struct eip_crypto_ahash_req_ctx {
 	unsigned long flags;			/* Update the result in final completion function */
 	uint8_t digest[SHA512_DIGEST_SIZE];	/* Storage for resultant digest */
 	struct scatterlist res;			/* Resultant scatterlist */
+	bool restore_req;	/* Restore user request */
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0))
 	crypto_completion_t complete;		/* Callback function for finup */
 	void *data;				/* Data for the callback function */
@@ -61,7 +62,7 @@ void eip_crypto_ahash_cra_exit(struct crypto_tfm *tfm);
 int eip_crypto_ahash_update(struct ahash_request *req);
 int eip_crypto_ahash_final(struct ahash_request *req);
 int eip_crypto_ahash_digest(struct ahash_request *req);
-int eip_crypto_ahash_tfm_init(struct ahash_request *req);
+int eip_crypto_ahash_req_init(struct ahash_request *req);
 int eip_crypto_ahash_export(struct ahash_request *req, void *out);
 int eip_crypto_ahash_import(struct ahash_request *req, const void *in);
 int eip_crypto_ahash_setkey(struct crypto_ahash *ahash, const u8 *key, unsigned int keylen);
@@ -79,7 +80,7 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 	 * Async non-keyed HASH digests
 	 */
 	{
-		.init   = eip_crypto_ahash_tfm_init,
+		.init   = eip_crypto_ahash_req_init,
 		.update = eip_crypto_ahash_update,
 		.final  = eip_crypto_ahash_final,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0))
@@ -107,7 +108,7 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 		},
 	},
 	{
-		.init   = eip_crypto_ahash_tfm_init,
+		.init   = eip_crypto_ahash_req_init,
 		.update = eip_crypto_ahash_update,
 		.final  = eip_crypto_ahash_final,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0))
@@ -135,7 +136,7 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 		},
 	},
 	{
-		.init   = eip_crypto_ahash_tfm_init,
+		.init   = eip_crypto_ahash_req_init,
 		.update = eip_crypto_ahash_update,
 		.final  = eip_crypto_ahash_final,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0))
@@ -163,7 +164,7 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 		},
 	},
 	{
-		.init   = eip_crypto_ahash_tfm_init,
+		.init   = eip_crypto_ahash_req_init,
 		.update = eip_crypto_ahash_update,
 		.final  = eip_crypto_ahash_final,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0))
@@ -191,7 +192,7 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 		},
 	},
 	{
-		.init   = eip_crypto_ahash_tfm_init,
+		.init   = eip_crypto_ahash_req_init,
 		.update = eip_crypto_ahash_update,
 		.final  = eip_crypto_ahash_final,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0))
@@ -219,7 +220,7 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 		},
 	},
 	{
-		.init   = eip_crypto_ahash_tfm_init,
+		.init   = eip_crypto_ahash_req_init,
 		.update = eip_crypto_ahash_update,
 		.final  = eip_crypto_ahash_final,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0))
@@ -251,7 +252,7 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 	 * Aynsc keyed HMAC digests
 	 */
 	{
-		.init   = eip_crypto_ahash_tfm_init,
+		.init   = eip_crypto_ahash_req_init,
 		.update = eip_crypto_ahash_update,
 		.final  = eip_crypto_ahash_final,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0))
@@ -279,7 +280,7 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 		},
 	},
 	{
-		.init   = eip_crypto_ahash_tfm_init,
+		.init   = eip_crypto_ahash_req_init,
 		.update = eip_crypto_ahash_update,
 		.final  = eip_crypto_ahash_final,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0))
@@ -307,7 +308,7 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 		},
 	},
 	{
-		.init   = eip_crypto_ahash_tfm_init,
+		.init   = eip_crypto_ahash_req_init,
 		.update = eip_crypto_ahash_update,
 		.final  = eip_crypto_ahash_final,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0))
@@ -335,7 +336,7 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 		},
 	},
 	{
-		.init   = eip_crypto_ahash_tfm_init,
+		.init   = eip_crypto_ahash_req_init,
 		.update = eip_crypto_ahash_update,
 		.final  = eip_crypto_ahash_final,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0))
@@ -363,7 +364,7 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 		},
 	},
 	{
-		.init   = eip_crypto_ahash_tfm_init,
+		.init   = eip_crypto_ahash_req_init,
 		.update = eip_crypto_ahash_update,
 		.final  = eip_crypto_ahash_final,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0))
@@ -391,7 +392,7 @@ static struct ahash_alg eip_crypto_ahash_algo[] = {
 		},
 	},
 	{
-		.init   = eip_crypto_ahash_tfm_init,
+		.init   = eip_crypto_ahash_req_init,
 		.update = eip_crypto_ahash_update,
 		.final  = eip_crypto_ahash_final,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0))
@@ -668,9 +669,11 @@ void eip_crypto_ahash_done(void *app_data, eip_req_t eip_req)
 	/*
 	 * Restore original src and nbytes in request
 	 */
-	req->src = actx->sg_user;
-	req->nbytes = actx->sg_user_len;
-	data_len = actx->data_len;
+	if (rctx->restore_req) {
+		req->src = actx->sg_user;
+		req->nbytes = actx->sg_user_len;
+		data_len = actx->data_len;
+	}
 
 	/*
 	 * free sg table and reset data length.
@@ -801,12 +804,12 @@ int eip_crypto_ahash_setkey(struct crypto_ahash *tfm, const u8 *key, unsigned in
 }
 
 /*
- * eip_crypto_ahash_tfm_init()
+ * eip_crypto_ahash_req_init()
  *	Ahash request to initialize hash operation.
  *	Initialize the private context for the specific request.
  *	Since this is called for non-keyed hash instead of setkey we need to allocate TR here.
  */
-int eip_crypto_ahash_tfm_init(struct ahash_request *req)
+int eip_crypto_ahash_req_init(struct ahash_request *req)
 {
 	struct crypto_tfm *tfm = crypto_ahash_tfm(crypto_ahash_reqtfm(req));
 	struct eip_crypto_ahash_tfm_ctx *actx = crypto_tfm_ctx(tfm);
@@ -820,6 +823,7 @@ int eip_crypto_ahash_tfm_init(struct ahash_request *req)
 	struct eip_tr_base *base;
 	void *tr, *old_tr;
 
+	rctx->restore_req = false;
 	tfm_stats = this_cpu_ptr(tfm_ctx->stats);
 	ahash_stats = this_cpu_ptr(ahash.stats);
 
@@ -859,6 +863,7 @@ int eip_crypto_ahash_tfm_init(struct ahash_request *req)
 #endif
 		tfm_stats->tr_alloc_err++;
 		ahash_stats->tr_alloc_err++;
+
 		return -EBUSY;
 	}
 
@@ -907,6 +912,11 @@ static int eip_crypto_ahash_send(struct ahash_request *req)
 	int ret;
 
 	/*
+	 * Initialize scatterlist for hash result and data.
+	 */
+	sg_init_one(&rctx->res, rctx->digest, rctx->diglen);
+
+	/*
 	 * We take RCU lock to synchronize encrypt/decrypt and setkey operation.
 	 */
 	rcu_read_lock_bh();
@@ -929,6 +939,7 @@ static int eip_crypto_ahash_send(struct ahash_request *req)
 		rcu_read_unlock_bh();
 		tfm_stats->tx_failures++;
 		ahash_stats->tx_failures++;
+
 		return ret;
 	}
 
@@ -1016,6 +1027,7 @@ int eip_crypto_ahash_final(struct ahash_request *req)
 	/*
 	 * store original src and nbytes from req.
 	 */
+	rctx->restore_req = true;
 	actx->sg_user = req->src;
 	actx->sg_user_len = req->nbytes;
 
@@ -1031,10 +1043,6 @@ int eip_crypto_ahash_final(struct ahash_request *req)
 		src = actx->sgt.sgl;
 	}
 
-	/*
-	 * Initialize scatterlist for hash result and data.
-	 */
-	sg_init_one(&rctx->res, rctx->digest, rctx->diglen);
 	req->src = src;
 	req->nbytes = actx->data_len;
 
@@ -1128,9 +1136,14 @@ int eip_crypto_ahash_digest(struct ahash_request *req)
 	int err = 0;
 
 	/*
-	 * Init followed by update and final.
+	 * Initialization is followed by sending data to the hardware.
+	 *
+	 * In case of a digest operation, copying user data to a local buffer
+	 * is not required as its required for multiple update calls.
+	 * Digest process follows the sequence: init --> update --> final,
+	 * we can directly send data to EIP HW.
 	 */
-	err = eip_crypto_ahash_tfm_init(req);
+	err = eip_crypto_ahash_req_init(req);
 	if (err) {
 		pr_warn("%px: Tfm init failed with error(%d) for digest operation.\n",
 				tfm_ctx, err);
@@ -1139,12 +1152,7 @@ int eip_crypto_ahash_digest(struct ahash_request *req)
 		return -EINVAL;
 	}
 
-	err = eip_crypto_ahash_update(req);
-	if (!err)  {
-		err = eip_crypto_ahash_final(req);
-	}
-
-	return err;
+	return eip_crypto_ahash_send(req);
 }
 
 /*
