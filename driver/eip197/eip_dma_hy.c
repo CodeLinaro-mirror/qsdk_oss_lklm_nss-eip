@@ -26,7 +26,6 @@
 #include <linux/slab.h>
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
-#include <asm/cacheflush.h>
 #include <net/ip.h>
 
 #include <ppe_drv_port.h>
@@ -46,7 +45,7 @@ static inline void eip_dma_hy_notify(struct eip_hw_ring *ring, uint8_t desc, uin
 	/*
 	 * Add Data barrier to insure all descriptor write operation is done.
 	 */
-	dsb(st);
+	eip_dsb();
 	iowrite32(EIP_HW_PREP_CNT_DESC_SZ(EIP_HW_DESC_WORDS * desc), ring->prep_cnt);
 }
 
@@ -62,7 +61,7 @@ static inline void eip_dma_hy_tx_res(struct eip_dma *dma, struct sk_buff *skb, s
 	 * Invalidate the all cache line associated with output data to avoid any corruption due to cache eviction.
 	 * This is new SKB so we dont care about the stored data.
 	 */
-	dmac_inv_range_no_dsb(frag->data, frag->data + frag->len);
+	eip_dmac_inv_range_no_dsb(frag->data, frag->data + frag->len);
 
 	/*
 	 * Fill result descriptor for single buffer.
@@ -81,7 +80,7 @@ static inline void eip_dma_hy_tx_res(struct eip_dma *dma, struct sk_buff *skb, s
 	res->bypass[0] = res->bypass[1] = res->bypass[2] = res->bypass[3] = 0;
 
 	dma->out.meta[frag->idx] = (uintptr_t)skb;
-	dmac_clean_range_no_dsb(res, res + 1);
+	eip_dmac_clean_range_no_dsb(res, res + 1);
 }
 
 /*
@@ -95,7 +94,7 @@ static inline void eip_dma_hy_tx_cmd(struct eip_dma *dma, struct eip_sw_desc *sw
 	/*
 	 * Flush all the data to be read by hardware.
 	 */
-	dmac_flush_range_no_dsb(frag->data, frag->data + frag->len);
+	eip_dmac_flush_range_no_dsb(frag->data, frag->data + frag->len);
 
 	/*
 	 * Fill command descriptor for single buffer.
@@ -136,7 +135,7 @@ static inline void eip_dma_hy_tx_cmd(struct eip_dma *dma, struct eip_sw_desc *sw
 	}
 
 	dma->in.meta[frag->idx] = (frag->flag & EIP_HW_CMD_FLAGS_LAST) ? (uintptr_t)sw : 0;
-	dmac_clean_range_no_dsb(cmd, cmd + 1);
+	eip_dmac_clean_range_no_dsb(cmd, cmd + 1);
 }
 
 /*
@@ -373,10 +372,10 @@ int eip_dma_hy_rx(struct eip_dma *dma, int budget)
 	 * We need to invalidate cache line from head and tail when hw index is behind sw index.
 	 */
 	if (hw_pidx > out_cidx) {
-		dmac_inv_range(dma->out.desc + out_cidx, dma->out.desc + hw_pidx);
+		eip_dmac_inv_range(dma->out.desc + out_cidx, dma->out.desc + hw_pidx);
 	} else {
-		dmac_inv_range_no_dsb(dma->out.desc + out_cidx, dma->out.desc + EIP_DMA_DESC_MAX);
-		dmac_inv_range(dma->out.desc, dma->out.desc + hw_pidx);
+		eip_dmac_inv_range_no_dsb(dma->out.desc + out_cidx, dma->out.desc + EIP_DMA_DESC_MAX);
+		eip_dmac_inv_range(dma->out.desc, dma->out.desc + hw_pidx);
 	}
 
 	while (avail--) {
@@ -402,7 +401,7 @@ int eip_dma_hy_rx(struct eip_dma *dma, int budget)
 		frag_len = EIP_HW_RES_FRAG_LEN(res->frag[0]);
 		BUG_ON(!frag_len);
 		data = phys_to_virt(res->frag[2]);
-		dmac_inv_range(data, data + frag_len);
+		eip_dmac_inv_range(data, data + frag_len);
 
 		/*
 		 * Trim the linear SKB frag to length produced by hardware.
