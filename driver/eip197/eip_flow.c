@@ -23,7 +23,6 @@
 #include <linux/cache.h>
 #include <linux/debugfs.h>
 #include <linux/slab.h>
-#include <asm/cacheflush.h>
 #include <linux/dmapool.h>
 #include <linux/dma-direct.h>
 #include <linux/spinlock.h>

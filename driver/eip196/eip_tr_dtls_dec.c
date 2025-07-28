@@ -21,7 +21,6 @@
 #include <linux/crypto.h>
 #include <linux/slab.h>
 #include <linux/completion.h>
-#include <asm/cacheflush.h>
 #include <net/dsfield.h>
 
 #include "eip_priv.h"
@@ -127,7 +126,7 @@ int eip_tr_dtls_dec(struct eip_tr *tr, struct sk_buff *skb)
 	 */
 	tk_words = eip_tr_fill_token(tk, &tr->dtls.ops, &tk_params);
 	WARN_ON(tk_words > sizeof(*tk));
-	dmac_clean_range(tk, tk + 1);
+	eip_dmac_clean_range(tk, tk + 1);
 
 	dma_tx = skb_is_nonlinear(skb) ? eip_dma_tx_nonlinear_skb : eip_dma_tx_linear_skb;
 
