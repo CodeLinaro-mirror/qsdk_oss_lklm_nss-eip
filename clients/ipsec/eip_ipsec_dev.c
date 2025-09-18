@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -134,6 +134,8 @@ static ssize_t eip_ipsec_dev_read(struct file *fp, char __user *ubuf, size_t sz,
 	len += snprintf(buf + len, max_len - len, "\tRx vp: %llu\n", stats.rx_vp);
 	len += snprintf(buf + len, max_len - len, "\tRx Error: %llu\n", stats.rx_fail);
 	len += snprintf(buf + len, max_len - len, "\tRx Fail SA: %llu\n", stats.rx_fail_sa);
+	len += snprintf(buf + len, max_len - len, "\tRPS bypass: %llu\n", stats.bypass_rps);
+	len += snprintf(buf + len, max_len - len, "\tRPS fail: %llu\n", stats.fail_rps);
 
 	/*
 	 * Encap SA stats read.
@@ -161,17 +163,29 @@ static int eip_ipsec_dev_open(struct net_device *ndev)
 	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
 
 	/*
-	 * Enable tx pkt steering.
+	 * Enable tx and rx pkt steering.
 	 */
 	if (drv->tx_steer_en && !netfn_pkt_steer_enable(&eid->tx_steer)) {
 		pr_warn("%px: Unable to enable tx packet steering.\n", eid);
 		goto fail_tx_steer;
 	}
 
+	if (drv->rx_steer_en && !netfn_pkt_steer_enable(&eid->rx_steer)) {
+		pr_warn("%px: Unable to enable rx data pkt steering.\n", eid);
+		goto fail_rx_steer;
+	}
+
 	netif_start_queue(ndev);
 	return 0;
 
+fail_rx_steer:
+	if (drv->tx_steer_en) {
+		netfn_pkt_steer_disable(&eid->tx_steer);
+		drv->tx_steer_en = false;
+	}
+
 fail_tx_steer:
+	drv->rx_steer_en = false;
 	return -ENOMEM;
 }
 
@@ -187,10 +201,14 @@ static int eip_ipsec_dev_stop(struct net_device *ndev)
 	netif_stop_queue(ndev);
 
 	/*
-	 * Disable the tx steer.
+	 * Disable the tx and rx steer.
 	 */
 	if (drv->tx_steer_en) {
 		netfn_pkt_steer_disable(&eid->tx_steer);
+	}
+
+	if (drv->rx_steer_en) {
+		netfn_pkt_steer_disable(&eid->rx_steer);
 	}
 
 	return 0;
@@ -777,9 +795,33 @@ static void eip_ipsec_dev_free(struct net_device *ndev)
 		netfn_pkt_steer_deinit(&eid->tx_steer);
 	}
 
+	netfn_pkt_steer_deinit(&eid->rx_steer);
 	free_netdev(ndev);
 	eip_ipsec_drv_deref(drv);
 	pr_info("%px: IPsec device freed\n", ndev);
+}
+
+/*
+ * eip_ipsec_dev_set_rps2cpu()
+ *	Set the CPU map for Receive packet steering.
+ */
+static void eip_ipsec_dev_set_rps2cpu(struct eip_ipsec_dev *eid)
+{
+	int cpu, idx = 0;
+
+	/*
+	 * Initialize the memory.
+	 */
+	memset(eid->rps_map, 0, sizeof(eid->rps_map));
+
+	/*
+	 * Set the RPS cpu map if RPS mask is configured.
+	 */
+	eid->rps_num_cores = bitmap_weight(&eip_rps_core_mask, NR_CPUS);
+	for_each_set_bit(cpu, &eip_rps_core_mask, NR_CPUS) {
+		eid->rps_map[idx] = cpu;
+		idx++;
+	}
 }
 
 /*
@@ -988,6 +1030,11 @@ struct net_device *eip_ipsec_dev_add(void)
 	eid->ndev = ndev;
 	eid->devid = -1;
 
+	/*
+	 * Map RPS core as per the configured CPU mask.
+	 */
+	eip_ipsec_dev_set_rps2cpu(eid);
+
 	INIT_LIST_HEAD(&eid->enc_sa);
 	INIT_LIST_HEAD(&eid->dec_sa);
 
@@ -1024,9 +1071,23 @@ struct net_device *eip_ipsec_dev_add(void)
 		info.fifo_len = eip_pkt_steer_qlen;
 		info.cb = eip_ipsec_dev_tx_steer_cb;
 		info.budget = EIP_IPSEC_TX_STEER_BUDGET;
-		info.sender_mask = *(to_cpumask(&eip_fwd_core_mask));
+		cpumask_copy(&info.sender_mask, cpu_online_mask);
 		cpumask_set_cpu(eip_ipsec_core_id, &info.receiver_mask);
 		netfn_pkt_steer_init(&eid->tx_steer, &info);
+	}
+
+	/*
+	 * Allocate rx data pkt steering object.
+	 */
+	if (drv->rx_steer_en) {
+		info.dev = ndev;
+		info.weight = 1;
+		info.fifo_len = eip_pkt_steer_qlen;
+		info.cb = eip_ipsec_proto_rx_steer_cb;
+		info.budget = EIP_IPSEC_RX_STEER_BUDGET;
+		cpumask_set_cpu(eip_ipsec_core_id, &info.sender_mask);
+		info.receiver_mask = *(to_cpumask(&eip_rps_core_mask));
+		netfn_pkt_steer_init(&eid->rx_steer, &info);
 	}
 
 	/*

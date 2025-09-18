@@ -128,12 +128,12 @@ static bool eip_ipsec_sa_match_addr(struct eip_ipsec_sa *sa, uint8_t version, __
 }
 
 /*
- * eip_ipsec_sa_get_by_spi()
+ * eip_ipsec_sa_match_spi()
  *	Lookup SA using SPI index in given database.
  *
  * This function must be called with rcu_read_lock_bh() or spin_lock_bh().
  */
-static struct eip_ipsec_sa *eip_ipsec_sa_get_by_spi(struct list_head *sa_head, __be32 spi)
+struct eip_ipsec_sa *eip_ipsec_sa_match_spi(struct list_head *sa_head, __be32 spi)
 {
 	struct eip_ipsec_sa *sa;
 
@@ -261,7 +261,7 @@ static struct eip_ipsec_sa *eip_ipsec_sa_dettach(struct net_device *ndev, struct
 	 * Lookup into Encap SA list.
 	 */
 	sa_head = &eid->enc_sa;
-	sa = eip_ipsec_sa_get_by_spi(sa_head, htonl(t->esp_spi));
+	sa = eip_ipsec_sa_match_spi(sa_head, htonl(t->esp_spi));
 	if (sa && eip_ipsec_sa_match_addr(sa, t->ip_version, t->dest_ip)) {
 		pr_debug("%px: SA is not present in encap device database", ndev);
 		goto found;
@@ -271,7 +271,7 @@ static struct eip_ipsec_sa *eip_ipsec_sa_dettach(struct net_device *ndev, struct
 	 * Lookup into Decap SA list.
 	 */
 	sa_head = &eid->dec_sa;
-	sa = eip_ipsec_sa_get_by_spi(sa_head, htonl(t->esp_spi));
+	sa = eip_ipsec_sa_match_spi(sa_head, htonl(t->esp_spi));
 	if (!sa || !eip_ipsec_sa_match_addr(sa, t->ip_version, t->dest_ip)) {
 		pr_debug("%px: SA is not present in decap device database", ndev);
 
@@ -313,7 +313,7 @@ static bool eip_ipsec_sa_exist(struct net_device *ndev, __be32 spi, bool encap)
 	 */
 	rcu_read_lock_bh();
 
-	if (eip_ipsec_sa_get_by_spi(sa_head, spi)) {
+	if (eip_ipsec_sa_match_spi(sa_head, spi)) {
 		exist = true;
 	}
 
