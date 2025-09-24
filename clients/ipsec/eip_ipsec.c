@@ -31,6 +31,8 @@
 
 #include "eip_ipsec_priv.h"
 
+#define EIP_IPSEC_MAX_CORE_MASK ((1 << NR_CPUS) - 1)	/* Max value of core mask */
+
 /*
  * global ipsec instance.
  */
@@ -47,13 +49,13 @@ bool disable_v4_offload = false;
 module_param(disable_v4_offload, bool, S_IRUSR | S_IWUSR | S_IRGRP);
 MODULE_PARM_DESC(disable_v4_offload, "Disable ipv4 acceleration");
 
-ulong eip_fwd_core_mask = 0x7;	/* 0111 represents core 0, 1 & 2 */
-module_param(eip_fwd_core_mask, ulong, S_IRUSR | S_IWUSR | S_IRGRP);
-MODULE_PARM_DESC(eip_fwd_core_mask, "Core mask to be used for receiving plaintext");
-
 int eip_pkt_steer_qlen = EIP_IPSEC_PKT_STEER_FIFO_LEN;
 module_param(eip_pkt_steer_qlen, int, S_IRUSR | S_IWUSR | S_IRGRP);
 MODULE_PARM_DESC(eip_pkt_steer_qlen, "FIFO length required for packet steer queues");
+
+ulong eip_rps_core_mask = 0x0;	/* Should be enabled as required */
+module_param(eip_rps_core_mask, ulong, S_IRUSR | S_IWUSR | S_IRGRP);
+MODULE_PARM_DESC(eip_rps_core_mask, "IPsec RPS core mask");
 
 /*
  * eip_ipsec_ppe_init()
@@ -159,6 +161,15 @@ int __init eip_ipsec_init_module(void)
 	svc = eip_is_inline_supported() ? EIP_SVC_HYBRID_IPSEC : EIP_SVC_IPSEC;
 
 	/*
+	 * Validate module param.
+	 */
+	if ((eip_ipsec_core_id >= NR_CPUS) || (eip_rps_core_mask > EIP_IPSEC_MAX_CORE_MASK)) {
+		pr_err("Invalid module param - ipsec_core_id: %d, rps_core_mask: %lu\n",
+				(int)eip_ipsec_core_id, eip_rps_core_mask);
+		return -1;
+	}
+
+	/*
 	 * Initialize the global object.
 	 * Dereference: eip_ipsec_exit_module()
 	 */
@@ -213,6 +224,11 @@ int __init eip_ipsec_init_module(void)
 	 * With inline channel hardware supports multi-core receive.
 	 */
 	drv->tx_steer_en = !eip_is_inline_supported();
+
+	/*
+	 * Enable receive packet steer when it is configured by user.
+	 */
+	drv->rx_steer_en = eip_rps_core_mask ? true : false;
 
 	/*
 	 * XFRM offload initialization.

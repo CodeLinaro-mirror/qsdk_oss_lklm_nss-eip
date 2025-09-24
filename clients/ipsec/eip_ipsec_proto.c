@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -38,6 +38,52 @@ static const struct net_protocol *linux_esp_handler;
 static const struct inet6_protocol *linux_esp6_handler;
 
 /*
+ * eip_ipsec_rps_hash_get()
+ *	Compute Hash from the 5-tuple.
+ */
+static uint32_t eip_ipsec_rps_hash_get(struct sk_buff *skb, uint8_t rps_num_cores, bool is_v6)
+{
+	uint32_t hash = 0;
+	uint8_t proto;
+
+	if (!is_v6) {
+		struct iphdr *iph = ip_hdr(skb);
+
+		proto = iph->protocol;
+		hash = ntohl(iph->saddr ^ iph->daddr);
+	} else {
+		struct ipv6hdr *ip6h = ipv6_hdr(skb);
+		__be32 *saddr;
+		__be32 *daddr;
+
+		proto = ip6h->nexthdr;
+		saddr = ip6h->saddr.s6_addr32;
+		daddr = ip6h->daddr.s6_addr32;
+
+		hash ^= saddr[0] ^ daddr[0];
+		hash ^= saddr[1] ^ daddr[1];
+		hash ^= saddr[2] ^ daddr[2];
+		hash ^= saddr[3] ^ daddr[3];
+	}
+
+	switch (proto) {
+	case IPPROTO_UDP:
+	case IPPROTO_TCP:
+		__le16 *sport = (__le16 *)skb_transport_header(skb);
+		__le16 *dport = (__le16 *)(skb_transport_header(skb) + sizeof(__le16));
+
+		hash ^= ntohs (*sport ^ *dport);
+		break;
+
+	default:
+		break;
+	}
+
+	hash ^= proto;
+	return (hash % rps_num_cores);
+}
+
+/*
  * eip_ipsec_proto_dec_err()
  *	Decapsulation completion callback.
  */
@@ -72,19 +118,113 @@ void eip_ipsec_proto_dec_err(void *app_data, eip_req_t req, int err)
 }
 
 /*
+ * eip_ipsec_proto_forward()
+ *	Forwards decapsulated packet through SFE/Linux.
+ */
+static void eip_ipsec_proto_forward(struct eip_ipsec_dev *eid, uint32_t spi, struct sk_buff *skb)
+{
+	struct eip_ipsec_dev_stats *dev_stats;
+	int (*fast_recv)(struct sk_buff *skb);
+	struct eip_ipsec_sa_stats *sa_stats;
+	struct eip_ipsec_sa *sa;
+
+	/*
+	 * Try to send packet via SFE
+	 */
+	rcu_read_lock_bh();
+
+	fast_recv = rcu_dereference(athrs_fast_nat_recv);
+	if (likely(fast_recv) && likely(fast_recv(skb))) {
+		rcu_read_unlock_bh();
+		return;
+	}
+
+	/*
+	 * Forwarding with SFE failed, possibly connection does not exist yet.
+	 * We should not come here very often, update and send packet to Linux stack.
+	 * Linux requires sp in SKB when xfrm is enabled.
+	 */
+	sa = eip_ipsec_sa_match_spi(&eid->dec_sa, htonl(spi));
+	if (!sa) {
+		pr_debug("%px: Failed to find a valid Decap SA pointer\n", sa);
+		goto fail;
+	}
+
+	dev_stats = this_cpu_ptr(eid->stats_pcpu);
+	sa_stats = this_cpu_ptr(sa->stats_pcpu);
+	sa_stats->fast_recv_miss++;
+
+	if (sa->xs) {
+		struct xfrm_state *x = sa->xs;
+		struct sec_path *sp;
+
+		sp = secpath_set(skb);
+		if(!sp) {
+			sa_stats->fail_sp_alloc++;
+			goto fail;
+		}
+
+		/*
+		 * TODO: Add API in linux xfrm_state_try_hold() ?
+		 * This is needed to solve race condition with final ref_put() by Linux.
+		 */
+		if (unlikely(!refcount_inc_not_zero(&x->refcnt))) {
+			goto fail;
+		}
+
+		sp->xvec[sp->len++] = x;
+	}
+
+	netif_receive_skb(skb);
+	rcu_read_unlock_bh();
+	return;
+
+fail:
+	rcu_read_unlock_bh();
+	dev_stats->rx_fail++;
+	consume_skb(skb);
+	return;
+}
+
+/*
+ * eip_ipsec_proto_rx_steer_cb()
+ *	Rx data packet steering callback
+ */
+void eip_ipsec_proto_rx_steer_cb(struct netfn_pkt_steer *rx_steer, struct sk_buff_head *q_head)
+{
+	struct eip_ipsec_dev *eid = container_of(rx_steer, struct eip_ipsec_dev, rx_steer);
+	struct sk_buff *skb, *nskb;
+	uint32_t spi;
+
+	skb_queue_walk_safe(q_head, skb, nskb) {
+		/*
+		 * Retrieve the spi.
+		 */
+		spi = EIP_IPSEC_PROTO_SPI_SKB_CB(skb)->spi;
+		EIP_IPSEC_PROTO_SPI_SKB_CB(skb)->spi = 0;
+
+		__skb_unlink(skb, q_head);
+		eip_ipsec_proto_forward(eid, spi, skb);
+	}
+}
+
+/*
  * eip_ipsec_proto_dec_done()
  *	Decapsulation completion callback.
  */
 void eip_ipsec_proto_dec_done(void *app_data, eip_req_t req)
 {
 	struct eip_ipsec_sa *sa = eip_ipsec_sa_ref_unless_zero((struct eip_ipsec_sa *)app_data);
+	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
 	struct sk_buff *skb = eip_req2skb(req);
 	struct eip_ipsec_dev_stats *dev_stats;
-	int (*fast_recv)(struct sk_buff *skb);
 	int ip_hdr_sz = sizeof(struct iphdr);
 	struct eip_ipsec_sa_stats *sa_stats;
 	uint16_t proto = htons(ETH_P_IP);
 	struct eip_ipsec_dev *eid;
+	uint32_t hash = 0;
+	bool is_v6 = false;
+	int cpu;
 
 	if (unlikely(!sa)) {
 		pr_debug("%px: Failed to take reference on SA\n", sa);
@@ -117,53 +257,48 @@ void eip_ipsec_proto_dec_done(void *app_data, eip_req_t req)
 	if (unlikely(ip_hdr(skb)->version != IPVERSION)) {
 		ip_hdr_sz = sizeof(struct ipv6hdr);
 		proto = htons(ETH_P_IPV6);
+		is_v6 = true;
 	}
 
 	skb->protocol = proto;
 	skb_set_transport_header(skb, ip_hdr_sz);
 
 	/*
-	 * Try to send packet via SFE
+	 * Do not steer flows if RPS is disabled.
 	 */
-	rcu_read_lock_bh();
-
-	fast_recv = rcu_dereference(athrs_fast_nat_recv);
-	if (likely(fast_recv) && likely(fast_recv(skb))) {
-		eip_ipsec_sa_deref(sa);
-		rcu_read_unlock_bh();
-		return;
+	if (likely(!drv->rx_steer_en)) {
+		dev_stats->bypass_rps++;
+		eip_ipsec_proto_forward(eid, sa->tuple.esp_spi, skb);
+		goto done;
 	}
-
-	rcu_read_unlock_bh();
 
 	/*
-	 * Forwarding with SFE failed, possibly connection does not exist yet.
-	 * We should not come here very often, update and send packet to Linux stack.
-	 * Linux requires sp in SKB when xfrm is enabled.
+	 * Fetch the hash for RPS mapping.
 	 */
-	sa_stats->fast_recv_miss++;
-	if (sa->xs) {
-		struct xfrm_state *x = sa->xs;
-		struct sec_path *sp;
-
-		sp = secpath_set(skb);
-		if(!sp) {
-			sa_stats->fail_sp_alloc++;
-			goto drop;
-		}
-
-		/*
-		 * TODO: Add API in linux xfrm_state_try_hold() ?
-		 * This is needed to solve race condition with final ref_put() by Linux.
-		 */
-		if (unlikely(!refcount_inc_not_zero(&x->refcnt))) {
-			goto drop;
-		}
-
-		sp->xvec[sp->len++] = x;
+	if (likely(eid->rps_num_cores > 1)) {
+		hash = eip_ipsec_rps_hash_get(skb, eid->rps_num_cores, is_v6);
 	}
 
-	netif_receive_skb(skb);
+	/*
+	 * Do not steer flows if its already on any of the RPS CPU.
+	 */
+	cpu = eid->rps_map[hash];
+	if (cpu == smp_processor_id()) {
+		dev_stats->bypass_rps++;
+		eip_ipsec_proto_forward(eid, sa->tuple.esp_spi, skb);
+		goto done;
+	}
+
+	/*
+	 * Map the packet to desired core.
+	 */
+	EIP_IPSEC_PROTO_SPI_SKB_CB(skb)->spi = sa->tuple.esp_spi;
+	if (unlikely(!netfn_pkt_steer_send(&eid->rx_steer, skb, cpu))) {
+		dev_stats->fail_rps++;
+		goto drop;
+	}
+
+done:
 	eip_ipsec_sa_deref(sa);
 	return;
 

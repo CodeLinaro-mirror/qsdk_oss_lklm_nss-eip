@@ -40,6 +40,7 @@
 #define EIP_IPSEC_HASH_SIZE (1U << EIP_IPSEC_HASH_SHIFT)
 #define EIP_IPSEC_HASH_MASK (EIP_IPSEC_HASH_SIZE - 1)
 
+#define EIP_IPSEC_RX_STEER_BUDGET 128U		/* RPS napi poll budget */
 #define EIP_IPSEC_TX_STEER_BUDGET 128U		/* TPS napi poll budget */
 #define EIP_IPSEC_PKT_STEER_FIFO_LEN 8192U	/* Packet steer FIFO length */
 
@@ -60,6 +61,7 @@ struct eip_ipsec_drv {
 	struct dentry *dentry;		/* Driver debugfs dentry */
 	struct platform_device *pdev;	/* Device associated with the driver */
 	bool tx_steer_en;		/* Tx packet steer is enabled */
+	bool rx_steer_en;		/* Rx packet steer is enabled */
 #if defined(EIP_IPSEC_VP_SUPP)
 	struct ppe_drv_iface *iface;	/* PPE interface for inline port */
 #endif
@@ -86,8 +88,8 @@ struct eip_ipsec_ppe_mdata {
 
 extern struct eip_ipsec_drv eip_ipsec_drv_g;	/* Global Driver object */
 extern uint8_t eip_ipsec_core_id;		/* Global ipsec core id */
-extern ulong eip_fwd_core_mask;			/* Global core mask to receive plaintext */
 extern int eip_pkt_steer_qlen;			/* Global queue length for packet steer */
+extern ulong eip_rps_core_mask;			/* Global core mask for IPsec RPS */
 extern void eip_ipsec_drv_final(struct kref *kref);
 extern bool disable_v4_offload;
 
