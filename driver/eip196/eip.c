@@ -53,6 +53,10 @@ uint32_t eip_dma_rx_napi_weight = 128;
 module_param(eip_dma_rx_napi_weight, uint, S_IRUSR | S_IWUSR | S_IRGRP);
 MODULE_PARM_DESC(eip_dma_rx_napi_weight, "EIP dma rx budget");
 
+uint32_t ring_sz = 256;
+module_param(ring_sz, uint, S_IRUSR | S_IWUSR | S_IRGRP);
+MODULE_PARM_DESC(ring_sz, "EIP ring size");
+
 /*
  * eip_device_probe()
  *	Device probe to initialize HW engine & DMA.
@@ -257,6 +261,14 @@ int __init eip_init_module(void)
 	if (!eip_is_enabled()) {
 		pr_info("Crypto hardware is unavailable\n");
 		return 0;
+	}
+
+	/*
+	 * Check if ring size if power of 2
+	 */
+	if (!is_power_of_2(ring_sz)) {
+		pr_err("Ring size(%d) is not power of 2\n", ring_sz);
+		return -EINVAL;
 	}
 
 	drv->dentry = debugfs_create_dir("qca-nss-eip", NULL);
