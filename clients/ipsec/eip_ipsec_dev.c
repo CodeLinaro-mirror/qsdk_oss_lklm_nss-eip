@@ -784,10 +784,6 @@ static void eip_ipsec_dev_free(struct net_device *ndev)
 		free_percpu(eid->stats_pcpu);
 	}
 
-	if (eid->dentry) {
-		debugfs_remove_recursive(eid->dentry);
-	}
-
 	/*
 	 * Deinit pkt steer objects.
 	 */
@@ -991,6 +987,13 @@ void eip_ipsec_dev_del(struct net_device *ndev)
 	if (eid->vp_num >= 0)
 		ppe_vp_free(eid->vp_num);
 #endif
+
+	/*
+	 * Remove existing debugfs entry
+	 */
+	if (eid->dentry) {
+		debugfs_remove_recursive(eid->dentry);
+	}
 
 	/*
 	 * Bring down the device and unregister from linux.
