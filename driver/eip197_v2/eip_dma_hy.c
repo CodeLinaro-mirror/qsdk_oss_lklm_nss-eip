@@ -316,10 +316,11 @@ static inline bool eip_dma_hy_classify_err(struct eip_dma *dma, struct sk_buff *
  */
 void eip_dma_hy_refill_all(struct eip_ctx *ctx)
 {
+	struct eip_drv *drv = &eip_drv_g;
 	struct eip_pdev *ep = ctx->ep;
 	int cpu;
 
-	for_each_online_cpu(cpu) {
+	for_each_cpu(cpu, &drv->hy_cpu_map) {
 		eip_dma_hy_refill(&ep->hy[cpu]);
 	}
 }
@@ -564,10 +565,10 @@ int eip_dma_hy_tx_comp(struct eip_dma *dma, int budget)
 }
 
 /*
- * eip_dma_hy_handle_irq()
+ * eip_dma_hy_handle_cmd_irq()
  *	Interrupt handler for DMA Rx.
  */
-static irqreturn_t eip_dma_hy_handle_irq(int irq, void *ctx)
+static irqreturn_t eip_dma_hy_handle_cmd_irq(int irq, void *ctx)
 {
 	struct eip_dma *dma = ctx;
 
@@ -580,6 +581,21 @@ static irqreturn_t eip_dma_hy_handle_irq(int irq, void *ctx)
 		napi_schedule(&dma->in.napi);
 	}
 
+	return IRQ_HANDLED;
+}
+
+/*
+ * eip_dma_hy_handle_rdr_irq()
+ *	Interrupt handler for DMA Rx.
+ */
+static irqreturn_t eip_dma_hy_handle_rdr_irq(int irq, void *ctx)
+{
+	struct eip_dma *dma = ctx;
+
+	/*
+	 * Acknowledge interrupt. HW interrupt remain in disabled state
+	 * until our bottom half re-enables it.
+	 */
 	if (ioread32(dma->out.proc_status) & EIP_HW_RDR_PROC_IRQ_STATUS) {
 		iowrite32(EIP_HW_RDR_PROC_IRQ_STATUS, dma->out.proc_status);
 		napi_schedule(&dma->out.napi);
@@ -696,6 +712,9 @@ int eip_dma_hy_tx_linear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct
 	uint32_t in_count;
 
 	BUG_ON(skb_is_nonlinear(skb));
+	if (unlikely(!dma->active)) {
+		return -ENOTSUPP;
+	}
 
 	in_count = eip_dma_avail_idx_and_count(&dma->in, &src.idx);
 	if (!in_count)
@@ -740,6 +759,9 @@ int eip_dma_hy_tx_nonlinear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, str
 	bool last_frag;
 
 	BUG_ON(!skb_is_nonlinear(skb));
+	if (unlikely(!dma->active)) {
+		return -ENOTSUPP;
+	}
 
 	in_count = eip_dma_avail_idx_and_count(&dma->in, &cmd_idx);
 	sw->src_nsegs = 0;
@@ -798,7 +820,10 @@ void eip_dma_hy_deinit(struct eip_dma *dma)
 	}
 
 	debugfs_remove_recursive(dma->dentry);
-	free_irq(dma->irq, dma);
+	irq_set_affinity_hint(dma->in.irq, NULL);
+	free_irq(dma->in.irq, dma);
+	irq_set_affinity_hint(dma->out.irq, NULL);
+	free_irq(dma->out.irq, dma);
 	napi_disable(&dma->in.napi);
 	napi_disable(&dma->out.napi);
 	netif_napi_del(&dma->in.napi);
@@ -814,54 +839,60 @@ void eip_dma_hy_deinit(struct eip_dma *dma)
  * eip_dma_hy_init()
  *	initialize the EIP197 DMA.
  */
-int eip_dma_hy_init(struct eip_dma *dma, struct platform_device *pdev, uint8_t tx_cpu,
-		uint8_t rx_cpu,	uint32_t ring_id, void __iomem *base_addr)
+int eip_dma_hy_init(struct eip_dma *dma, struct platform_device *pdev, struct device_node *child, int cpu)
 {
 	struct eip_pdev *ep = platform_get_drvdata(pdev);
+	void __iomem *base_addr = ep->dev_vaddr;
+	struct eip_dma_ring_info cmd_info = {0};
+	struct eip_dma_ring_info res_info = {0};
+	uint8_t ring_id;
 	int status;
 
 	if (dma->active) {
-		pr_err("%px: DMA is already configured; ring_id(%u)\n", dma, ring_id);
+		pr_err("%px: Hybrid DMA is already configured; cpu(%u)\n", dma, cpu);
+		return -EINVAL;
+	}
+
+	status = of_property_read_u8(child, "ring-id", &ring_id);
+	if (status < 0) {
+		pr_err("%px: Failed to read ring_id\n", pdev);
+		return -EINVAL;
+	}
+
+	cmd_info.irq = of_irq_get_byname(child, "cdr_proc_irq");
+	if (!cmd_info.irq) {
+		pr_err("%px: irq_of_parse_and_map() fail for irq, ring_id(%u)\n", dma, ring_id);
+		return -EINVAL;
+	}
+
+	res_info.irq = of_irq_get_byname(child, "rdr_proc_irq");
+	if (!res_info.irq) {
+		pr_err("%px: irq_of_parse_and_map() fail for irq, ring_id(%u)\n", dma, ring_id);
 		return -EINVAL;
 	}
 
 	dma->type = EIP_DMA_TYPE_HYBRID;
 	dma->ring_id = ring_id;
-	dma->irq_mask = EIP_HW_RDR_PROC_IRQ_STATUS;
-	dma->irq_status = base_addr + EIP_HW_HIA_RDR_STAT(ring_id);
+	cmd_info.base_addr = res_info.base_addr = base_addr;
+	cmd_info.cpu = res_info.cpu = cpu;
+	cmd_info.handler = eip_dma_hy_handle_cmd_irq;
+	res_info.handler = eip_dma_hy_handle_rdr_irq;
 
-	/*
-	 * TODO: should we rename rx_cpu to irq_num?
-	 */
-	dma->irq = platform_get_irq(ep->pdev, rx_cpu);
-	if (!dma->irq) {
-		pr_err("%px: irq_of_parse_and_map() fail for irq, ring_id(%u)\n", dma, ring_id);
-		return -EINVAL;
-	}
 
 	/*
 	 * Initialize and allocate ring.
 	 */
-	status = eip_dma_cmd_init(dma, base_addr, true, rx_cpu);
+	status = eip_dma_cmd_init(dma, &cmd_info, true);
 	if (status < 0) {
 		pr_err("%px: Failed to initialize cmd ring(%u)\n", dma, ring_id);
 		return status;
 
 	}
 
-	status = eip_dma_res_init(dma, base_addr, true, rx_cpu);
+	status = eip_dma_res_init(dma, &res_info, true);
 	if (status < 0) {
 		pr_err("%px: Failed to initialize res ring(%u)\n", dma, ring_id);
 		goto fail_res;
-	}
-
-	/*
-	 * Initialize the interrupt.
-	 */
-	status = request_irq(dma->irq, eip_dma_hy_handle_irq, IRQF_SHARED, irq_name[ring_id], dma);
-	if (status < 0) {
-		pr_err("%px: IRQ %u request failed\n", dma, dma->irq);
-		goto fail_irq;
 	}
 
 	/*
@@ -889,19 +920,14 @@ int eip_dma_hy_init(struct eip_dma *dma, struct platform_device *pdev, uint8_t t
 	napi_enable(&dma->out.napi);
 	ep->dma_refill_req = true;
 
-	/*
-	 * Interrupt can only be handled by the specified CPU.
-	 */
-	irq_set_affinity_hint(dma->irq, cpumask_of(rx_cpu));
-
 	dma->dentry = debugfs_create_file(dma_name[ring_id], S_IRUGO, ep->dentry, dma, &dma_stats_ops);
 	dma->active = 1;
-	pr_info("%px: DMA ring(%u) configured and Rx mapped to cpu(%u)\n", dma, ring_id, rx_cpu);
+	pr_info("%px: DMA ring(%u) configured and Rx mapped to cpu(%u)\n", dma, ring_id, cpu);
 	return 0;
 
-fail_irq:
-	kfree(dma->out.kaddr);
 fail_res:
+	irq_set_affinity_hint(dma->in.irq, NULL);
+	free_irq(dma->in.irq, dma);
 	kfree(dma->in.kaddr);
 	return status;
 }

@@ -94,6 +94,9 @@ struct eip_sw_desc {
  */
 struct eip_drv {
 	struct dentry *dentry;			/* Root package debugfs dentry */
+	cpumask_t la_cpu_map;			/* Lookaside active CPU map */
+	cpumask_t hy_cpu_map;			/* Hybrid active CPU map */
+
 	struct platform_device *pdev;		/* Device associated with the driver */
 };
 

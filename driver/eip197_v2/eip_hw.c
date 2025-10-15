@@ -11,10 +11,77 @@
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
 #include <linux/of_address.h>
+#include <linux/of_irq.h>
 #include <linux/firmware.h>
 #include <linux/clk.h>
+#include <linux/reset.h>
 
 #include "eip_priv.h"
+#include <linux/of.h>
+
+/*
+ * eip_hw_next_compatible_child()
+ *	Find the next child node with a matching compatible string
+ *
+ * @parent: Parent device node
+ * @prev: Previous child node (or NULL to start from the beginning)
+ * @compatible: Compatible string to match
+ */
+static struct device_node *eip_hw_next_compatible_child(struct device_node *parent,
+		struct device_node *prev, const char *compatible)
+{
+	struct device_node *child = prev;
+
+	while ((child = of_get_next_child(parent, child))) {
+		if (of_device_is_compatible(child, compatible))
+			return child;
+	}
+
+	return NULL;
+}
+
+/*
+ * eip_hw_external_reset()
+ *	Reset EIP hardware.
+ */
+static bool eip_hw_external_reset(struct platform_device *pdev)
+{
+	struct device_node *np = of_node_get(pdev->dev.of_node);
+	const char *rst_string;
+	int count, i;
+
+	/*
+	 * Get Reset singal count
+	 */
+	count = of_property_count_strings(np, "reset-names");
+	if (count < 0) {
+		pr_warn("%px:EIP reset-names entry not found\n", np);
+		return false;
+	}
+
+	for (i = 0; i < count; i++) {
+		struct reset_control *hw_rst;
+
+		/*
+		 * parse reset control from DTSI
+		 */
+		of_property_read_string_index(np, "reset-names", i, &rst_string);
+
+		hw_rst = devm_reset_control_get(&pdev->dev, rst_string);
+		if (!hw_rst) {
+			pr_warn("%px:EIP reset control not found\n", np);
+			return false;
+		}
+
+		reset_control_assert(hw_rst);
+		udelay(100);
+
+		reset_control_deassert(hw_rst);
+		udelay(100);
+	}
+
+	return true;
+}
 
 /*
  * eip_hw_reset_status()
@@ -598,6 +665,11 @@ static int eip_hw_clock_init(struct device *dev, struct device_node *np)
 	struct clk *clk;
 	int status = 0;
 
+	if (of_machine_is_compatible("qcom,ipq9679-emulation")) {
+		pr_info("%px:Skipped clock for RUMI emulation.\n", np);
+		return 0;
+	}
+
 	/*
 	 * Enable crypto clock
 	 */
@@ -668,6 +740,8 @@ void eip_hw_deinit(struct platform_device *pdev)
 	struct eip_pdev *ep = platform_get_drvdata(pdev);
 	int i;
 
+	eip_hw_external_reset(pdev);
+
 	/*
 	 * We just need to deinitialize DMA. Other HW register does not require any deinit.
 	 */
@@ -698,10 +772,12 @@ int eip_hw_init(struct platform_device *pdev)
 	struct device_node *np = of_node_get(pdev->dev.of_node);
 	struct eip_pdev *ep = platform_get_drvdata(pdev);
 	void __iomem *base_addr = ep->dev_vaddr;
+	struct eip_drv *drv = &eip_drv_g;
 	struct device_node *child = NULL;
+	struct device_node *prev = NULL;
 	uint32_t redirect_en = 0;
-	uint8_t ring_id = 0;
-	int status;
+	uint8_t max_ring;
+	int status, cpu;
 
 	/*
 	 * Initialize HW clock.
@@ -709,6 +785,18 @@ int eip_hw_init(struct platform_device *pdev)
 	status = eip_hw_clock_init(&pdev->dev, np);
 	if (status < 0) {
 		pr_err("%px: Failed to initialize clock status(%u)\n", pdev, status);
+		goto fail_init;
+	}
+
+	status = of_property_read_u8(np, "max-ring", &max_ring);
+	if (status < 0) {
+		pr_err("%px: Failed to read max_ring\n", pdev);
+		goto fail_init;
+	}
+
+	if ((cpumask_weight(&drv->la_cpu_map) + cpumask_weight(&drv->hy_cpu_map)) > max_ring) {
+		pr_err("%px: Hardware DMA not available - Requested LA(%u) HY(%u) Available(%u)\n", ep,
+			cpumask_weight(&drv->la_cpu_map), cpumask_weight(&drv->hy_cpu_map), max_ring);
 		goto fail_init;
 	}
 
@@ -754,104 +842,55 @@ int eip_hw_init(struct platform_device *pdev)
 	ep->inline_support = of_property_read_bool(np, "qcom,inline-enabled");
 	pr_info("%px: EIP inline_support: %s", pdev, ep->inline_support ? "yes" : "no");
 
+
 	/*
-	 * Initialize all lookaside DMA.
+	 * Find first dma copmatible node.
 	 */
-	for_each_available_child_of_node(np, child) {
-		struct eip_dma *dma;
-		uint8_t tx_cpu = 0;
-		uint8_t rx_cpu = 0;
-
-		status = of_property_match_string(child, "ring-name", "lookaside");
-		if (status < 0) {
-			continue;
-		}
-
-		status = of_property_read_u8(child, "tx_cpu", &tx_cpu);
-		if (status < 0) {
-			pr_err("%px: Failed to read tx_cpu\n", pdev);
-			goto fail_init;
-		}
-
-		if (tx_cpu >= NR_CPUS) {
-			pr_err("%px: Invalid tx_cpu number(%u)\n", pdev, tx_cpu);
-			goto fail_init;
-		}
-
-		status = of_property_read_u8(child, "rx_cpu", &rx_cpu);
-		if (status < 0) {
-			pr_err("%px: Failed to read rx_cpu\n", pdev);
-			goto fail_init;
-		}
-
-		if (rx_cpu >= NR_CPUS) {
-			pr_err("%px: Invalid rx_cpu number(%u)\n", pdev, rx_cpu);
-			goto fail_init;
-		}
-
-		status = of_property_read_u8(child, "ring-id", &ring_id);
-		if (status < 0) {
-			pr_err("%px: Failed to read ring_id\n", pdev);
-			goto fail_init;
-		}
-
-		dma = &ep->la[tx_cpu];
-		status = eip_dma_la_init(dma, pdev, tx_cpu, rx_cpu, ring_id, base_addr);
-		if (status < 0) {
-			pr_err("%px: LA DMA initialization failed for cpu(%u)\n", pdev, tx_cpu);
-			goto fail_init;
-		}
+	child = eip_hw_next_compatible_child(np, prev, "qcom,eip-dma");
+	if (!child) {
+		pr_err("%px: No DMA nodes found in device tree\n", pdev);
+		status = -ENODEV;
+		goto fail_init;
 	}
 
 	/*
-	 * Initialize all hybrid DMA.
+	 * Initialize & map DMA nodes to Lookaside as per provided CPU Map.
 	 */
-	for_each_available_child_of_node(np, child) {
+	for_each_cpu(cpu, &drv->la_cpu_map) {
 		struct eip_dma *dma;
-		uint8_t tx_cpu = 0;
-		uint8_t rx_cpu = 0;
 
-		status = of_property_match_string(child, "ring-name", "hybrid");
+		dma = &ep->la[cpu];
+		status = eip_dma_la_init(dma, pdev, child, cpu);
 		if (status < 0) {
-			continue;
+			pr_err("%px: LA DMA initialization failed for cpu(%u)\n", pdev, cpu);
+			of_node_put(child);
+			goto fail_init;
 		}
 
-		status = of_property_read_u8(child, "tx_cpu", &tx_cpu);
+		prev = child;
+		child = eip_hw_next_compatible_child(np, prev, "qcom,eip-dma");
+		of_node_put(prev);
+	}
+
+	/*
+	 * Initialize & map DMA nodes to Hybrid as per provided CPU MAP.
+	 */
+	for_each_cpu(cpu, &drv->hy_cpu_map) {
+		struct eip_dma *dma;
+
+		dma = &ep->hy[cpu];
+		status = eip_dma_hy_init(dma, pdev, child, cpu);
 		if (status < 0) {
-			pr_err("%px: Failed to read tx_cpu\n", pdev);
+			pr_err("%px: LA DMA initialization failed for cpu(%u)\n", pdev, cpu);
+			of_node_put(child);
 			goto fail_init;
 		}
 
-		if (tx_cpu >= NR_CPUS) {
-			pr_err("%px: Invalid tx_cpu number(%u)\n", pdev, tx_cpu);
-			goto fail_init;
-		}
+		redirect_en |= EIP_HW_ICE_REDIRECT_EN(dma->ring_id);
 
-		status = of_property_read_u8(child, "rx_cpu", &rx_cpu);
-		if (status < 0) {
-			pr_err("%px: Failed to read rx_cpu\n", pdev);
-			goto fail_init;
-		}
-
-		if (rx_cpu >= NR_CPUS) {
-			pr_err("%px: Invalid rx_cpu number(%u)\n", pdev, rx_cpu);
-			goto fail_init;
-		}
-
-		status = of_property_read_u8(child, "ring-id", &ring_id);
-		if (status < 0) {
-			pr_err("%px: Failed to read ring_id\n", pdev);
-			goto fail_init;
-		}
-
-		dma = &ep->hy[tx_cpu];
-		status = eip_dma_hy_init(dma, pdev, tx_cpu, rx_cpu, ring_id, base_addr);
-		if (status < 0) {
-			pr_err("%px: LA DMA initialization failed for cpu(%u)\n", pdev, tx_cpu);
-			goto fail_init;
-		}
-
-		redirect_en |= EIP_HW_ICE_REDIRECT_EN(ring_id);
+		prev = child;
+		child = eip_hw_next_compatible_child(np, prev, "qcom,eip-dma");
+		of_node_put(prev);
 	}
 
 	/*
