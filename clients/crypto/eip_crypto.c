@@ -29,6 +29,7 @@
  */
 static const struct of_device_id eip_crypto_dt_ids[] = {
 	{ .compatible = "qcom,eip_crypto" },
+	{}
 };
 MODULE_DEVICE_TABLE(of, eip_crypto_dt_ids);
 
