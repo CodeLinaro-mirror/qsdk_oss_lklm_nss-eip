@@ -180,7 +180,7 @@ struct eip_tr {
 	uint32_t ctrl_words[2];			/* Initial HW control word */
 	uint32_t nonce;				/* nonce passed during allocation */
 	uint32_t tr_flags;			/* Flags for TR */
-	uint16_t iv_len;			/* IV length for configured algo */
+	uint16_t iv_len;			/* IV length for configured algo FIXME: NA for Crypto. Move to ipsec */
 	uint16_t digest_len;			/* HMAC length for configured algo */
 	uint16_t blk_len;			/* Cipher block length for configured algo */
 
