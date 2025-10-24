@@ -174,10 +174,15 @@ EXPORT_SYMBOL(eip_tk_dec_3des);
 uint8_t eip_tk_enc(struct eip_tk *tk, struct eip_tk_params *tk_params)
 {
 	struct skcipher_request *req = eip_req2skcipher_request(tk_params->eip_req);
-	struct eip_tr *tr = tk_params->tr;
+	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
+	uint32_t iv_len = crypto_skcipher_ivsize(tfm);
 	uint32_t *tk_hdr = &tk_params->tk_hdr;
-	uint32_t *iv_word = (uint32_t *)req->iv;
+	struct eip_tr *tr = tk_params->tr;
 	uint32_t *tk_word = tk->words;
+	uint32_t zeroes[4] = {0};
+	uint32_t *iv_word;
+
+	iv_word = iv_len ? (uint32_t *)req->iv : zeroes;
 
 	/*
 	 * Fill token control info.
@@ -219,10 +224,15 @@ EXPORT_SYMBOL(eip_tk_enc);
 uint8_t eip_tk_dec(struct eip_tk *tk, struct eip_tk_params *tk_params)
 {
 	struct skcipher_request *req = eip_req2skcipher_request(tk_params->eip_req);
-	struct eip_tr *tr = tk_params->tr;
+	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
+	uint32_t iv_len = crypto_skcipher_ivsize(tfm);
 	uint32_t *tk_hdr = &tk_params->tk_hdr;
-	uint32_t *iv_word = (uint32_t *)req->iv;
+	struct eip_tr *tr = tk_params->tr;
 	uint32_t *tk_word = tk->words;
+	uint32_t zeroes[4] = {0};
+	uint32_t *iv_word;
+
+	iv_word = iv_len ? (uint32_t *)req->iv : zeroes;
 
 	/*
 	 * Fill token control info.
