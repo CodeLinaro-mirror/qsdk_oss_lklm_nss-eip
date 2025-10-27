@@ -15,8 +15,9 @@
 #include "eip_ctx.h"
 #include "eip_tk.h"
 #include "eip_tr.h"
-#include "eip_tr_ipsec.h"
 #include "eip_flow.h"
+#include "eip_tr_ipsec.h"
+#include "eip_tr_dtls.h"
 
 #define EIP_MAX_STR_LEN 25U		/* Maximum string length */
 #define EIP_DEBUGFS_MAX_NAME 128U	/* Maximum string length for debugfs */
@@ -80,7 +81,8 @@ struct eip_sw_desc {
 	uint32_t tk_addr;		/* Control token address (EIP96 instructions) */
 	uint32_t tr_addr_type;		/* TR physical address with lower 2 bits OR'd with type */
 	uint32_t tk_words;		/* Command Frag[0] Contol token length in words */
-	uint32_t hw_svc;		/* HW service */
+	uint32_t hw_svc;		/* HW service (token[6]) */
+	uint32_t cmd_l4_csum;		/* L4 checksum offload flag (token[5]) */
 
 	uint16_t src_nsegs;		/* Source data segments */
 	uint16_t dst_nsegs;		/* Destination data segments */

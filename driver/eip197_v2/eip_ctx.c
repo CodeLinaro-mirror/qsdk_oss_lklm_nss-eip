@@ -20,6 +20,7 @@ static const char *svcname[EIP_SVC_MAX] = {
 	[EIP_SVC_AEAD] = "eip_aead",
 	[EIP_SVC_IPSEC] = "eip_ipsec",
 	[EIP_SVC_HYBRID_IPSEC] = "eip_hy_ipsec",
+	[EIP_SVC_HYBRID_DTLS] = "eip_hy_dtls",
 };
 
 /*
@@ -234,6 +235,11 @@ struct eip_ctx *eip_ctx_alloc(enum eip_svc svc, struct dentry **dentry)
 		ctx->svc_db = eip_tr_dtls_get_svc();
 		ctx->db_size = eip_tr_dtls_get_svc_len();
 		ctx->dma = ep->la;
+		break;
+	case EIP_SVC_HYBRID_DTLS:
+		ctx->svc_db = eip_tr_dtls_get_svc();
+		ctx->db_size = eip_tr_dtls_get_svc_len();
+		ctx->dma = ep->hy;
 		break;
 	default:
 		pr_err("%px: Service database not found\n", ep);

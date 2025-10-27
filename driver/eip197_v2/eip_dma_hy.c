@@ -109,6 +109,7 @@ static inline void eip_dma_hy_tx_cmd(struct eip_dma *dma, struct eip_sw_desc *sw
 		cmd->token[5] = 0;
 		cmd->token[6] = sw->hw_svc;
 		cmd->token[7] = EIP_HW_CMD_OFFSET(sizeof(struct ethhdr));
+		cmd->token[7] |= sw->cmd_l4_csum;
 
 		/*
 		 * TODO: Copy with uint64_t?
@@ -204,7 +205,7 @@ static inline void eip_dma_hy_tr_deliver(struct eip_tr *tr, struct sk_buff *skb,
 {
 	struct eip_tr_stats *tr_stats = this_cpu_ptr(tr->stats_pcpu);
 
-	BUG_ON(tr->svc != EIP_SVC_HYBRID_IPSEC);
+	WARN_ON((tr->svc != EIP_SVC_HYBRID_IPSEC) && (tr->svc != EIP_SVC_HYBRID_DTLS));
 
 	tr_stats->rx_frags += nsegs;
 	tr_stats->rx_pkts++;
@@ -213,7 +214,28 @@ static inline void eip_dma_hy_tr_deliver(struct eip_tr *tr, struct sk_buff *skb,
 	/*
 	 * Call completion callback.
 	 */
-	tr->ipsec.ops.cb(tr->ipsec.app_data, skb);
+	if (tr->svc == EIP_SVC_HYBRID_IPSEC) {
+		tr->ipsec.ops.cb(tr->ipsec.app_data, skb);
+		return;
+	}
+
+	/*
+	 * EIP currently strips of extra 4 bytes of CAPWAP + DTLS header.
+	 * skb_push() would BUG() on insufficient headroom; guard against that here.
+	 */
+	if (unlikely(skb_headroom(skb) < tr->dtls.remove_len)) {
+		pr_err_ratelimited("%px: Insufficient headroom(%u) to push DTLS header(%u)\n",
+				tr, skb_headroom(skb), tr->dtls.remove_len);
+		tr_stats->rx_error++;
+		consume_skb(skb);
+		return;
+	}
+
+	/*
+	 * Push to the correct header.
+	 */
+	skb_push(skb, tr->dtls.remove_len);
+	tr->dtls.ops.cb(tr->dtls.app_data, skb);
 }
 
 /*
@@ -224,7 +246,7 @@ static inline void eip_dma_hy_tr_deliver_err(struct eip_tr *tr, struct sk_buff *
 {
 	struct eip_tr_stats *tr_stats = this_cpu_ptr(tr->stats_pcpu);
 
-	BUG_ON(tr->svc != EIP_SVC_HYBRID_IPSEC);
+	WARN_ON((tr->svc != EIP_SVC_HYBRID_IPSEC) && (tr->svc != EIP_SVC_HYBRID_DTLS));
 
 	tr_stats->rx_frags += nsegs;
 	tr_stats->rx_pkts++;
@@ -234,7 +256,12 @@ static inline void eip_dma_hy_tr_deliver_err(struct eip_tr *tr, struct sk_buff *
 	/*
 	 * Call completion callback.
 	 */
-	tr->ipsec.ops.err_cb(tr->ipsec.app_data, skb, -EBADE);
+	if (tr->svc == EIP_SVC_HYBRID_IPSEC) {
+		tr->ipsec.ops.err_cb(tr->ipsec.app_data, skb, -EBADE);
+		return;
+	}
+
+	tr->dtls.ops.err_cb(tr->dtls.app_data, skb, -EBADE);
 }
 
 /*

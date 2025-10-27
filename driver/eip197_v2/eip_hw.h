@@ -665,6 +665,9 @@
 #define EIP_HW_CTX_SIZE_38WORDS (0x26U << 8)
 #define EIP_HW_CTX_SIZE_40WORDS (0x28U << 8)
 
+#define EIP_HW_CTX_PAD_TLS (0x5 << 14)
+#define EIP_HW_CTX_BYTE2WORDS(x) ((x) / sizeof(uint32_t))
+
 /*
  * Control word fields.
  */
@@ -704,6 +707,15 @@
 #define EIP_HW_TOKEN_HDR_CMN (EIP_HW_TOKEN_HDR_BASIC | EIP_HW_TOKEN_HDR_CTX_PTR | EIP_HW_TOKEN_HDR_APP_ID)
 #define EIP_HW_TOKEN_HDR_DIGEST (EIP_HW_TOKEN_HDR_CMN | EIP_HW_TOKEN_HDR_CTX_CTRL)
 #define EIP_HW_TOKEN_HDR_EXTENDED EIP_HW_TOKEN_HDR_CMN
+
+/*
+ * DTLS LDT/IDT extended command token header bits (word 0, per FW manual section 3.3.4.2).
+ * These are OR'd into tk_hdr for DTLS hybrid (IDT) flows.
+ */
+#define EIP_HW_TOKEN_HDR_DTLS_CAPWAP		0x04000000U	/* bit[26]: CAPWAP preamble present in inbound packet */
+#define EIP_HW_TOKEN_HDR_DTLS_INBOUND		0x08000000U	/* bit[27]: Direction=1 (inbound/decap) */
+#define EIP_HW_TOKEN_HDR_DTLS_CT_APP_DATA	0x30000000U	/* bits[29:28]=11b: Application data content type */
+
 #define EIP_HW_TOKEN_HDR_CRYPTO_CMN (EIP_HW_TOKEN_HDR_APP_ID | EIP_HW_TOKEN_HDR_CTX_PTR \
 				| EIP_HW_TOKEN_HDR_REUSE_CTX | EIP_HW_TOKEN_HDR_CTX_CTRL \
 				| EIP_HW_TOKEN_HDR_BASIC)
@@ -783,15 +795,23 @@
 #define EIP_HW_RES_ERR_FLOW_FAIL 188U
 #define EIP_HW_RES_BYPASS_SRC_PORT(by) ((by) & 0xFFFFU)
 #define EIP_HW_RES_OFFST(res) (((res) >> 16) & 0xFFU)
+#define EIP_HW_RES_RECORD_OFFST(res) ((res) & 0xFFU)
 
 /*
  * HW specific service number.
  */
 #define EIP_HW_HWSERVICE_IPSEC 0x3U
 #define EIP_HW_HWSERVICE_CRYPTO 0x4U
+#define EIP_HW_HWSERVICE_DTLS 0x28U
 #define EIP_HW_CMD_HWSERVICE_INV_TRC (0x6U << 24)
 #define EIP_HW_CMD_HWSERVICE_LIP (EIP_HW_HWSERVICE_IPSEC << 24)
 #define EIP_HW_CMD_HWSERVICE_LAC (EIP_HW_HWSERVICE_CRYPTO << 24)
+#define EIP_HW_CMD_HWSERVICE_IDT (EIP_HW_HWSERVICE_DTLS << 24)
+
+/*
+ * Command token Word 5 flags (FW3.6 Section 3.3.4).
+ */
+#define EIP_HW_CMD_W5_L4CHKSUM (1U << 26)	/* Compute and insert UDP/TCP checksum (IDT/LDT outbound, requires OCE) */
 
 /*
  * Command base redirection enable

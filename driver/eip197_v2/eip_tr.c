@@ -358,6 +358,10 @@ struct eip_tr *eip_tr_alloc(struct eip_ctx *ctx, struct eip_tr_info *info)
 		tr->word_idx = 3;
 		tr->word_shift = 16;
 		break;
+	case EIP_SVC_HYBRID_DTLS:
+		tr->word_idx = 7;
+		tr->word_shift = 0;
+		break;
 	default:
 		break;
 	}
@@ -385,7 +389,7 @@ struct eip_tr *eip_tr_alloc(struct eip_ctx *ctx, struct eip_tr_info *info)
 	/*
 	 * Context is going to use hybrid ring, so refill it
 	 */
-	if (tr->svc == EIP_SVC_HYBRID_IPSEC && ep->dma_refill_req) {
+	if ((tr->svc == EIP_SVC_HYBRID_IPSEC || tr->svc == EIP_SVC_HYBRID_DTLS) && ep->dma_refill_req) {
 		eip_dma_hy_refill_all(ctx);
 		ep->dma_refill_req = false;
 	}
@@ -450,6 +454,12 @@ void eip_tr_disable(struct eip_tr *tr)
 		 */
 	case EIP_SVC_HYBRID_IPSEC:
 		ops = &tr->ipsec.ops;
+		xchg(&ops->cb, eip_tr_dummy_cb);
+		xchg(&ops->err_cb, eip_tr_dummy_err);
+		break;
+
+	case EIP_SVC_HYBRID_DTLS:
+		ops = &tr->dtls.ops;
 		xchg(&ops->cb, eip_tr_dummy_cb);
 		xchg(&ops->err_cb, eip_tr_dummy_err);
 		break;
@@ -653,5 +663,6 @@ void eip_tr_get_algo_info(struct eip_tr *tr, struct eip_tr_algo_info *algo)
 {
 	algo->iv_len = tr->iv_len;
 	algo->blk_len = tr->blk_len;
+	algo->hmac_len = tr->digest_len;
 }
 EXPORT_SYMBOL(eip_tr_get_algo_info);

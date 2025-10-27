@@ -114,6 +114,7 @@ enum eip_svc {
 	EIP_SVC_IPSEC,
 	EIP_SVC_HYBRID_IPSEC,
 	EIP_SVC_DTLS,
+	EIP_SVC_HYBRID_DTLS,
 	EIP_SVC_MAX
 };
 
@@ -301,6 +302,8 @@ struct eip_tr_info_dtls {
 	__be16 dst_port;	/* Destination port for ESP-over-UDP flow */
 	__be16 epoch;		/* DTLS epoch version */
 	uint16_t version;	/* DTLS version (0xFEFF/v1.0 or 0xFEFD/v1.2) */
+
+	struct eip_ppe_mdata ppe_mdata;	/* EIP-PPE meta/bypass information */
 
 	uint8_t ip_ver;		/* Version 4 or 6 */
 	uint8_t ip_ttl;		/* Default time-to-live */

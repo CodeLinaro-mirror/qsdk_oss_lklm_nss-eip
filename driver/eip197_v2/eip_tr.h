@@ -16,14 +16,18 @@
 #define EIP_TR_REDIR_IFACE(i) (((i) & 0xFU) << 12) /* Redirect destination interface */
 #define EIP_TR_ERR_SHIFT 16U
 #define EIP_MAX_PKT_LEN	9216 /* Bytes */
+#define EIP_TR_PRE_PROCESS(tr, ops, skb) ((ops)->pre(tr, skb)) /* Call pre processing function */
+#define EIP_TR_POST_PROCESS(tr, ops, skb) ((ops)->post(tr, skb)) /* Call post processing function */
 
 struct eip_svc_entry;
 typedef bool (*eip_tr_init_t) (struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo);
+typedef void (*eip_tr_proc_t)(struct eip_tr *tr, struct sk_buff *skb);
 
 /*
  * IPsec specific Transform Record Field
  */
 #define EIP_TR_IPSEC_SPI (1U << 27)
+#define EIP_TR_DTLS_PROTO_VER EIP_TR_IPSEC_SPI	/* CCW0[27]: SPI word stores DTLS protocol version */
 #define EIP_TR_IPSEC_SEQ_NUM (1U << 28)
 #define EIP_TR_IPSEC_EXT_SEQ_NUM(x) ((x) << 29)
 #define EIP_TR_IPSEC_CONTROL_IV(x) ((x) << 5)
@@ -39,6 +43,17 @@ typedef bool (*eip_tr_init_t) (struct eip_tr *tr, struct eip_tr_info *info, cons
 #define EIP_TR_IPSEC_ENCAP_TOKEN_INST_LEN(x) (((x) + 1U) << 24)
 #define EIP_TR_IPSEC_ENCAP_TOKEN_HDR 0x420000U
 #define EIP_TR_IPSEC_ENCAP_TOKEN_HDR_IV 0x4000000U
+
+#define EIP_TR_DTLS_ENCAP_TOKEN_HDR 0x00020000U
+#define EIP_TR_DTLS_ENCAP_TOKEN_HDR_GCM 0x00420000U
+#define EIP_TR_DTLS_DECAP_TOKEN_HDR 0x01420000U
+#define EIP_TR_DTLS_DECAP_TOKEN_HDR_GCM 0x00420000U
+#define EIP_TR_DTLS_DECAP_TOKEN_CAPWAP 0x4000000U
+#define EIP_TR_DTLS_DECAP_TOKEN 0x8000000U
+#define EIP_TR_DTLS_ENCAP_TOKEN_ALERT 0x10000000U
+#define EIP_TR_DTLS_ENCAP_TOKEN_HANDSHAKE 0x20000000U
+#define EIP_TR_DTLS_ENCAP_TOKEN_DATA 0x30000000U
+
 #define EIP_TR_IPSEC_IV_SIZE(x) (x)
 #define EIP_TR_IPSEC_ICV_SIZE(x) ((x) << 8)
 #define EIP_TR_IPSEC_OHDR_PROTO(x) ((x) << 16)
@@ -104,6 +119,69 @@ typedef bool (*eip_tr_init_t) (struct eip_tr *tr, struct eip_tr_info *info, cons
 #define U64_FROM_U32(hi, lo) (((u64)(hi) << 32)|(u64)(lo))
 
 /*
+ * Merge two 32-bit values (lo, hi) into a single 64-bit value
+ */
+#define EIP_TR_TOTAL_CNT_MRG_TO_64(lo, hi) (((uint64_t) hi << 32) | lo)
+
+
+/*
+ * DTLS Specific TR fields
+ */
+#define EIP_TR_DTLS_IV_SIZE(x) (x)
+#define EIP_TR_DTLS_ICV_SIZE(x) ((x) << 8)
+#define EIP_TR_DTLS_PROTO(x) ((x) << 24)
+#define EIP_TR_DTLS_OHDR_PROTO(x) ((x) << 16)
+#define EIP_TR_DTLS_IPV6_EN (0x1U << 8)
+#define EIP_TR_DTLS_COPY_HDR (0x1U << 29)
+#define EIP_TR_DTLS_PAD_2BYTE(x) ((x) / sizeof(uint16_t))
+#define EIP_TR_DTLS_WINDOW_4BYTE(x) (((x) / sizeof(uint32_t)) << 8)
+#define EIP_TR_DTLS_ENCAP_TOKEN_VERIFY 0xd0060000U
+#define EIP_TR_DTLS_ENCAP_ESN_TOKEN_INST(seq_offset) (0xe2560800 | ((seq_offset)))
+#define EIP_TR_DTLS_DECAP_TOKEN_VERIFY(hash_len) (0xd9070000 | ((hash_len) & 0xfffc))
+#define EIP_TR_DTLS_DECAP_ESN_TOKEN_INST(seq_offset) (0xe2560800 | ((seq_offset)))
+
+
+/*
+ * DTLS context control word0 fields
+ */
+#define EIP_TR_DTLS_CTX0_SEQNO (0x2U << 28)
+#define EIP_TR_DTLS_CTX0_SEQNO_MASK64 (0x1U << 30)
+#define EIP_TR_DTLS_CTX0_SEQNO_MASK128 (0x3U << 30)
+#define EIP_TR_DTLS_CTX1_PAD_TLS (0x5U << 14)
+#define EIP_TR_DTLS_CTX1_HASH_STORE (0x1U << 19)
+#define EIP_TR_DTLS_CTX1_PRE_CRYPTO_DECAP (0x1 << 13)
+#define EIP_TR_DTLS_CONTROL_IV(x) ((x) << 5)
+#define EIP_TR_DTLS_IV_FORMAT(x) ((x) << 10)
+#define EIP_TR_DTLS_VER(major, minor) (((major) << 8) | (minor))
+
+/*
+ * Context control word1 fields
+ */
+#define EIP_TR_CTRL_SEQ_NUM_STORE (1U << 22)
+#define EIP_TR_CTRL_SEQ_NUM_OFFSET(x) ((x) << 24)
+#define EIP_TR_CTRL_SEQ_NUM_OFFSET_EN (1U << 30)
+
+/*
+ * Ohdr for DTLS
+ */
+#define EIP_TR_DTLS_OHDR_PROTO_V4_OUT 13U
+#define EIP_TR_DTLS_OHDR_PROTO_V4_IN 14U
+#define EIP_TR_DTLS_OHDR_PROTO_V6_OUT 15U
+#define EIP_TR_DTLS_OHDR_PROTO_V6_IN 16U
+#define EIP_TR_DTLS_CAPWAP_OHDR_PROTO_V4_OUT 17U
+#define EIP_TR_DTLS_CAPWAP_OHDR_PROTO_V4_IN 18U
+#define EIP_TR_DTLS_CAPWAP_OHDR_PROTO_V6_OUT 19U
+#define EIP_TR_DTLS_CAPWAP_OHDR_PROTO_V6_IN 20U
+
+/*
+ * ESP proto for DTLS
+ */
+#define EIP_TR_DTLS_PROTO_OUT_CBC 13U
+#define EIP_TR_DTLS_PROTO_OUT_GCM 14U
+#define EIP_TR_DTLS_PROTO_IN_CBC 15U
+#define EIP_TR_DTLS_PROTO_IN_GCM 16U
+
+/*
  * eip_tr_stats
  *	Statistics for each transform record.
  */
@@ -124,6 +202,7 @@ struct eip_tr_stats {
  */
 struct eip_tr_ops {
 	eip_tk_proc_t tk_fill;		/* cached Token fill method */
+	eip_tr_proc_t pre, post;	/* Pre & Post processing methods */
 	void *app_data;			/* App data passed for callback */
 	eip_tr_callback_t cb;		/* completion callback to client */
 	eip_tr_err_callback_t err_cb;	/* completion with error callback to client */
@@ -149,6 +228,30 @@ struct eip_tr_ipsec {
 };
 
 /*
+ * eip_tr_dtls
+ *	DTLS TR information
+ */
+struct eip_tr_dtls {
+	struct eip_tr_ops ops;		/* Transformation operation callback */
+	uint32_t tk_hdr;		/* Command token[2] */
+	__be32 src_ip[4];		/* Source IP address */
+	__be32 dst_ip[4];		/* Destination IP address */
+	__be16 src_port;		/* Source UDP port */
+	__be16 dst_port;		/* Destination UDP port */
+	__be16 version;			/* version */
+	__be16 ip_df;			/* htons(IP_DF) or 0 */
+	uint8_t ip_version;		/* v4 or v6 */
+	uint8_t protocol;		/* UDP or UDPlite */
+	uint8_t tos;			/* DSCP for transform record */
+	uint8_t ttl;			/* Time-to-live */
+	atomic_t ip_id;			/* Per-session IP identifier */
+	uint8_t seq_offset;		/* Sequence no offset in context record */
+	uint8_t remove_len;		/* Length of headers to be removed */
+	uint8_t bypass_len;		/* Length of headers to be bypassed (IP/IP+UDP) */
+	void *app_data;			/* Opaque to pass with callback */
+};
+
+/*
  * eip_tr
  *	Transformation record allocated by HW for each session.
  */
@@ -160,6 +263,7 @@ struct eip_tr {
 	union {
 		struct eip_tr_crypto crypto;	/* Crypto information */
 		struct eip_tr_ipsec ipsec;	/* IPsec information */
+		struct eip_tr_dtls dtls;	/* DTLS information */
 	};
 
 	uint32_t tr_addr_type;			/* TR address with lower 2-bit representing type */
