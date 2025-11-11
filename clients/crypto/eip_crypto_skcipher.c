@@ -109,7 +109,7 @@ static struct skcipher_alg eip_crypto_skcipher_algo[] = {
 
 		.init 		= eip_crypto_skcipher_tfm_init,
 		.exit 		= eip_crypto_skcipher_tfm_exit,
-		.ivsize 	= AES_BLOCK_SIZE,
+		.ivsize 	= 0,
 		.min_keysize 	= AES_MIN_KEY_SIZE,
 		.max_keysize 	= AES_MAX_KEY_SIZE,
 		.setkey 	= eip_crypto_skcipher_setkey,
