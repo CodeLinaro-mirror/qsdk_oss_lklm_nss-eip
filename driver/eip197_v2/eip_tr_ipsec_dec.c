@@ -149,16 +149,6 @@ void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
 		tr_words[65] |= EIP_TR_IPSEC_IPV6_EN;
 	}
 
-	/*
-	 * Redirect packet to inline chanel after encapsulation.
-	 * TODO: Round robin ring
-	 */
-	if (tr->svc == EIP_SVC_HYBRID_IPSEC) {
-		tr_words[65] |= EIP_TR_REDIR_EN;
-		tr_words[65] |= EIP_TR_REDIR_IFACE(EIP_HW_INLINE_RING);
-		pr_debug("%px: Redirection enable to ring(%u) for decap record\n", tr, EIP_HW_INLINE_RING);
-	}
-
 	tr_words[66] = EIP_TR_IPSEC_TTL(ipsec->ip_ttl);
 	tr_words[66]|= (algo->cipher_blk_len / 2);
 
@@ -209,9 +199,17 @@ int eip_tr_ipsec_dec(struct eip_tr *tr, struct sk_buff *skb)
 	struct eip_ctx *ctx = tr->ctx;
 	struct eip_sw_desc *sw;
 	struct eip_dma *dma;
+	u32 redir_ring;
 	int status = 0;
 
 	dma_tx = skb_is_nonlinear(skb) ? eip_dma_hy_tx_nonlinear_skb : eip_dma_hy_tx_linear_skb;
+	dma = &ctx->dma[smp_processor_id()];
+
+	/*
+	 * If the packet length exceeds the maximum jumbo size supported by the PPE
+	 * (EIP_MAX_PKT_LEN), redirect it to the Hybrid DMA ring for processing.
+	 */
+	redir_ring = (skb->len > EIP_MAX_PKT_LEN) ? dma->ring_id : EIP_HW_INLINE_RING;
 
 	/*
 	 * Allocate SW descriptor.
@@ -232,7 +230,7 @@ int eip_tr_ipsec_dec(struct eip_tr *tr, struct sk_buff *skb)
 	sw->tk_addr = 0;
 	sw->tr_addr_type = tr->tr_addr_type;
 	sw->tk_words = 0;
-	sw->hw_svc = EIP_HW_CMD_HWSERVICE_LIP;
+	sw->hw_svc = EIP_HW_CMD_HWSERVICE_LIP | EIP_HW_CMD_PKT_REDIR_RING_ID(redir_ring);
 	sw->req = skb;
 
 	/*
@@ -244,7 +242,6 @@ int eip_tr_ipsec_dec(struct eip_tr *tr, struct sk_buff *skb)
 	sw->comp = &eip_tr_ipsec_tx_done;
 	sw->err_comp = NULL; /* There is no error in Transmit completion */
 
-	dma = &ctx->dma[smp_processor_id()];
 
 	status = dma_tx(dma, sw, skb);
 	if (status < 0) {

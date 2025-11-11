@@ -794,6 +794,16 @@
 #define EIP_HW_CMD_HWSERVICE_LAC (EIP_HW_HWSERVICE_CRYPTO << 24)
 
 /*
+ * Command base redirection enable
+ */
+#define EIP_HW_CMD_PKT_REDIR_EN (1U << 20)
+
+/*
+ * Ring id configure on CMD
+ */
+#define EIP_HW_CMD_PKT_REDIR_RING_ID(ring_id) (EIP_HW_CMD_PKT_REDIR_EN | ((ring_id) << 16))
+
+/*
  * Prepared and processed register specific macro
  */
 #define EIP_HW_PREP_CNT_DESC_SZ(x) ((x) << 2)
