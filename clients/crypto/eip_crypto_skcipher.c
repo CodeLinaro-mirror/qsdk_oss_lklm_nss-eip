@@ -182,7 +182,7 @@ static int eip_crypto_skcipher_tfm_init(struct crypto_skcipher *sk_tfm)
 	/*
 	 * set this tfm reqsize to the transform specific structure
 	 */
-	crypto_skcipher_set_reqsize(sk_tfm, sizeof(crypto_skcipher_ivsize(sk_tfm)));
+	crypto_skcipher_set_reqsize(sk_tfm, crypto_skcipher_ivsize(sk_tfm));
 
 	return 0;
 }
