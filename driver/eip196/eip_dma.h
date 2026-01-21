@@ -23,6 +23,8 @@ extern uint32_t ring_sz;
 #define EIP_IDX_SUB(i, val, max) (((i) - (val) + (max)) & ((max) - 1))
 
 #define EIP_DMA_DESC_MAX ring_sz
+#define EIP_RING_SZ_MAX 8192
+#define EIP_RING_SZ_MIN 64
 
 #define EIP_DMA_AVAIL_COUNT(head, tail) EIP_IDX_SUB(head, tail, EIP_DMA_DESC_MAX)
 #define EIP_DMA_IDX_ADD(i, val) EIP_IDX_ADD((i), (val), EIP_DMA_DESC_MAX)
