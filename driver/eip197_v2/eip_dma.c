@@ -18,8 +18,10 @@
 
 #include "eip_priv.h"
 
-const char *irq_name[] = {"eip_irq_ring_0", "eip_irq_ring_1", "eip_irq_ring_2", "eip_irq_ring_3",
-	"eip_irq_ring_4", "eip_irq_ring_5", "eip_irq_ring_6", "eip_irq_ring_7"};
+const char *cdr_irq_name[] = {"eip_irq_cdr_0", "eip_irq_cdr_1", "eip_irq_cdr_2", "eip_irq_cdr_3",
+	"eip_irq_cdr_4", "eip_irq_cdr_5", "eip_irq_cdr_6", "eip_irq_cdr_7"};
+const char *rdr_irq_name[] = {"eip_irq_rdr_0", "eip_irq_rdr_1", "eip_irq_rdr_2", "eip_irq_rdr_3",
+	"eip_irq_rdr_4", "eip_irq_rdr_5", "eip_irq_rdr_6", "eip_irq_rdr_7"};
 const char *dma_name[] = {"ring_0", "ring_1", "ring_2", "ring_3",
 	"ring_4", "ring_5", "ring_6", "ring_7"};
 
@@ -317,6 +319,16 @@ static int eip_dma_rx(struct eip_dma *dma, int budget)
 }
 
 /*
+ * eip_dma_unhandled_irq()
+ *	Interrupt handler for DMA Tx, Currently unused.
+ */
+static irqreturn_t eip_dma_unhandled_irq(int irq, void *ctx)
+{
+	WARN_ON_ONCE(1);
+	return IRQ_NONE;
+}
+
+/*
  * eip_dma_handle_irq()
  *	Interrupt handler for DMA Rx.
  */
@@ -454,6 +466,10 @@ int eip_dma_tx_sg(struct eip_dma *dma, struct eip_sw_desc *sw, struct scatterlis
 	uint32_t src_len, len;
 	uint32_t count;
 
+	if (unlikely(!dma->active)) {
+		return -ENOTSUPP;
+	}
+
 	/*
 	 * We may be in process context. disable bottom half to prevent preemption.
 	 * We have per cpu DMA object. So this ensures that there is no race condition.
@@ -563,13 +579,20 @@ struct file_operations dma_stats_ops = {
  * eip_dma_cmd_init()
  *	Initialize the DMA HW ring.
  */
-int eip_dma_cmd_init(struct eip_dma *dma, void __iomem *base_addr, bool irq, uint8_t rx_cpu)
+int eip_dma_cmd_init(struct eip_dma *dma, struct eip_dma_ring_info *info, bool en_irq)
 {
+	void __iomem *base_addr = info->base_addr;
 	struct eip_hw_ring *cmd = &dma->in;
 	uint32_t ring_id = dma->ring_id;
 	size_t total_sz;
 	size_t dma_sz;
+	int ret = 0;
 	void *addr;
+
+	if (!info->handler || !info->irq) {
+		pr_err("%px: Invalid initialization info for DMA Ring_ID(%u)\n", dma, ring_id);
+		return -EINVAL;
+	}
 
 	/*
 	 * Allocate memory for
@@ -589,6 +612,7 @@ int eip_dma_cmd_init(struct eip_dma *dma, void __iomem *base_addr, bool irq, uin
 	cmd->kaddr = addr;
 	cmd->desc = PTR_ALIGN(addr, L1_CACHE_BYTES);
 	cmd->meta = (void *)cmd->desc + dma_sz;
+	cmd->irq = info->irq;
 	atomic_set(&cmd->prod_idx, 0);
 	atomic_set(&cmd->cons_idx, 0);
 
@@ -627,28 +651,46 @@ int eip_dma_cmd_init(struct eip_dma *dma, void __iomem *base_addr, bool irq, uin
 	iowrite32(EIP_HW_CDR_CFG_VAL, base_addr + EIP_HW_HIA_CDR_CFG(ring_id));
 	iowrite32(EIP_HW_CDR_DMA_CFG_VAL, base_addr + EIP_HW_HIA_CDR_DMA_CFG(ring_id));
 
-	if (irq) {
-		uint32_t val;
+	if (en_irq) {
 		iowrite32(EIP_HW_CDR_HIA_THR_VAL, base_addr + EIP_HW_HIA_CDR_THRESH(ring_id));
-		val = ioread32(base_addr + EIP_HW_HIA_AIC_R_ENABLE_CTRL(rx_cpu));
-		val |= EIP_HW_HIA_AIC_R_ENABLE_CTRL_CDR(ring_id);
-		iowrite32(val, base_addr + EIP_HW_HIA_AIC_R_ENABLE_CTRL(rx_cpu));
+
+		/*
+		 * Initialize the interrupt.
+		 */
+		ret = request_irq(cmd->irq, info->handler, IRQF_SHARED, cdr_irq_name[ring_id], dma);
+		if (ret < 0) {
+			pr_err("%px: IRQ %u request failed\n", dma, cmd->irq);
+			goto fail_irq;
+		}
+
+		irq_set_affinity_hint(cmd->irq, cpumask_of(info->cpu));
 	}
 
 	return 0;
+fail_irq:
+	kfree(cmd->kaddr);
+	memset(cmd, 0, sizeof(*cmd));
+	return ret;
 }
 
 /*
  * eip_dma_res_init()
  *	Initialize the DMA HW ring.
  */
-int eip_dma_res_init(struct eip_dma *dma, void __iomem *base_addr, bool irq, uint8_t rx_cpu)
+int eip_dma_res_init(struct eip_dma *dma, struct eip_dma_ring_info *info, bool en_irq)
 {
+	void __iomem *base_addr = info->base_addr;
 	struct eip_hw_ring *res = &dma->out;
 	uint32_t ring_id = dma->ring_id;
 	size_t total_sz;
 	size_t dma_sz;
+	int ret = 0;
 	void *addr;
+
+	if (!info->handler || !info->irq) {
+		pr_err("%px: Invalid initialization info for DMA Ring_ID(%u)\n", dma, ring_id);
+		return -EINVAL;
+	}
 
 	/*
 	 * Allocate memory for
@@ -668,6 +710,7 @@ int eip_dma_res_init(struct eip_dma *dma, void __iomem *base_addr, bool irq, uin
 	res->kaddr = addr;
 	res->desc = PTR_ALIGN(addr, L1_CACHE_BYTES);
 	res->meta = (uintptr_t *)((uint8_t *)res->desc + dma_sz);
+	res->irq = info->irq;
 	atomic_set(&res->prod_idx, 0);
 	atomic_set(&res->cons_idx, 0);
 
@@ -706,15 +749,26 @@ int eip_dma_res_init(struct eip_dma *dma, void __iomem *base_addr, bool irq, uin
 	iowrite32(EIP_HW_RDR_CFG_VAL, base_addr + EIP_HW_HIA_RDR_CFG(ring_id));
 	iowrite32(EIP_HW_RDR_DMA_CFG_VAL, base_addr + EIP_HW_HIA_RDR_DMA_CFG(ring_id));
 
-	if (irq) {
-		uint32_t val;
+	if (en_irq) {
 		iowrite32(EIP_HW_RDR_HIA_THR_VAL, base_addr + EIP_HW_HIA_RDR_THRESH(ring_id));
-		val = ioread32(base_addr + EIP_HW_HIA_AIC_R_ENABLE_CTRL(rx_cpu));
-		val |= EIP_HW_HIA_AIC_R_ENABLE_CTRL_RDR(ring_id);
-		iowrite32(val, base_addr + EIP_HW_HIA_AIC_R_ENABLE_CTRL(rx_cpu));
+
+		/*
+		 * Initialize the interrupt.
+		 */
+		ret = request_irq(res->irq, info->handler, IRQF_SHARED, rdr_irq_name[ring_id], dma);
+		if (ret < 0) {
+			pr_err("%px: IRQ %u request failed\n", dma, res->irq);
+			goto fail_irq;
+		}
+
+		irq_set_affinity_hint(res->irq, cpumask_of(info->cpu));
 	}
 
 	return 0;
+fail_irq:
+	kfree(res->kaddr);
+	memset(res, 0, sizeof(*res));
+	return ret;
 }
 
 /*
@@ -728,7 +782,8 @@ void eip_dma_la_deinit(struct eip_dma *dma)
 	}
 
 	debugfs_remove_recursive(dma->dentry);
-	free_irq(dma->irq, dma);
+	irq_set_affinity_hint(dma->out.irq, NULL);
+	free_irq(dma->out.irq, dma);
 	napi_disable(&dma->out.napi);
 	netif_napi_del(&dma->out.napi);
 	kfree(dma->out.kaddr);
@@ -741,53 +796,65 @@ void eip_dma_la_deinit(struct eip_dma *dma)
  * eip_dma_la_init()
  *	initialize the EIP197 DMA.
  */
-int eip_dma_la_init(struct eip_dma *dma, struct platform_device *pdev, uint8_t tx_cpu,
-		uint8_t rx_cpu,	uint32_t ring_id, void __iomem *base_addr)
+int eip_dma_la_init(struct eip_dma *dma, struct platform_device *pdev, struct device_node *child, int cpu)
 {
 	struct eip_pdev *ep = platform_get_drvdata(pdev);
+	struct eip_dma_ring_info cmd_info = {0};
+	struct eip_dma_ring_info res_info = {0};
+	void __iomem *base_addr = ep->dev_vaddr;
+	uint8_t ring_id;
 	int status;
 
 	if (dma->active) {
-		pr_err("%px: DMA is already configured; ring_id(%u)\n", dma, ring_id);
+		pr_err("%px: DMA is already configured; CPU(%u)\n", dma, cpu);
+		return -EINVAL;
+	}
+
+	status = of_property_read_u8(child, "ring-id", &ring_id);
+	if (status < 0) {
+		pr_err("%px: Failed to read ring_id\n", pdev);
+		return -EINVAL;
+	}
+
+	cmd_info.irq = of_irq_get_byname(child, "cdr_proc_irq");
+	if (!cmd_info.irq) {
+		pr_err("%px: CMD irq_of_parse_and_map() fail for cdr_proc_irq, ring_id(%u)\n", dma, ring_id);
+		return -EINVAL;
+	}
+
+	res_info.irq = of_irq_get_byname(child, "rdr_proc_irq");
+	if (!res_info.irq) {
+		pr_err("%px: irq_of_parse_and_map() fail for rdr_proc_irq, ring_id(%u)\n", dma, ring_id);
 		return -EINVAL;
 	}
 
 	dma->type = EIP_DMA_TYPE_LA;
 	dma->ring_id = ring_id;
-	dma->irq_mask = EIP_HW_RDR_PROC_IRQ_STATUS;
-	dma->irq_status = base_addr + EIP_HW_HIA_RDR_STAT(ring_id);
-	dma->irq = platform_get_irq(ep->pdev, rx_cpu);
-	if (!dma->irq) {
-		pr_err("%px: irq_of_parse_and_map() fail for irq, ring_id(%u)\n", dma, ring_id);
-		return -EINVAL;
-	}
+	cmd_info.base_addr = res_info.base_addr = base_addr;
+	cmd_info.cpu = res_info.cpu = cpu;
+	cmd_info.handler = eip_dma_unhandled_irq;
+	res_info.handler = eip_dma_handle_irq;
 
 	/*
 	 * Initialize and allocate ring.
 	 * Enable interrupt only for result ring.
 	 */
-	status = eip_dma_cmd_init(dma, base_addr, false, rx_cpu);
+	status = eip_dma_cmd_init(dma, &cmd_info, false);
 	if (status < 0) {
 		pr_err("%px: Failed to initialize cmd ring(%u)\n", dma, ring_id);
 		return status;
 
 	}
 
-	status = eip_dma_res_init(dma, base_addr, true, rx_cpu);
+	status = eip_dma_res_init(dma, &res_info, true);
 	if (status < 0) {
 		pr_err("%px: Failed to initialize res ring(%u)\n", dma, ring_id);
 		goto fail_res;
 	}
 
 	/*
-	 * Initialize the interrupt and NAPI.
+	 * Initialize the NAPI.
 	 */
-	status = request_irq(dma->irq, eip_dma_handle_irq, IRQF_SHARED, irq_name[ring_id], dma);
-	if (status < 0) {
-		pr_err("%px: IRQ %u request failed\n", dma, dma->irq);
-		goto fail_irq;
-	}
-
 	init_dummy_netdev(&dma->out.ndev);
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	netif_napi_add(&dma->out.ndev, &dma->out.napi, eip_dma_napi_rx_poll, eip_dma_rx_napi_weight);
@@ -800,15 +867,12 @@ int eip_dma_la_init(struct eip_dma *dma, struct platform_device *pdev, uint8_t t
 	/*
 	 * Interrupt can only be handled by the specified CPU.
 	 */
-	irq_set_affinity_hint(dma->irq, cpumask_of(rx_cpu));
 
 	dma->dentry = debugfs_create_file(dma_name[ring_id], S_IRUGO, ep->dentry, dma, &dma_stats_ops);
 	dma->active = 1;
-	pr_info("%px: DMA ring(%u) configured and Rx mapped to cpu(%u)\n", dma, ring_id, rx_cpu);
+	pr_info("%px: DMA ring(%u) configured and Rx mapped to cpu(%u)\n", dma, ring_id, cpu);
 	return 0;
 
-fail_irq:
-	kfree(dma->out.kaddr);
 fail_res:
 	kfree(dma->in.kaddr);
 	return status;

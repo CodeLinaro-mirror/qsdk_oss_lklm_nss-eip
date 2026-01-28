@@ -45,6 +45,14 @@ uint32_t eip_dma_tx_compl_napi_weight = 128;
 module_param(eip_dma_tx_compl_napi_weight, uint, S_IRUSR | S_IWUSR | S_IRGRP);
 MODULE_PARM_DESC(eip_dma_tx_compl_napi_weight, "EIP dma tx completion budget");
 
+ulong la_cpu_map = 0x1F;
+module_param(la_cpu_map, ulong, S_IRUSR | S_IWUSR | S_IRGRP);
+MODULE_PARM_DESC(la_cpu_map, "Configure EIP Lookaside DMA for CPU(s)");
+
+ulong hy_cpu_map = 0x7;
+module_param(hy_cpu_map, ulong, S_IRUSR | S_IWUSR | S_IRGRP);
+MODULE_PARM_DESC(hy_cpu_map, "Configure EIP Hybrid DMA for CPU(s)");
+
 /*
  * eip_device_probe()
  *	Device probe to initialize HW engine & DMA.
@@ -60,7 +68,7 @@ static int eip_device_probe(struct platform_device *pdev)
 	phys_addr_t paddr;
 	int err;
 
-	if (of_property_read_u32(np, "reg_offset", &reg_offset) < 0) {
+	if (of_property_read_u32(np, "reg-offset", &reg_offset) < 0) {
 		pr_err("%px: Failed to read register offset\n", pdev);
 		return -EINVAL;
 	}
@@ -222,6 +230,17 @@ int __init eip_init_module(void)
 	if (!eip_is_enabled()) {
 		pr_info("Crypto hardware is unavailable\n");
 		return 0;
+	}
+	drv->la_cpu_map = *(to_cpumask(&la_cpu_map));
+	if (!cpumask_subset(&drv->la_cpu_map, cpu_possible_mask)) {
+		pr_err("%px: Invalid LA CPU mask\n", drv);
+		return -EINVAL;
+	}
+
+	drv->hy_cpu_map = *(to_cpumask(&hy_cpu_map));
+	if (!cpumask_subset(&drv->hy_cpu_map, cpu_possible_mask)) {
+		pr_err("%px: Invalid HY CPU mask\n", drv);
+		return -EINVAL;
 	}
 
 	drv->dentry = debugfs_create_dir("qca-nss-eip", NULL);

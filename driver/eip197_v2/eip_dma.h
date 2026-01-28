@@ -54,6 +54,7 @@ struct eip_hw_ring {
 	void __iomem *proc_thresh;	/* HW processed threshold register */
 	void __iomem *proc_status;	/* HW status register */
 
+	unsigned int irq;		/* IRQ number for DMA ring */
 	struct net_device ndev;		/* Dummy_netdev for NAPI */
 	struct napi_struct napi;	/* NAPI handler */
 
@@ -88,13 +89,21 @@ struct eip_dma {
 	enum eip_dma_type type;		/* Ring type */
 	bool active;			/* DMA is configured */
 
-	uint32_t irq;			/* IRQ number for DMA ring */
 	uint32_t ring_id;		/* CDR/RDR ring - ID */
-	uint32_t irq_mask;		/* IRQ mask for this ring */
-	void __iomem *irq_status;	/* HW status register */
 
 	struct eip_dma_stats stats;	/* Stats */
 	struct dentry *dentry;		/* debugfs dentry */
+};
+
+/*
+ * eip_dma_ring_info
+ *	Ring Info for initialization.
+ */
+struct eip_dma_ring_info {
+	void __iomem *base_addr;
+	irq_handler_t handler;
+	int irq;
+	int cpu;
 };
 
 /*
@@ -120,14 +129,13 @@ int eip_dma_tx_sg(struct eip_dma *dma, struct eip_sw_desc *sw, struct scatterlis
 int eip_dma_hy_tx_linear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct sk_buff *skb);
 int eip_dma_hy_tx_nonlinear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct sk_buff *skb);
 
-int eip_dma_cmd_init(struct eip_dma *dma, void __iomem *base_addr, bool irq, uint8_t rx_cpu);
-int eip_dma_res_init(struct eip_dma *dma, void __iomem *base_addr, bool irq, uint8_t rx_cpu);
-int eip_dma_la_init(struct eip_dma *dma, struct platform_device *pdev, uint8_t tx_cpu,
-		uint8_t rx_cpu,	uint32_t ring_id, void __iomem *base_addr);
+int eip_dma_cmd_init(struct eip_dma *dma, struct eip_dma_ring_info *info, bool en_irq);
+int eip_dma_res_init(struct eip_dma *dma, struct eip_dma_ring_info *info, bool en_irq);
+
+int eip_dma_la_init(struct eip_dma *dma, struct platform_device *pdev, struct device_node *child, int cpu);
 void eip_dma_la_deinit(struct eip_dma *dma);
 
-int eip_dma_hy_init(struct eip_dma *dma, struct platform_device *pdev, uint8_t tx_cpu,
-		uint8_t rx_cpu,	uint32_t ring_id, void __iomem *base_addr);
+int eip_dma_hy_init(struct eip_dma *dma, struct platform_device *pdev, struct device_node *child, int cpu);
 void eip_dma_hy_refill_all(struct eip_ctx *ctx);
 void eip_dma_hy_deinit(struct eip_dma *dma);
 
