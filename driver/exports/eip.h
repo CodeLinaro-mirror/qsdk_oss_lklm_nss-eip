@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2026, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -344,7 +344,8 @@ static inline bool eip_is_enabled(void)
 			soc_id == QCOM_ID_IPQ9550 || soc_id == QCOM_ID_IPQ9574 ||
 			soc_id == QCOM_ID_IPQ9554 || soc_id == QCOM_ID_IPQ5332 ||
 			soc_id == QCOM_ID_IPQ5300 || soc_id == QCOM_ID_IPQ5424 ||
-			soc_id == QCOM_ID_IPQ5404);
+			soc_id == QCOM_ID_IPQ5404 || soc_id == QCOM_ID_IPQ5200 ||
+			soc_id == QCOM_ID_IPQ5210);
 }
 #endif
 
