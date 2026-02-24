@@ -220,6 +220,16 @@ void eip_tr_get_stats(struct eip_tr *tr, struct eip_tr_stats *stats)
 }
 
 /*
+ * eip_tr_get_hw_stats()
+ *	Get the delta TR states from HW.
+ */
+void eip_tr_get_hw_stats(struct eip_tr *tr, struct eip_hw_stats *delta)
+{
+	return;
+}
+EXPORT_SYMBOL(eip_tr_get_hw_stats);
+
+/*
  * eip_tr_final()
  *	Mark TR completion.
  */

@@ -6,6 +6,8 @@
 #ifndef __EIP_FLOW_H
 #define __EIP_FLOW_H
 
+#include <linux/debugfs.h>
+
 #define EIP_FLOW_MAX (1U << (EIP_HW_FLUE_CONFIG_TABLE_SZ + 5))
 #define EIP_FLOW_MASK (EIP_FLOW_MAX - 1)
 #define EIP_FLOW_HASH_IDX(hash) ((hash.words[0] >> 6) & EIP_FLOW_MASK)
@@ -50,6 +52,7 @@ struct eip_flow {
 	eip_flow_hash_t hash;           /* Hash value calculated from flow tuple */
 	struct eip_flow_tuple tuple;    /* Flow tuple */
 	bool sentinel;                  /* Sentinel to check if a node is the head node */
+	struct eip_hw_stats stats;      /* Accumulated HW stats (sum of deltas from eip_tr_get_hw_stats) */
 };
 
 /*
@@ -67,7 +70,8 @@ struct eip_flow_tbl {
 		uint64_t active_collision;              /* Counter for total collisions that are active */
 		uint64_t fail_collision;		/* Counter for total collosions fail */
 	} stats;
-} ;
+	struct dentry *dentry;				/* Debugfs dentry for flow table dump */
+};
 
 bool eip_flow_table_init(struct platform_device *pdev);
 void eip_flow_table_deinit(struct platform_device *pdev);

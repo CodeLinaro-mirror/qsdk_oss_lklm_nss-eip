@@ -100,6 +100,8 @@ typedef bool (*eip_tr_init_t) (struct eip_tr *tr, struct eip_tr_info *info, cons
 #define EIP_TR_IPSEC_PROTO_IN_GCM 11U
 #define EIP_TR_IPSEC_PROTO_IN_GMAC 12U
 
+#define U64_FROM_U32(hi, lo) (((u64)(hi) << 32)|(u64)(lo))
+
 /*
  * eip_tr_stats
  *	Statistics for each transform record.
@@ -174,6 +176,7 @@ struct eip_tr {
 	enum eip_svc svc;			/* Service number */
 	uint32_t inval_dummy_buf;		/* Dummy 4 byte buffer for Invalidation. */
 	struct delayed_work inval_work;		/* Workqueue for Invalidation schedule */
+	struct eip_hw_stats tr_stats;		/* Last readed TR stats */
 
 	uint32_t hw_words[] __attribute__((aligned (L1_CACHE_BYTES)));
 						/* Hardware record words. Aligned it to exact L1 cache line boundary */

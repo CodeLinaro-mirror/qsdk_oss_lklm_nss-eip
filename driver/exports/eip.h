@@ -161,7 +161,7 @@ struct eip_flow_tuple {
  *	EIP stats
  */
 struct eip_hw_stats {
-	uint64_t pkt_count;	/* Number of packet processed */
+	uint64_t pkt_cnt;	/* Number of packet processed */
 	uint64_t byte_cnt;	/* Number of bytes processed */
 };
 
@@ -467,6 +467,21 @@ void eip_tr_disable(struct eip_tr *tr);
  * @param[in] tr	Pointer to the transformation record.
  */
 void eip_tr_free(struct eip_tr *tr);
+
+/*
+ * eip_tr_get_hw_stats
+ *	Get delta of TR packet count and byte counts processed by TR
+ *
+ * @datatypes
+ * struct eip_tr \n
+ * struct eip_hw_stats
+ *
+ * @param[in] tr	Transform record.
+ * @param[in] stats	TR stats
+ *
+ * @return
+ */
+void eip_tr_get_hw_stats(struct eip_tr *tr, struct eip_hw_stats *stats);
 
 /*
  * eip_tr_skcipher_enc

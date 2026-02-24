@@ -15,10 +15,182 @@
 #include <linux/dmapool.h>
 #include <linux/dma-direct.h>
 #include <linux/spinlock.h>
+#include <linux/seq_file.h>
 #include <eip.h>
 
 #include "eip_priv.h"
 #include "eip_flow.h"
+
+/*
+ * Name for the debugfs entry for the flow table
+ */
+#define FLOW_TBL_DUMP_DEBUF_FS "eip_flow_table"
+
+/*
+ * eip_flow_dump_entry()
+ *	Helper function to print a single flow entry.
+ */
+static void eip_flow_dump_entry(struct seq_file *s, struct eip_flow *flow,
+				 uint32_t index, uint32_t flow_count)
+{
+	const char *ip_version;
+	const char *ip_str;
+
+	ip_version = (flow->tuple.ip_ver == 4) ? "IPv4" : "IPv6";
+
+	seq_printf(s, "================================================================================\n");
+	seq_printf(s, "Flow Entry #%u (Bucket: %u)\n", flow_count, index);
+	seq_printf(s, "================================================================================\n");
+
+	/*
+	 * Flow identification and hardware information
+	 */
+	seq_printf(s, "Hardware Information:\n");
+	seq_printf(s, "  Physical Address    : %pad\n", &flow->hflow_paddr);
+
+	seq_printf(s, "  Hash ID [0]         : [0x%08x] [0x%08x] [0x%08x] [0x%08x]\n",
+		   flow->hflow->hashid_1.words[0], flow->hflow->hashid_1.words[1],
+		   flow->hflow->hashid_1.words[2], flow->hflow->hashid_1.words[3]);
+
+	seq_printf(s, "  Hash ID [1]         : [0x%08x] [0x%08x] [0x%08x] [0x%08x]\n",
+		   flow->hflow->reserved_0.words[0], flow->hflow->reserved_0.words[1],
+		   flow->hflow->reserved_0.words[2], flow->hflow->reserved_0.words[3]);
+
+	seq_printf(s, "  Hash ID [2]         : [0x%08x] [0x%08x] [0x%08x] [0x%08x]\n",
+		   flow->hflow->reserved_1.words[0], flow->hflow->reserved_1.words[1],
+		   flow->hflow->reserved_1.words[2], flow->hflow->reserved_1.words[3]);
+
+	seq_printf(s, "  Address Type [0]    : 0x%08x\n", flow->hflow->tr_addr_type_1);
+	seq_printf(s, "  Address Type [1]    : 0x%08x\n", flow->hflow->reserved_addr_0);
+	seq_printf(s, "  Address Type [2]    : 0x%08x\n", flow->hflow->reserved_addr_1);
+
+	/*
+	 * Network tuple information
+	 */
+	seq_printf(s, "\nNetwork Tuple (%s):\n", ip_version);
+
+	ip_str = (flow->tuple.ip_ver == 4) ? "%pI4\n" : "%pI6\n";
+
+	seq_printf(s, "  Source Address      : ");
+	seq_printf(s, ip_str, &flow->tuple.src_ip[0]);
+
+	seq_printf(s, "  Destination Address : ");
+	seq_printf(s, ip_str, &flow->tuple.dst_ip[0]);
+
+	seq_printf(s, "  Protocol            : %u\n", flow->tuple.ip_proto);
+	seq_printf(s, "  Source Port         : %u\n", flow->tuple.src_port);
+	seq_printf(s, "  Destination Port    : %u\n", flow->tuple.dst_port);
+	seq_printf(s, "  SPI Index           : 0x%08x\n", flow->tuple.spi);
+	seq_printf(s, "  Epoch               : %u\n", flow->tuple.epoch);
+
+	seq_printf(s, "================================================================================\n\n");
+}
+
+/*
+ * eip_flow_dump()
+ *	dump all flow entries.
+ */
+static int eip_flow_dump(struct seq_file *s, void *data)
+{
+	struct eip_pdev *ep = platform_get_drvdata(eip_drv_g.pdev);
+	struct eip_flow_tbl *flow_db = &ep->flow_table;
+	struct hlist_head *head;
+	struct eip_flow *flow;
+	uint32_t flow_cnt = 0;
+	uint32_t index;
+
+	/*
+	 * Print header information
+	 */
+	seq_printf(s, "EIP Flow Table Dump\n");
+	seq_printf(s, "===================\n");
+	seq_printf(s, "Maximum Buckets: %u\n\n", EIP_FLOW_MAX);
+
+	/*
+	 * Iterate through all buckets in the flow table.
+	 * Lock is acquired and released per bucket to avoid holding
+	 * the lock for too long when dumping large number of flows.
+	 */
+	for (index = 0; index < EIP_FLOW_MAX; index++) {
+		spin_lock_bh(&ep->lock);
+
+		head = &flow_db->sw_head[index];
+
+		if (hlist_empty(head)) {
+			spin_unlock_bh(&ep->lock);
+			continue;
+		}
+
+		/*
+		 * Iterate through all flows in this bucket
+		 */
+		hlist_for_each_entry(flow, head, h_node) {
+			flow_cnt++;
+			eip_flow_dump_entry(s, flow, index, flow_cnt);
+		}
+
+		spin_unlock_bh(&ep->lock);
+
+		/*
+		 * Yield CPU to prevent monopolizing it during large dumps
+		 */
+		cond_resched();
+	}
+
+	/*
+	 * Print summary information
+	 */
+	seq_printf(s, "================================================================================\n");
+	seq_printf(s, "Summary: Total Active Flows = %u\n", flow_cnt);
+	seq_printf(s, "================================================================================\n");
+
+	return 0;
+}
+
+/*
+ * eip_flow_dump_open()
+ *	open operation for debugfs.
+ */
+static int eip_flow_dump_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, eip_flow_dump, NULL);
+}
+
+/*
+ * File operations for the debugfs.
+ */
+static struct file_operations flow_dump_ops = {
+	.owner = THIS_MODULE,
+	.open = eip_flow_dump_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+/*
+ * eip_flow_dump_init()
+ *	Initialize the debugfs interface for flow table dumping.
+ */
+static int eip_flow_dump_init(struct eip_flow_tbl *tbl, struct eip_pdev *ep)
+{
+	tbl->dentry = debugfs_create_file(FLOW_TBL_DUMP_DEBUF_FS, S_IRUGO, ep->dentry, NULL, &flow_dump_ops);
+	if (!tbl->dentry) {
+		pr_info("Falied to allocate debugfd : %s\n", FLOW_TBL_DUMP_DEBUF_FS);
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+
+/*
+ * eip_flow_dump_deinit()
+ *	Remove debugfs interface.
+ */
+static void eip_flow_dump_deinit(struct eip_flow_tbl *tbl)
+{
+	if (tbl->dentry)
+		debugfs_remove_recursive(tbl->dentry);
+}
 
 /*
  * eip_flow_get_tail
@@ -526,6 +698,10 @@ bool eip_flow_table_init(struct platform_device *pdev)
 		INIT_HLIST_HEAD(&tbl->sw_head[i]);
 	}
 
+	if (eip_flow_dump_init(tbl, ep)) {
+		pr_err("%px: Failed to create flow dump debug fs\n",pdev);
+	}
+
 	return true;
 
 fail_dma:
@@ -544,6 +720,7 @@ void eip_flow_table_deinit(struct platform_device *pdev)
 	struct eip_flow_tbl *tbl;
 
 	tbl = &ep->flow_table;
+	eip_flow_dump_deinit(tbl);
 	iowrite32(0x0, base_addr + EIP_HW_FLUE_HASHBASE_LO(0));
 	kmem_cache_destroy(ep->flow_swcache);
 	dma_free_coherent(&pdev->dev, EIP_FLOW_MAX * sizeof(struct eip_flow_hw), tbl->hw_head, tbl->hw_head_paddr);

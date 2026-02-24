@@ -195,6 +195,32 @@ void eip_tr_get_stats(struct eip_tr *tr, struct eip_tr_stats *stats)
 }
 
 /*
+ * eip_tr_get_hw_stats()
+ *	Get the delta TR states from HW
+ */
+void eip_tr_get_hw_stats(struct eip_tr *tr, struct eip_hw_stats *delta)
+{
+	uint32_t *words;
+
+	if (!tr || !delta) {
+		pr_warn("Failed to get HW stats : Transform Record/eip_stats is invalid\n");
+		return;
+	}
+
+	words = tr->hw_words;
+	eip_dmac_inv_range(words, words + EIP_HW_CTX_SIZE_LARGE_WORDS);
+
+	/* Compute delta packet and bytes counts */
+	delta->pkt_cnt = U64_FROM_U32(words[77], words[76])  - tr->tr_stats.pkt_cnt;
+	delta->byte_cnt = U64_FROM_U32(words[79], words[78]) - tr->tr_stats.byte_cnt;
+
+	/* Update latest TR counts */
+	tr->tr_stats.pkt_cnt += delta->pkt_cnt;
+	tr->tr_stats.byte_cnt += delta->byte_cnt;
+}
+EXPORT_SYMBOL(eip_tr_get_hw_stats);
+
+/*
  * eip_tr_final()
  *	Mark TR completion.
  */
