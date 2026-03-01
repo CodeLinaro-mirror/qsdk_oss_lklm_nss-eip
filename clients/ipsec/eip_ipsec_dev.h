@@ -64,6 +64,7 @@ struct eip_ipsec_dev_stats {
 struct eip_ipsec_dev {
 	struct list_head node;		/* Node in Global device list */
 	struct net_device *ndev;	/* Linux netdevice representation for this device */
+	struct eip_tun *tun;		/* Tunnel associated with the dev */
 	int64_t devid;			/* Device ID */
 	uint8_t rps_num_cores;		/* Number of cores for Receive Packet Steering */
 	struct list_head enc_sa;	/* Encap SA list protected by RCU read lock and spinlock for modification */

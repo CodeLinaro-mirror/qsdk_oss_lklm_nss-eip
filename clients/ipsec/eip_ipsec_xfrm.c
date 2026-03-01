@@ -240,6 +240,7 @@ static struct net_device *eip_ipsec_xfrm_get_dev(struct net_device *kdev, struct
 	 * This is a plain text packet undergoing encap.
 	 */
 	*type = 0;
+
 	xs = skb_dst(skb)->xfrm;
 	if (xs) {
 		/*
@@ -541,6 +542,7 @@ static void eip_ipsec_xfrm_sa_tuple_init(struct xfrm_state *xs, struct eip_ipsec
  */
 static int eip_ipsec_xfrm_state_add(struct xfrm_state *xs)
 {
+	struct eip_ctx *ctx = eip_ipsec_drv_g.ctx;
 	struct eip_ipsec_tuple sa_tuple = {0};
 	struct eip_ipsec_data sa_data = {0};
 	struct net_device *dev;
@@ -615,6 +617,13 @@ static int eip_ipsec_xfrm_state_add(struct xfrm_state *xs)
 	dev_hold(dev);
 	xs->data = dev;
 	xs->xflags |= XFRM_STATE_OFFLOAD_NSS;
+
+	/*
+	 * Set XFRM_STATE_OFFLOAD_NSS_HW in xfrm state.
+	 */
+	if (eip_feature_check(ctx, EIP_OFFLOAD_INNER_FLOW)) {
+		xs->xflags |= XFRM_STATE_OFFLOAD_HW_INNER;
+	}
 
 	return 0;
 }
