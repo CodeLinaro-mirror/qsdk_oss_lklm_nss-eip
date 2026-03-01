@@ -30,6 +30,8 @@
 #include <net/ip.h>
 #include <net/ip6_route.h>
 #include <net/esp.h>
+#include <net/xfrm.h>
+#include <linux/inetdevice.h>
 
 #include "eip_ipsec_priv.h"
 
@@ -39,7 +41,8 @@
  * eip_ipsec_dev_vp_stats_cb()
  *	Update the netdevice stats.
  */
-static bool eip_ipsec_dev_vp_stats_cb(struct net_device *ndev, ppe_vp_hw_stats_t *stats) {
+static bool eip_ipsec_dev_vp_stats_cb(struct net_device *ndev, ppe_vp_hw_stats_t *stats)
+{
 	struct eip_ipsec_dev *eid = netdev_priv(ndev);
 	struct eip_ipsec_dev_stats *dev_stats;
 
@@ -523,6 +526,47 @@ consume:
 	consume_skb(skb);
 }
 
+/* eip_ipsec_dev_is_local()
+ *	Packet originated from local interface
+ */
+static bool eip_ipsec_dev_is_local(struct sk_buff *skb, void *cb_data __maybe_unused)
+{
+	void *next_hdr;
+	u8 ip_hdr_sz;
+	u8 protocol;
+
+	if (ip_hdr(skb)->version == IPVERSION) {
+		ip_hdr_sz = ip_hdr(skb)->ihl * 4;
+		protocol = ip_hdr(skb)->protocol;
+	} else {
+		ip_hdr_sz = sizeof(struct ipv6hdr);
+		protocol = ipv6_hdr(skb)->nexthdr;
+
+		/* IPsec tunnel never adds extension header */
+		if (ipv6_ext_hdr(protocol))
+			return false;
+	}
+
+	/* ESP packet */
+	if (protocol == IPPROTO_ESP)
+		return true;
+
+	/* UDP encapsulated ESP (NAT-T) */
+	next_hdr = skb_network_header(skb) + ip_hdr_sz;
+	if (protocol == IPPROTO_UDP) {
+		struct udphdr *udph = next_hdr;
+		u8 is_natt = 0;
+
+		is_natt += (udph->dest == htons(EIP_IPSEC_NATT_PORT));
+		is_natt += (udph->source == htons(EIP_IPSEC_NATT_PORT));
+
+		if (is_natt)
+			return true;
+	}
+
+	return false;
+}
+
 /*
  * eip_ipsec_dev_vp_except()
  *	VP callback for outer exception.
@@ -532,6 +576,7 @@ bool eip_ipsec_dev_vp_except(struct ppe_vp_cb_info *info, void *cb_data)
 	struct sk_buff *skb = info->skb;
 	struct net_device *ndev = skb->dev;
 
+	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
 	struct eip_ipsec_dev_stats *dev_stats;
 	struct eip_ipsec_dev *eid = cb_data;
 	struct eip_ipsec_sa *sa;
@@ -540,6 +585,15 @@ bool eip_ipsec_dev_vp_except(struct ppe_vp_cb_info *info, void *cb_data)
 
 	dev_stats = this_cpu_ptr(eid->stats_pcpu);
 	skb_reset_network_header(skb);
+
+	/*
+	 * If inner-flow offload is enabled and the packet did not originate from
+	 * a local interface, treat it as a post decapsulation exception.
+	 */
+	if (eip_feature_check(drv->ctx, EIP_OFFLOAD_INNER_FLOW) && !eip_ipsec_dev_is_local(skb, cb_data)) {
+		eip_ipsec_proto_except(eid, skb);
+		return true;
+	}
 
 	/*
 	 * First SA in the device encapsulation head is always selected.
@@ -590,11 +644,11 @@ consume:
  */
 static ppe_vp_num_t eip_ipsec_dev_alloc_vp(struct net_device *ndev)
 {
+	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
+	ppe_drv_eip_service_t eip_svc = 0;
 	struct ppe_drv_iface *iface;
 	struct ppe_vp_ai vpai = {0};
 	ppe_vp_num_t vp_num;
-	bool is_inline = eip_is_inline_supported();
-	ppe_drv_eip_service_t eip_svc = PPE_DRV_EIP_SERVICE_IIPSEC;
 
 	/*
 	 * Allocate new VP
@@ -609,11 +663,23 @@ static ppe_vp_num_t eip_ipsec_dev_alloc_vp(struct net_device *ndev)
 	vpai.flags |= PPE_VP_FLAG_DISABLE_TTL_DEC;
 	vpai.xmit_port = PPE_DRV_PORT_EIP197;
 
-	if (!is_inline) {
+	/*
+	 * Get feature mask to set PPE service
+	 */
+	if (eip_feature_check(drv->ctx, EIP_OFFLOAD_OUTER_FLOW))
+		eip_svc = PPE_DRV_EIP_SERVICE_IIPSEC;
+
+	if (eip_feature_check(drv->ctx, EIP_OFFLOAD_OUTER_FLOW)) {
+		eip_svc = PPE_DRV_EIP_SERVICE_FULL_INLINE;
+	}
+
+	if (!eip_svc) {
 		eip_svc = PPE_DRV_EIP_SERVICE_NONINLINE;
 		vpai.queue_num = ppe_drv_queue_from_core(eip_ipsec_core_id);
 		vpai.flags |= PPE_VP_FLAG_REDIR_ENABLE;
 	}
+
+	pr_debug("%px: The EIP_SVC = %u\n", ndev, eip_svc);
 
 	vp_num = ppe_vp_alloc(ndev, &vpai);
 	if (vp_num < 0) {
@@ -783,6 +849,11 @@ static void eip_ipsec_dev_free(struct net_device *ndev)
 	if (eid->stats_pcpu) {
 		free_percpu(eid->stats_pcpu);
 	}
+
+	/*
+	 * Remove tunnel associated with dev
+	 */
+	eip_tun_free(eid->tun);
 
 	/*
 	 * Deinit pkt steer objects.
@@ -1094,6 +1165,18 @@ struct net_device *eip_ipsec_dev_add(void)
 	}
 
 	/*
+	 * Allocate tunnel for new connection
+	 */
+	eid->tun = eip_tun_alloc(drv->ctx);
+	if (!eid->tun) {
+		pr_err("%px: Unable to allocate tunnel object\n", ndev);
+		unregister_netdevice(ndev);
+		rtnl_unlock();
+
+		return NULL;
+	}
+
+	/*
 	 * Set netdevice to UP state.
 	 */
 	status = dev_open(ndev, NULL);
@@ -1106,7 +1189,6 @@ struct net_device *eip_ipsec_dev_add(void)
 	}
 
 	rtnl_unlock();
-
 #if defined(EIP_IPSEC_VP_SUPP)
 	/*
 	 * Device will be only used after SA addition; So there wont be any race condition.

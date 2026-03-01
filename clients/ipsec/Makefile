@@ -14,6 +14,7 @@ $(EIP_IPSEC_MOD_NAME)-objs += eip_ipsec_dev.o
 $(EIP_IPSEC_MOD_NAME)-objs += eip_ipsec_sa.o
 $(EIP_IPSEC_MOD_NAME)-objs += eip_ipsec_proto.o
 $(EIP_IPSEC_MOD_NAME)-objs += eip_ipsec_xfrm.o
+$(EIP_IPSEC_MOD_NAME)-objs += eip_ipsec_flow.o
 
 obj ?= .
 EIP_IPSEC_INCLUDE = -I$(obj)/../../driver/exports

@@ -41,4 +41,5 @@ void eip_ipsec_proto_dec_done(void *app_data, eip_req_t req);
 void eip_ipsec_proto_dec_err(void *app_data, eip_req_t req, int err);
 bool eip_ipsec_proto_vp_rx(struct ppe_vp_cb_info *info, void *cb_data);
 void eip_ipsec_proto_rx_steer_cb(struct netfn_pkt_steer *rx_steer, struct sk_buff_head *q_head);
+void eip_ipsec_proto_except(struct eip_ipsec_dev *eid, struct sk_buff *skb);
 #endif /* !__EIP_IPSEC_PROTO_H */

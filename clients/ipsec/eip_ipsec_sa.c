@@ -26,6 +26,7 @@
 #include <net/addrconf.h>
 #include <net/xfrm.h>
 #include <crypto/aes.h>
+#include <ppe_acl.h>
 
 #include "eip_ipsec_priv.h"
 
@@ -42,6 +43,7 @@ static void eip_ipsec_sa_data_to_tr_info(struct eip_ipsec_data *data, struct eip
 	memset(tr_info, 0, sizeof(*tr_info));
 
 	base->svc = eip_is_inline_supported() ? EIP_SVC_HYBRID_IPSEC : EIP_SVC_IPSEC;
+
 	strlcpy(base->alg_name, data->base.algo_name, CRYPTO_MAX_ALG_NAME);
 	base->cipher.key_data = data->base.cipher.data;
 	base->cipher.key_len = data->base.cipher.len;
@@ -243,19 +245,14 @@ static void eip_ipsec_sa_attach(struct net_device *ndev, struct eip_ipsec_sa *sa
 }
 
 /*
- * eip_ipsec_sa_dettach()
- *	Dettach SA from device encap/decap DB.
+ * __sa_lookup()
+ *	Lookup SA using tuple.
  */
-static struct eip_ipsec_sa *eip_ipsec_sa_dettach(struct net_device *ndev, struct eip_ipsec_tuple *t)
+static struct eip_ipsec_sa *__sa_lookup(struct net_device *ndev, struct eip_ipsec_tuple *t)
 {
-	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
 	struct eip_ipsec_dev *eid = netdev_priv(ndev);
-	struct eip_ipsec_dev_stats *dev_stats;
 	struct list_head *sa_head;
 	struct eip_ipsec_sa *sa;
-
-	dev_stats = this_cpu_ptr(eid->stats_pcpu);
-	spin_lock_bh(&drv->lock);
 
 	/*
 	 * Lookup into Encap SA list.
@@ -263,8 +260,8 @@ static struct eip_ipsec_sa *eip_ipsec_sa_dettach(struct net_device *ndev, struct
 	sa_head = &eid->enc_sa;
 	sa = eip_ipsec_sa_match_spi(sa_head, htonl(t->esp_spi));
 	if (sa && eip_ipsec_sa_match_addr(sa, t->ip_version, t->dest_ip)) {
-		pr_debug("%px: SA is not present in encap device database", ndev);
-		goto found;
+		pr_debug("%px: SA is present in encap device database", ndev);
+		return sa;
 	}
 
 	/*
@@ -274,12 +271,50 @@ static struct eip_ipsec_sa *eip_ipsec_sa_dettach(struct net_device *ndev, struct
 	sa = eip_ipsec_sa_match_spi(sa_head, htonl(t->esp_spi));
 	if (!sa || !eip_ipsec_sa_match_addr(sa, t->ip_version, t->dest_ip)) {
 		pr_debug("%px: SA is not present in decap device database", ndev);
+		return NULL;
+	}
 
+	return sa;
+}
+
+/*
+ * eip_ipsec_sa_ref_get
+ *	Lookup SA using tuple and take ref.
+ */
+struct eip_ipsec_sa *eip_ipsec_sa_ref_get(struct net_device *ndev, struct eip_ipsec_tuple *t)
+{
+	struct eip_ipsec_sa *sa;
+
+	rcu_read_lock_bh();
+
+	sa = __sa_lookup(ndev, t);
+	if (likely(sa))
+		eip_ipsec_sa_ref(sa);
+
+	rcu_read_unlock_bh();
+	return sa;
+}
+
+/*
+ * eip_ipsec_sa_dettach()
+ *	Dettach SA from device encap/decap DB.
+ */
+static struct eip_ipsec_sa *eip_ipsec_sa_dettach(struct net_device *ndev, struct eip_ipsec_tuple *t)
+{
+	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
+	struct eip_ipsec_dev *eid = netdev_priv(ndev);
+	struct eip_ipsec_dev_stats *dev_stats;
+	struct eip_ipsec_sa *sa;
+
+	dev_stats = this_cpu_ptr(eid->stats_pcpu);
+	spin_lock_bh(&drv->lock);
+
+	sa = __sa_lookup(ndev, t);
+	if (!sa) {
 		spin_unlock_bh(&drv->lock);
 		return NULL;
 	}
 
-found:
 	list_del_rcu(&sa->node);
 	eip_ipsec_sa_dettach_global(sa);
 	dev_stats->sa_removed++;
@@ -407,6 +442,7 @@ static void eip_ipsec_sa_get_summary_stats(struct eip_ipsec_sa *sa,
 		for (i = 0; i < words; i++, stats_ptr++, sp_ptr++)
 			*stats_ptr += *sp_ptr;
 	}
+
 }
 
 /*
@@ -477,6 +513,25 @@ struct eip_ipsec_sa *eip_ipsec_sa_ref_get_encap(struct net_device *ndev)
 	rcu_read_lock_bh();
 
 	sa = list_first_or_null_rcu(&eid->enc_sa, struct eip_ipsec_sa, node);
+	if (likely(sa))
+		eip_ipsec_sa_ref(sa);
+
+	rcu_read_unlock_bh();
+	return sa;
+}
+
+/*
+ * eip_ipsec_sa_ref_get_decap()
+ *	Return head decap SA.
+ */
+struct eip_ipsec_sa *eip_ipsec_sa_ref_get_decap(struct net_device *ndev)
+{
+	struct eip_ipsec_dev *eid = netdev_priv(ndev);
+	struct eip_ipsec_sa *sa;
+
+	rcu_read_lock_bh();
+
+	sa = list_first_or_null_rcu(&eid->dec_sa, struct eip_ipsec_sa, node);
 	if (likely(sa))
 		eip_ipsec_sa_ref(sa);
 
@@ -557,6 +612,7 @@ int eip_ipsec_sa_add(struct net_device *ndev, struct eip_ipsec_data *data, struc
 {
 	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
 	struct eip_ipsec_dev *eid = netdev_priv(ndev);
+	struct eip_ipsec_sa *old_sa = NULL;
 	struct eip_tr_info tr_info;
 	struct eip_ipsec_sa *sa;
 	bool udp_encap;
@@ -629,6 +685,7 @@ int eip_ipsec_sa_add(struct net_device *ndev, struct eip_ipsec_data *data, struc
 	sa->head_room = EIP_IPSEC_DEV_MAX_HEADROOM; /* TODO: Calculate using SA type */
 	sa->tail_room = EIP_IPSEC_DEV_MAX_TAILROOM;
 	sa->tuple = *t;
+	sa->flags = data->base.flags;
 
 	/*
 	 * Cache part of tuple used in datapath in network order.
@@ -677,6 +734,13 @@ int eip_ipsec_sa_add(struct net_device *ndev, struct eip_ipsec_data *data, struc
 		goto fail_tr;
 	}
 
+	/*
+	 * If its a rekey for encap SA, Update the tunnel with new TR
+	 */
+	if (encap && eip_feature_check(drv->ctx, EIP_OFFLOAD_INNER_FLOW)) {
+		old_sa = eip_ipsec_sa_ref_get_encap(ndev);
+	}
+
 	sa->xs = data->xs;
 
 	if (!encap && udp_encap) {
@@ -691,12 +755,59 @@ int eip_ipsec_sa_add(struct net_device *ndev, struct eip_ipsec_data *data, struc
 	}
 
 	/*
+	 * Set ACL rule id to invalid
+	 */
+	sa->acl_rule_id = EIP_IPSEC_INVALID_ACL_RULE_ID;
+
+	/*
 	 * TODO: Do we need to handle multiple sa_add() on multiple core.
 	 */
 	eip_ipsec_sa_attach(ndev, sa, encap);
+
+	if (old_sa) {
+		struct eip_tun_update_info info = {0};
+
+		info.valid_flags |= EIP_TUN_TR_VALID;
+		info.tr = old_sa->tr;
+		info.new_tr = sa->tr;
+
+		eip_tun_update(eid->tun, &info);
+		eip_ipsec_sa_deref(old_sa);
+	}
+
+	/*
+	 * If flow is decap direction add flow to EIP.
+	 */
+	if (!encap) {
+		if (eip_feature_check(drv->ctx, EIP_OFFLOAD_OUTER_FLOW)) {
+			if (eip_ipsec_flow_add(ndev, &sa->tuple, sa)) {
+				/*
+				 * If flow addition fails, fall back to the slow path so that
+				 * packets continue to be processed without offload.
+				 */
+				pr_warn("%px: Failed to add flow for inline, Throughput will be impacted\n", ndev);
+				goto out;
+			}
+		}
+
+		/*
+		 * When both inner and outer offload are supported, the flow hardware
+		 * operates in full inline mode. In this case, configure ACL rules.
+		 */
+		if (eip_feature_check(drv->ctx, EIP_OFFLOAD_INNER_FLOW) && eip_feature_check(drv->ctx, EIP_OFFLOAD_OUTER_FLOW)) {
+			sa->acl_rule_id = eip_ipsec_flow_match_spi(ntohl(sa->spi), ndev, sa->flags);
+			if (sa->acl_rule_id == EIP_IPSEC_INVALID_ACL_RULE_ID) {
+				pr_debug("%px: Failed to create ACL rule\n", sa);
+				goto acl_fail;
+			}
+		}
+	}
+
+out:
 	return 0;
 
-
+acl_fail:
+	eip_ipsec_flow_del(ndev,  &sa->tuple, encap);
 fail_tr:
 	dev_put(ndev);
 	dst_cache_destroy(&sa->dst_cache);
@@ -713,7 +824,9 @@ fail_pcpu:
  */
 void eip_ipsec_sa_del(struct net_device *ndev, struct eip_ipsec_tuple *t)
 {
+	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
 	struct eip_ipsec_sa *sa;
+	s16 acl_ret;
 
 	might_sleep();
 
@@ -724,6 +837,29 @@ void eip_ipsec_sa_del(struct net_device *ndev, struct eip_ipsec_tuple *t)
 	if (!sa) {
 		pr_warn("%px: SA not found\n", ndev);
 		return;
+	}
+
+	/*
+	 * If flow is decap direction adelete flow to EIP.
+	 */
+	if (eip_feature_check(drv->ctx, EIP_OFFLOAD_OUTER_FLOW) && !(sa->flags & EIP_IPSEC_FLAG_ENC)) {
+		/*
+		 * Clean up the associated ACL rule when a valid rule ID is present.
+		 * Note: ACL rules are configured and valid only when the hardware
+		 * is operating in full inline mode.
+		 */
+		if (sa->acl_rule_id != EIP_IPSEC_INVALID_ACL_RULE_ID) {
+			acl_ret = ppe_acl_rule_destroy(sa->acl_rule_id);
+			if (acl_ret != PPE_ACL_RET_SUCCESS) {
+				pr_warn("%px: Failed to destroy ACL rule ID %d, error %u\n",
+						sa, sa->acl_rule_id, acl_ret);
+			}
+		}
+
+		/*
+		 * Delete Flow.
+		 */
+		eip_ipsec_flow_del(ndev, &sa->tuple, false);
 	}
 
 	/*

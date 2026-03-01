@@ -187,6 +187,34 @@ fail:
 }
 
 /*
+ * eip_ipsec_handle_plain_text_pkt()
+ *	Handle plain text(post decapsulation) packet.
+ */
+void eip_ipsec_proto_except(struct eip_ipsec_dev *eid, struct sk_buff *skb)
+{
+	struct net_device *ndev;
+	struct eip_ipsec_sa *sa;
+	__be32 spi;
+
+	/*
+	 * We will pick whatever head SA available as
+	 * we don't know which exact decap SA has been used by EIP for ESP decapsulation.
+	 * (If SA has not been rekeyed during exception then this SA would be the correct one).
+	 */
+	ndev = eid->ndev;
+	sa = eip_ipsec_sa_ref_get_decap(ndev);
+	if (!sa) {
+		pr_debug("%px: Failed to get decap SA\n", skb);
+		kfree_skb(skb);
+		return;
+	}
+
+	spi = htonl(sa->spi);
+	eip_ipsec_proto_forward(eid, spi, skb);
+	eip_ipsec_sa_deref(sa);
+}
+
+/*
  * eip_ipsec_proto_rx_steer_cb()
  *	Rx data packet steering callback
  */
