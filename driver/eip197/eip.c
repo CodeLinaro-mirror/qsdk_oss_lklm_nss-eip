@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, 2026, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -132,6 +132,7 @@ static int eip_device_probe(struct platform_device *pdev)
 	ep->dev_paddr = paddr;
 	ep->dev_vaddr = vaddr;
 	ep->pdev = pdev;
+	spin_lock_init(&ep->lock);
 
 	/*
 	 * Set platform data.
@@ -222,6 +223,18 @@ bool eip_is_inline_supported(void)
 	return ep->inline_support;
 }
 EXPORT_SYMBOL(eip_is_inline_supported);
+
+/*
+ * eip_feature_check()
+ *	Check for a feature in the context
+ */
+bool eip_feature_check(struct eip_ctx *ctx, eip_features_t feature)
+{
+	struct eip_pdev *ep = ctx->ep;
+
+	return (feature & ep->flags);
+}
+EXPORT_SYMBOL(eip_feature_check);
 
 /*
  * eip_init_module()

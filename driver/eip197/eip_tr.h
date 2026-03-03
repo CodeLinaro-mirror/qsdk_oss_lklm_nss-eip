@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, 2026, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -185,7 +185,6 @@ struct eip_tr {
 	enum eip_svc svc;			/* Service number */
 	uint32_t inval_dummy_buf;		/* Dummy 4 byte buffer for Invalidation. */
 	struct delayed_work inval_work;		/* Workqueue for Invalidation schedule */
-	struct eip_flow *flow;			/* Software flow object*/
 
 	uint32_t hw_words[] __attribute__((aligned (L1_CACHE_BYTES)));
 						/* Hardware record words. Aligned it to exact L1 cache line boundary */

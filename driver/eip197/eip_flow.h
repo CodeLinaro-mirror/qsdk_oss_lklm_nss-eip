@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, 2026, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -35,21 +35,6 @@ typedef struct {
 } eip_flow_hash_t;
 
 /*
- * eip_flow_tuple
- *      Filled by caller; Allocate on stack.
- */
-struct eip_flow_tuple {
-	__be32 src_ip[4];
-	__be32 dst_ip[4];
-	__be32 spi;           /* For non-IPsec flow this must be zero */
-	__be16 src_port;
-	__be16 dst_port;
-	__be16 epoch;         /* For non-DTLS flow this must be zero */
-	uint8_t ip_ver;
-	uint8_t ip_proto;
-};
-
-/*
  * eip_flow_hw
  *      Hw flow
  */
@@ -68,7 +53,9 @@ struct eip_flow_hw {
  *      SW flow object
  */
 struct eip_flow {
-	struct hlist_node node;         /* Hlist node to traverse the collision list */
+	struct hlist_node h_node;	/* Hlist node to traverse the collision list */
+	struct list_head t_node;	/* List node for per-device tunnel flows (encap/decap) */
+	struct eip_tr *tr;		/* Transform record associated with this flow */
 	struct eip_flow_hw *hflow;      /* Pointer to HW flow */
 	dma_addr_t hflow_paddr;         /* Physical address of hardware flow */
 	eip_flow_hash_t hash;           /* Hash value calculated from flow tuple */
@@ -84,18 +71,17 @@ struct eip_flow_tbl {
 	struct hlist_head sw_head[EIP_FLOW_MAX];        /* Pointer to SW flow object in the flow table */
 	struct eip_flow_hw *hw_head;                    /* Pointer to HW flow in the flow table */
 	dma_addr_t hw_head_paddr;                       /* Physical address of the flow table */
-	spinlock_t lock;                                /* Spinlock */
 	struct eip_flow_tbl_stats {
 		uint64_t alloc;                         /* Counter for number of flows allocated */
 		uint64_t free;                          /* Counter for number of flows freed */
 		uint64_t collision;                     /* Counter for total number of collisions */
 		uint64_t active_collision;              /* Counter for total collisions that are active */
+		uint64_t fail_collision;		/* Counter for total collosions fail */
 	} stats;
 } ;
 
-struct eip_flow *eip_flow_add(struct eip_flow_tuple *flow_tuple, struct eip_tr *tr);
-void eip_flow_del(struct eip_flow_tuple *flow_tuple, struct eip_tr *tr);
 bool eip_flow_table_init(struct platform_device *pdev);
 void eip_flow_table_deinit(struct platform_device *pdev);
+int eip_flow_update_by_tr(struct eip_tun *tun, struct eip_tr *tr, struct eip_tr *new_tr);
 
 #endif /* __EIP_FLOW_H */

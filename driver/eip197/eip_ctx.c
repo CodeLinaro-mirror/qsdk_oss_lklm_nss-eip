@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, 2026, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -14,6 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <asm-generic/errno.h>
 #include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -71,6 +72,7 @@ static ssize_t eip_ctx_read_tr_stats(struct file *filep, char __user *ubuf, size
 
 	/*
 	 * Take read lock for TR list iteration.
+	 * TODO: Evaluate whether this lock can be merged with ep->lock.
 	 */
 	read_lock_bh(&ctx->tr.lock);
 
@@ -91,38 +93,23 @@ static ssize_t eip_ctx_read_tr_stats(struct file *filep, char __user *ubuf, size
 		len += snprintf(buf + len, max_buf_len - len, "\tRx Packets - %llu\n", stats.rx_pkts);
 		len += snprintf(buf + len, max_buf_len - len, "\tRx bytes - %llu\n", stats.rx_bytes);
 		len += snprintf(buf + len, max_buf_len - len, "\tError - %llu\n", stats.rx_error);
-
-		if(tr->flow) {
-			struct eip_flow_tuple *tuple = &tr->flow->tuple;
-			uint32_t idx;
-			idx = EIP_FLOW_HASH_IDX(tr->flow->hash);
-
-			if (tuple->ip_ver == 6) {
-				len += snprintf(buf + len, max_buf_len - len, "Flow Src:%pI6n Dst:%pI6n spi:0x%X sport:%u dport:%u proto:%u index %u\n", tuple->src_ip, tuple->dst_ip, tuple->spi, ntohs(tuple->src_port), ntohs(tuple->dst_port), tuple->ip_proto, idx);
-			}
-			else {
-				len += snprintf(buf + len, max_buf_len - len, "Flow Src:%pI4n Dst:%pI4n spi:0x%X sport:%u dport:%u proto:%u index %u \n", tuple->src_ip, tuple->dst_ip, tuple->spi, ntohs(tuple->src_port), ntohs(tuple->dst_port), tuple->ip_proto, idx);
-
-			}
-
-		}
 	}
 
 	read_unlock_bh(&ctx->tr.lock);
 
-	spin_lock_bh(&tbl->lock);
+	spin_lock_bh(&ctx->ep->lock);
         len += snprintf(buf + len, max_buf_len - len, "Flows allocated - %llu \n", tbl->stats.alloc);
         len += snprintf(buf + len, max_buf_len - len, "Flows deallocated - %llu \n", tbl->stats.free);
         len += snprintf(buf + len, max_buf_len - len, "Total collisions - %llu \n", tbl->stats.collision);
         len += snprintf(buf + len, max_buf_len - len, "Active collisions - %llu \n", tbl->stats.active_collision);
-	spin_unlock_bh(&tbl->lock);
+	len += snprintf(buf + len, max_buf_len - len, "Fail collisions - %llu \n", tbl->stats.fail_collision);
+	spin_unlock_bh(&ctx->ep->lock);
 
 	ret = simple_read_from_buffer(ubuf, count, ppos, buf, len);
 	vfree(buf);
 
 	return ret;
 }
-
 
 /*
  * eip_ctx_final()
@@ -246,6 +233,10 @@ struct eip_ctx *eip_ctx_alloc(enum eip_svc svc, struct dentry **dentry)
 		ctx->db_size = eip_tr_aead_get_svc_len();
 		ctx->dma = ep->la;
 		break;
+	/*
+	 * TODO: Replace EIP_SVC_HYBRID_IPSEC with EIP_SVC_IPSEC.
+	 * Use eip_features_t flags to derive remaining IPsec-related information.
+	 */
 	case EIP_SVC_HYBRID_IPSEC:
 		ctx->svc_db = eip_tr_ipsec_get_svc();
 		ctx->db_size = eip_tr_ipsec_get_svc_len();
@@ -332,3 +323,64 @@ bool eip_ctx_algo_supported(struct eip_ctx *ctx, const char *algo_name)
 	return true;
 }
 EXPORT_SYMBOL(eip_ctx_algo_supported);
+
+/*
+ * eip_tun_update
+ *	Update Tunnel.
+ */
+int eip_tun_update(struct eip_tun *tun, struct eip_tun_update_info *info)
+{
+	/* Currently only TR update is supported for Encap flows. */
+	if (!(info->valid_flags & EIP_TUN_TR_VALID)) {
+		return -ENOTSUPP;
+	}
+
+	if (!info->new_tr) {
+		pr_debug("%px : New TR is not valid\n", tun);
+		return -EINVAL;
+	}
+
+	if (!eip_feature_check(tun->ctx, EIP_OFFLOAD_INNER_FLOW)) {
+		pr_debug("%px : Context doesn't support inner flow acceleration", tun->ctx);
+		return -EINVAL;
+	}
+
+	return eip_flow_update_by_tr(tun, info->tr, info->new_tr);
+}
+EXPORT_SYMBOL(eip_tun_update);
+
+/*
+ * eip_tun_alloc()
+ *	Allocate and initialize tunnel context.
+ */
+struct eip_tun *eip_tun_alloc(struct eip_ctx *ctx)
+{
+	struct eip_tun *tun;
+
+	tun = kzalloc(sizeof(struct eip_tun), GFP_KERNEL | __GFP_ZERO);
+	if (!tun) {
+		pr_err("%px : Failed to allocate tunnel context\n", ctx);
+		return NULL;
+	}
+
+	tun->ctx = ctx;
+	INIT_LIST_HEAD(&tun->flows);
+
+	return tun;
+}
+EXPORT_SYMBOL(eip_tun_alloc);
+
+/*
+ * eip_tun_free()
+ *	Free tunnel context.
+ * NOTE:
+ *      Caller must ensure that all tunnel-associated resources
+ *      (including flows) are fully cleaned up before invoking
+ *      this function.
+ */
+void eip_tun_free(struct eip_tun *tun)
+{
+	WARN_ON(!list_empty(&tun->flows));
+	kfree(tun);
+}
+EXPORT_SYMBOL(eip_tun_free);
