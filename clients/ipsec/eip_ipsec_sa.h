@@ -78,6 +78,7 @@ struct eip_ipsec_sa *eip_ipsec_sa_ref_get_decap_v4(__be32 *addr, __be32 spi);
 struct eip_ipsec_sa *eip_ipsec_sa_match_spi(struct list_head *sa_head, __be32 spi);
 ssize_t eip_ipsec_sa_read(struct net_device *ndev, bool encap, char *buf, ssize_t max_len);
 struct eip_ipsec_sa *eip_ipsec_sa_ref_get(struct net_device *ndev, struct eip_ipsec_tuple *t);
+void eip_ipsec_sa_stats_sync(struct net_device *ndev, struct eip_ipsec_sa *sa);
 
 /*
  * Increment SA reference.

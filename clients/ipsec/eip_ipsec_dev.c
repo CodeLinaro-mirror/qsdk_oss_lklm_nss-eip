@@ -35,6 +35,44 @@
 
 #include "eip_ipsec_priv.h"
 
+/*
+ * eip_ipsec_stats_sync_cb()
+ *	sync stats function.
+ */
+static void eip_ipsec_stats_sync(struct eip_ipsec_dev *eid)
+{
+	struct net_device *ndev = eid->ndev;
+	struct eip_ipsec_sa *sa;
+
+	dev_hold(ndev);
+
+	/*
+	 * Collect Encap stats
+	 */
+	rcu_read_lock_bh();
+	list_for_each_entry_rcu(sa, &eid->enc_sa, node) {
+		/*
+		 * Sync SA stats stats
+		 */
+		eip_ipsec_sa_stats_sync(ndev, sa);
+	}
+	rcu_read_unlock_bh();
+
+	/*
+	 * Collect Decap stats.
+	 */
+	rcu_read_lock_bh();
+	list_for_each_entry_rcu(sa, &eid->dec_sa, node) {
+		/*
+		 * Sync SA stats stats
+		 */
+		eip_ipsec_sa_stats_sync(ndev, sa);
+	}
+
+	rcu_read_unlock_bh();
+	dev_put(ndev);
+}
+
 #if defined(EIP_IPSEC_VP_SUPP)
 
 /*
@@ -62,6 +100,7 @@ static bool eip_ipsec_dev_vp_stats_cb(struct net_device *ndev, ppe_vp_hw_stats_t
 static void eip_ipsec_dev_get_summary_stats(struct eip_ipsec_dev *eid,
 		struct eip_ipsec_dev_stats *stats)
 {
+	struct eip_ctx *ctx = eip_ipsec_drv_g.ctx;
 	int words;
 	int cpu;
 	int i;
@@ -69,6 +108,9 @@ static void eip_ipsec_dev_get_summary_stats(struct eip_ipsec_dev *eid,
 	words = (sizeof(*stats) / sizeof(uint64_t));
 	memset(stats, 0, sizeof(*stats));
 
+	if (eip_feature_check(ctx, EIP_OFFLOAD_OUTER_FLOW) &&
+			eip_feature_check(ctx, EIP_OFFLOAD_INNER_FLOW))
+		eip_ipsec_stats_sync(eid);
 	/*
 	 * All statistics are 64bit. So we can just iterate by words.
 	 */
@@ -668,8 +710,10 @@ static ppe_vp_num_t eip_ipsec_dev_alloc_vp(struct net_device *ndev)
 	if (eip_feature_check(ctx, EIP_OFFLOAD_OUTER_FLOW))
 		eip_svc = PPE_DRV_EIP_SERVICE_IIPSEC;
 
-	if (eip_feature_check(ctx, EIP_OFFLOAD_INNER_FLOW))
+	if (eip_feature_check(ctx, EIP_OFFLOAD_INNER_FLOW)) {
 		eip_svc = PPE_DRV_EIP_SERVICE_FULL_INLINE;
+		vpai.stats_cb = NULL;
+	}
 
 	if (!eip_svc) {
 		eip_svc = PPE_DRV_EIP_SERVICE_NONINLINE;

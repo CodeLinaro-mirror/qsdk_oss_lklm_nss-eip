@@ -418,15 +418,52 @@ static void eip_ipsec_sa_set_mtu(struct eip_ipsec_sa *sa, struct eip_ipsec_data 
 }
 
 /*
+ * eip_ipsec_sa_stats_sync
+ *	sync and store dev and SA stats from TR.
+ */
+void eip_ipsec_sa_stats_sync(struct net_device *ndev, struct eip_ipsec_sa *sa)
+{
+	struct eip_ipsec_dev_stats *dev_stats;
+	struct eip_ipsec_dev *eid = netdev_priv(ndev);
+	struct eip_hw_stats delta_stats = {0};
+	struct eip_ipsec_sa_stats *sa_stats;
+
+	dev_stats = this_cpu_ptr(eid->stats_pcpu);
+	sa_stats = this_cpu_ptr(sa->stats_pcpu);
+
+	/*  Fetch stats from Driver */
+	eip_tr_get_hw_stats(sa->tr, &delta_stats );
+
+	if (sa->flags & EIP_IPSEC_FLAG_ENC) {
+		dev_stats->tx_pkts +=  delta_stats.pkt_cnt;
+		dev_stats->tx_bytes += delta_stats.byte_cnt;
+		sa_stats->tx_pkts += delta_stats.pkt_cnt;
+		sa_stats->tx_bytes += delta_stats.byte_cnt;
+	} else {
+
+		dev_stats->rx_pkts += delta_stats.pkt_cnt;
+		dev_stats->rx_bytes += delta_stats.byte_cnt;
+		sa_stats->rx_pkts += delta_stats.pkt_cnt;
+		sa_stats->rx_bytes += delta_stats.byte_cnt;
+	}
+}
+
+/*
  * eip_ipsec_dev_get_summary_stats()
  *	Update the summary stats.
  */
-static void eip_ipsec_sa_get_summary_stats(struct eip_ipsec_sa *sa,
+static void eip_ipsec_sa_stats_get(struct eip_ipsec_sa *sa,
 		struct eip_ipsec_sa_stats *stats)
 {
+	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
 	int words;
 	int cpu;
 	int i;
+
+	if (eip_feature_check(drv->ctx, EIP_OFFLOAD_INNER_FLOW) &&
+			eip_feature_check(drv->ctx, EIP_OFFLOAD_OUTER_FLOW)) {
+		eip_ipsec_sa_stats_sync(sa->ndev, sa);
+	}
 
 	words = (sizeof(*stats) / sizeof(uint64_t));
 	memset(stats, 0, sizeof(*stats));
@@ -442,7 +479,6 @@ static void eip_ipsec_sa_get_summary_stats(struct eip_ipsec_sa *sa,
 		for (i = 0; i < words; i++, stats_ptr++, sp_ptr++)
 			*stats_ptr += *sp_ptr;
 	}
-
 }
 
 /*
@@ -472,7 +508,7 @@ ssize_t eip_ipsec_sa_read(struct net_device *ndev, bool encap, char *buf, ssize_
 	i = 0;
 	list_for_each_entry_rcu(sa, sa_head, node) {
 		struct eip_ipsec_tuple *t = &sa->tuple;
-		eip_ipsec_sa_get_summary_stats(sa, &stats);
+		eip_ipsec_sa_stats_get(sa, &stats);
 
 		if (t->ip_version == IPVERSION) {
 			len += snprintf(buf + len, max_len - len, "%s SA%u (src:%pI4h dst:%pI4h spi:0x%X sport:%u dport:%u proto:%u):\n",
@@ -589,7 +625,6 @@ struct eip_ipsec_sa *eip_ipsec_sa_ref_get_decap_v4(__be32 *addr, __be32 spi)
 	rcu_read_unlock_bh();
 	return NULL;
 }
-
 
 /*
  * eip_ipsec_sa_final()
@@ -878,6 +913,14 @@ tr_disable:
 	 * Wait for all outstanding SA operation.
 	 */
 	wait_for_completion(&sa->completion);
+
+	/*
+	 * Just before rekease TR get final stats
+	 */
+	if (eip_feature_check(drv->ctx, EIP_OFFLOAD_INNER_FLOW) &&
+			eip_feature_check(drv->ctx, EIP_OFFLOAD_OUTER_FLOW)) {
+		eip_ipsec_sa_stats_sync(ndev, sa);
+	}
 
 	/*
 	 * Release the TR and other SA resources

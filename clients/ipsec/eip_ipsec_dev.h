@@ -74,7 +74,6 @@ struct eip_ipsec_dev {
 	uint8_t rps_map[NR_CPUS];	/* Mapping for Receive Packet Steering */
 	struct netfn_pkt_steer tx_steer;	/* Tx data packet steering handle. */
 	struct netfn_pkt_steer rx_steer;	/* Rx data packet steering handle. */
-
 #if defined(EIP_IPSEC_VP_SUPP)
 	ppe_vp_num_t vp_num;		/* VP number associated with this netdevice. */
 #endif
