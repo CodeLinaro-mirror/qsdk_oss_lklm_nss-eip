@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, 2026, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -348,3 +348,62 @@ bool eip_ctx_algo_supported(struct eip_ctx *ctx, const char *algo_name)
 	return true;
 }
 EXPORT_SYMBOL(eip_ctx_algo_supported);
+
+/*
+ * eip_tun_update()
+ *	Tunnel update
+ */
+int eip_tun_update(struct eip_tun *tun, struct eip_tun_update_info *info)
+{
+	return -EOPNOTSUPP;
+}
+EXPORT_SYMBOL(eip_tun_update);
+
+/*
+ * eip_tun_alloc()
+ *	Tunnel allocation for context
+ */
+struct eip_tun *eip_tun_alloc(struct eip_ctx *ctx)
+{
+	struct eip_tun *tun;
+
+	tun = kzalloc(sizeof(struct eip_tun), GFP_KERNEL | __GFP_ZERO);
+	if (!tun) {
+		pr_err("%px : Failed to allocate tunnel context\n", ctx);
+		return NULL;
+	}
+
+	tun->ctx = ctx;
+	return tun;
+}
+EXPORT_SYMBOL(eip_tun_alloc);
+
+/*
+ * eip_tun_free()
+ *	Tunnel free
+ */
+void eip_tun_free(struct eip_tun *tun)
+{
+	kfree(tun);
+}
+EXPORT_SYMBOL(eip_tun_free);
+
+/*
+ * eip_flow_add()
+ *	Flow add to hardware table
+ */
+int eip_flow_add(struct eip_tun *tun, struct eip_flow_info *info)
+{
+	return -EOPNOTSUPP;
+}
+EXPORT_SYMBOL(eip_flow_add);
+
+/*
+ * eip_flow_del()
+ * 	Deletion of flow from the hardware table
+ */
+void eip_flow_del(struct eip_tun *tun, struct eip_flow_info *info)
+{
+	return;
+}
+EXPORT_SYMBOL(eip_flow_del);
