@@ -46,18 +46,18 @@ static const struct of_device_id eip_dev_dt_id[] = {
 };
 
 /*
- * Module params
+ * Module params only allowed to be set during module load.
  */
 uint32_t eip_dma_rx_napi_weight = 64;
-module_param(eip_dma_rx_napi_weight, uint, S_IRUSR | S_IWUSR | S_IRGRP);
+module_param(eip_dma_rx_napi_weight, uint, S_IRUSR | S_IRGRP);
 MODULE_PARM_DESC(eip_dma_rx_napi_weight, "EIP dma rx budget");
 
 uint32_t eip_dma_tx_compl_napi_weight = 128;
-module_param(eip_dma_tx_compl_napi_weight, uint, S_IRUSR | S_IWUSR | S_IRGRP);
+module_param(eip_dma_tx_compl_napi_weight, uint, S_IRUSR | S_IRGRP);
 MODULE_PARM_DESC(eip_dma_tx_compl_napi_weight, "EIP dma tx completion budget");
 
 uint32_t ring_sz = 256;
-module_param(ring_sz, uint, S_IRUSR | S_IWUSR | S_IRGRP);
+module_param(ring_sz, uint, S_IRUSR | S_IRGRP);
 MODULE_PARM_DESC(ring_sz, "EIP ring size");
 
 /*
@@ -240,8 +240,13 @@ int __init eip_init_module(void)
 	}
 
 	/*
-	 * Check if ring size is power of 2
+	 * Check if ring size is power of 2 and within valid range.
 	 */
+	if (ring_sz < EIP_RING_SZ_MIN || ring_sz > EIP_RING_SZ_MAX) {
+		pr_err("Ring size(%d) must be between %u-%u\n", ring_sz, EIP_RING_SZ_MIN, EIP_RING_SZ_MAX);
+		return -EINVAL;
+	}
+
 	if (!is_power_of_2(ring_sz)) {
 		pr_err("Ring size(%d) is not power of 2\n", ring_sz);
 		return -EINVAL;
