@@ -129,6 +129,7 @@ static int eip_device_probe(struct platform_device *pdev)
 	ep->dev_paddr = paddr;
 	ep->dev_vaddr = vaddr;
 	ep->pdev = pdev;
+	spin_lock_init(&ep->lock);
 
 	/*
 	 * Set platform data.
@@ -219,6 +220,14 @@ bool eip_is_inline_supported(void)
 	return ep->inline_support;
 }
 EXPORT_SYMBOL(eip_is_inline_supported);
+
+bool eip_feature_check(struct eip_ctx *ctx, eip_features_t feature)
+{
+	struct eip_pdev *ep = ctx->ep;
+
+	return (feature & ep->flags);
+}
+EXPORT_SYMBOL(eip_feature_check);
 
 /*
  * eip_init_module()

@@ -39,8 +39,18 @@
 #define EIP_DTLS_TYPE_APP_DATA	0x17U	/* DTLS header type is Application data */
 #define EIP_DTLS_TYPE_CC_SPEC	0x20U	/* DTLS header type is change cipher spec */
 
+/*
+ * eip_features_t
+ *	EIP HW features.
+ */
+typedef enum eip_hw_features {
+	EIP_OFFLOAD_INNER_FLOW = BIT(0),	/* EIP supports inner flow offload */
+	EIP_OFFLOAD_OUTER_FLOW = BIT(1),	/* EIP supports outer flow offload */
+} eip_features_t;
+
 struct eip_ctx;	/* HW context per sevice */
 struct eip_tr;	/* Transform record per session */
+struct eip_tun;	/* EIP flow context */
 
 /*
  * Request object. Use below inline APIs to get the relavent objects.
@@ -132,6 +142,30 @@ enum eip_dtls_replay {
 };
 
 /*
+ * eip_flow_tuple
+ *      Filled by caller; Allocate on stack.
+ */
+struct eip_flow_tuple {
+	__be32 src_ip[4];	/* Source IP address */
+	__be32 dst_ip[4];	/* Destination IP address */
+	__be32 spi;		/* For non-IPsec flow this must be zero */
+	__be16 src_port;	/* Source transport layer(L4) port. */
+	__be16 dst_port;	/* Destination transport layer(L4) port. */
+	__be16 epoch;		/* For non-DTLS flow this must be zero */
+	uint8_t ip_ver;		/* IP version. */
+	uint8_t ip_proto;	/* IP protocol number. */
+};
+
+/*
+ * eip_he_stats
+ *	EIP stats
+ */
+struct eip_hw_stats {
+	uint64_t pkt_count;	/* Number of packet processed */
+	uint64_t byte_cnt;	/* Number of bytes processed */
+};
+
+/*
  * eip_tr_base
  *	Allocated by user; mostly on stack
  */
@@ -145,6 +179,26 @@ struct eip_tr_base {
 
 	uint32_t nonce;
 	char alg_name[CRYPTO_MAX_ALG_NAME];
+};
+
+/*
+ * eip_tun_update_info
+ *	Tunnel update info.
+ */
+struct eip_tun_update_info {
+#define EIP_TUN_TR_VALID BIT(0)	/* TR is valid in this struct */
+	uint32_t valid_flags;	/* Valid flags */
+	struct eip_tr *tr;	/* Transform record to be replaced */
+	struct eip_tr *new_tr;	/* New transform record */
+};
+
+/*
+ * eip_flow_info
+ *	EIP flow info.
+ */
+struct eip_flow_info {
+	struct eip_flow_tuple tuple;	/* Flow tuple */
+	struct eip_tr *tr;	/* Transform record */
 };
 
 /*
@@ -588,5 +642,94 @@ bool eip_ctx_algo_supported(struct eip_ctx *dma_ctx, const char *algo_name);
  * true/false
  */
 bool eip_is_inline_supported(void);
+
+/*
+ * eip_tun_update
+ *	eip_tun_update
+ *
+ * @datatypes
+ * struct eip_tun
+ * struct eip_tun_update_info
+ *
+ * @param[in] tun Tunnel.
+ * @param[in] info Tunnel info
+ *
+ * @return
+ * Return 0 on sucess, else error code.
+ */
+int eip_tun_update(struct eip_tun *tun, struct eip_tun_update_info *info);
+
+/*
+ * eip_tun_alloc
+ *	Allocate and initialize tunnel.
+ * @datatypes
+ * struct eip_ctx
+ *
+ * @param[in] ctx EIP context
+ *
+ * @return
+ * tun on success, NULL in error case
+ */
+struct eip_tun *eip_tun_alloc(struct eip_ctx *ctx);
+
+/*
+ * eip_tun_free
+ *	Free tunnel.
+ *
+ * @datatypes
+ * struct eip_tun
+ *
+ * @param[in] tun tunnel.
+ *
+ * @return
+ *
+ */
+void eip_tun_free(struct eip_tun *tun);
+
+/*
+ * eip_flow_add
+ *	Add flows to EIP HW.
+ *
+ * @datatypes
+ * struct eip_tun
+ * struct flow_flow_info
+ *
+ * @param[in] tun Tunnel context.
+ * @param[in] info Flow info.
+ *
+ * @return
+ * 0 on suscess, else NULL on fail.
+ */
+int eip_flow_add(struct eip_tun *tun, struct eip_flow_info *info);
+
+/*
+ * eip_flow_del
+ *	Delete flows from EIP HW.
+ *
+ * @datatypes
+ * struct eip_tun
+ * struct flow_flow_info
+ *
+ * @param[in] tun Tunnel context.
+ * @param[in] info Flow info.
+ * @return
+ */
+void eip_flow_del(struct eip_tun *tun, struct eip_flow_info *info);
+
+/*
+ * eip_feature_check
+ *	Check HW features.
+ *
+ * @datatypes
+ * struct eip_ctx
+ * eip_features_t
+ *
+ * @param[in] ctx EIP context
+ * @param[in] feature
+ *
+ * @return
+ * true if featur is supported, else false
+ */
+bool eip_feature_check(struct eip_ctx *ctx, eip_features_t feature);
 
 #endif /* __EIP_H */
