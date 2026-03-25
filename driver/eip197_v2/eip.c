@@ -57,6 +57,14 @@ ulong hy_cpu_map = 0x7;
 module_param(hy_cpu_map, ulong, S_IRUSR | S_IRGRP);
 MODULE_PARM_DESC(hy_cpu_map, "Configure EIP Hybrid DMA for CPU(s)");
 
+uint32_t eip_flow_max = EIP_FLOW_DEF;
+module_param(eip_flow_max, uint, S_IRUSR | S_IRGRP);
+MODULE_PARM_DESC(eip_flow_max, "EIP primary flow table size (power of 2, min: 64, max: 16384)");
+
+uint32_t eip_collision_max = EIP_FLOW_COLLISION_DEF;
+module_param(eip_collision_max, uint, S_IRUSR | S_IRGRP);
+MODULE_PARM_DESC(eip_collision_max, "EIP flow collision pool size (power of 2, default: 64)");
+
 /*
  * eip_device_probe()
  *	Device probe to initialize HW engine & DMA.
@@ -268,6 +276,28 @@ int __init eip_init_module(void)
 		pr_err("Ring size(%d) is not power of 2\n", ring_sz);
 		return -EINVAL;
 	}
+
+	/*
+	 * Validate flow table size: must be a power of 2 within the HW-supported
+	 * range [2^(1+5), 2^(9+5)] = [64, 16384].
+	 */
+	if (!is_power_of_2(eip_flow_max)) {
+		pr_err("Flow table size (%u) must be a power of 2 between %u and %u\n",
+			eip_flow_max, EIP_FLOW_MIN, EIP_FLOW_MAX);
+		return -EINVAL;
+	}
+
+	if (!is_power_of_2(eip_collision_max)) {
+		pr_err("Collision pool size (%u) must be a non-zero power of 2 between %u and %u\n",
+			eip_collision_max, EIP_FLOW_COLLISION_MIN, EIP_FLOW_COLLISION_MAX);
+		return -EINVAL;
+	}
+
+	drv->flow_max = clamp(eip_flow_max, EIP_FLOW_MIN, EIP_FLOW_MAX);
+	drv->collision_max = clamp(eip_collision_max, EIP_FLOW_COLLISION_MIN, EIP_FLOW_COLLISION_MAX);
+
+	pr_debug("EIP flow table configured: flow_max=%u, collision_max=%u\n",
+			drv->flow_max, drv->collision_max);
 
 	drv->dentry = debugfs_create_dir("qca-nss-eip", NULL);
 	if (IS_ERR_OR_NULL(drv->dentry)) {

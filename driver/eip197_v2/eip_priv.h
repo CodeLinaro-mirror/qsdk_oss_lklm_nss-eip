@@ -98,6 +98,8 @@ struct eip_drv {
 	cpumask_t hy_cpu_map;			/* Hybrid active CPU map */
 
 	struct platform_device *pdev;		/* Device associated with the driver */
+	uint32_t flow_max;			/* Validated flow table size (frozen at module init) */
+	uint32_t collision_max;		/* Validated collision pool size (frozen at module init) */
 };
 
 /*

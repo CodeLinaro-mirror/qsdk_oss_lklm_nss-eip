@@ -8,11 +8,17 @@
 
 #include <linux/debugfs.h>
 
-#define EIP_FLOW_MAX (1U << (EIP_HW_FLUE_CONFIG_TABLE_SZ + 5))
-#define EIP_FLOW_MASK (EIP_FLOW_MAX - 1)
-#define EIP_FLOW_HASH_IDX(hash) ((hash.words[0] >> 6) & EIP_FLOW_MASK)
+#define EIP_FLOW_HW_MIN_SHIFT 5
+#define EIP_FLOW_HW_MIN (1 << EIP_FLOW_HW_MIN_SHIFT) /* 32 entries */
+#define EIP_FLOW_MIN (1 << (1 + EIP_FLOW_HW_MIN_SHIFT)) /* 64 entries */
+#define EIP_FLOW_DEF 1024U	/* Default flow count */
+#define EIP_FLOW_MAX 4096U	/* Maximum flow count */
+#define EIP_FLOW_COLLISION_MIN 64U	/* Minimum collision pool size */
+#define EIP_FLOW_COLLISION_DEF 1024U	/* Default collision pool size */
+#define EIP_FLOW_COLLISION_MAX 16384U	/* Maximum collision pool size */
+#define EIP_FLOW_HASH_IDX(hash, mask) \
+	((hash.words[0] >> 6) & (mask))
 #define EIP_FLOW_HASH_DATA_SZ 13U /* Iterations for hash function */
-#define EIP_FLOW_MAX_COLLISION 64U
 #define EIP_HASH_EQUAL(H1,H2) ((H1.words[0] == H2.words[0]) && (H1.words[1] == H2.words[1]) && (H1.words[2] == H2.words[2]) && (H1.words[3] == H2.words[3]))
 #define EIP_FLOW_TR_DISABLE 0x0
 #define EIP_FLOW_VALID_BIT 0x1U
@@ -60,8 +66,9 @@ struct eip_flow {
  * 	Flow table
  */
 struct eip_flow_tbl {
-	struct hlist_head sw_head[EIP_FLOW_MAX];        /* Pointer to SW flow object in the flow table */
+	struct hlist_head *sw_head;                     /* Dynamically allocated SW flow bucket array */
 	struct eip_flow_hw *hw_head;                    /* Pointer to HW flow in the flow table */
+	u32 pool_sz;					/* HW flow pool size */
 	dma_addr_t hw_head_paddr;                       /* Physical address of the flow table */
 	struct eip_flow_tbl_stats {
 		uint64_t alloc;                         /* Counter for number of flows allocated */

@@ -16,6 +16,8 @@
 #include <linux/dma-direct.h>
 #include <linux/spinlock.h>
 #include <linux/seq_file.h>
+#include <linux/log2.h>
+#include <linux/errno.h>
 #include <eip.h>
 
 #include "eip_priv.h"
@@ -94,6 +96,7 @@ static int eip_flow_dump(struct seq_file *s, void *data)
 {
 	struct eip_pdev *ep = platform_get_drvdata(eip_drv_g.pdev);
 	struct eip_flow_tbl *flow_db = &ep->flow_table;
+	struct eip_drv *drv = &eip_drv_g;
 	struct hlist_head *head;
 	struct eip_flow *flow;
 	uint32_t flow_cnt = 0;
@@ -104,14 +107,14 @@ static int eip_flow_dump(struct seq_file *s, void *data)
 	 */
 	seq_printf(s, "EIP Flow Table Dump\n");
 	seq_printf(s, "===================\n");
-	seq_printf(s, "Maximum Buckets: %u\n\n", EIP_FLOW_MAX);
+	seq_printf(s, "Maximum Buckets: %u\n\n", drv->flow_max);
 
 	/*
 	 * Iterate through all buckets in the flow table.
 	 * Lock is acquired and released per bucket to avoid holding
 	 * the lock for too long when dumping large number of flows.
 	 */
-	for (index = 0; index < EIP_FLOW_MAX; index++) {
+	for (index = 0; index < drv->flow_max; index++) {
 		spin_lock_bh(&ep->lock);
 
 		head = &flow_db->sw_head[index];
@@ -309,6 +312,7 @@ static eip_flow_hash_t eip_flow_get_hash(struct eip_flow_tuple *flow)
 static struct eip_flow *_eip_flow_lookup(struct eip_flow_tbl *flow_table, eip_flow_hash_t hash)
 {
 	struct eip_pdev *ep = platform_get_drvdata(eip_drv_g.pdev);
+	struct eip_drv *drv = &eip_drv_g;
 	struct hlist_head *flow_head;
 	struct hlist_node *entry;
 	struct eip_flow *flow;
@@ -316,7 +320,7 @@ static struct eip_flow *_eip_flow_lookup(struct eip_flow_tbl *flow_table, eip_fl
 
 	assert_spin_locked(&ep->lock);
 
-	idx = EIP_FLOW_HASH_IDX(hash);
+	idx = EIP_FLOW_HASH_IDX(hash, drv->flow_max - 1);
 	flow_head = &flow_table->sw_head[idx];
 
 	if (hlist_empty(flow_head)) {
@@ -340,6 +344,7 @@ static struct eip_flow *eip_flow_alloc(struct eip_tun *tun, struct eip_flow_tupl
 {
 	struct eip_pdev *ep = platform_get_drvdata(eip_drv_g.pdev);
 	struct hlist_head *flow_head = NULL;
+	struct eip_drv *drv = &eip_drv_g;
 	struct eip_flow_hw *hflow = NULL;
 	struct eip_flow_tbl *tbl = NULL;
 	struct eip_flow *flow = NULL;
@@ -348,7 +353,7 @@ static struct eip_flow *eip_flow_alloc(struct eip_tun *tun, struct eip_flow_tupl
 	int i;
 
 	hash = eip_flow_get_hash(flow_tuple);
-	idx = EIP_FLOW_HASH_IDX(hash);
+	idx = EIP_FLOW_HASH_IDX(hash, drv->flow_max - 1);
 	tbl = &ep->flow_table;
 	flow_head = &tbl->sw_head[idx];
 
@@ -397,7 +402,7 @@ static struct eip_flow *eip_flow_alloc(struct eip_tun *tun, struct eip_flow_tupl
 	/*
 	 * Look up the available hardware flow memory from the collision pool.
 	 */
-	for (i = 0; i < EIP_FLOW_MAX_COLLISION; i++) {
+	for (i = 0; i < drv->collision_max; i++) {
 		hflow = ep->flow_hwcache + i;
 		if (hflow->tr_addr_type_1 == 0) {
 			hflow->tr_addr_type_1 = tr->tr_addr_type;
@@ -463,6 +468,7 @@ int eip_flow_add(struct eip_tun *tun, struct eip_flow_info *info)
 	struct eip_pdev *ep = platform_get_drvdata(eip_drv_g.pdev);
 	struct eip_flow_tuple *flow_tuple = &info->tuple;
 	struct eip_flow *flow, *tail_flow;
+	struct eip_drv *drv = &eip_drv_g;
 	struct list_head *tun_flow_head;
 	struct hlist_head *flow_head;
 	struct eip_tr *tr = info->tr;
@@ -489,7 +495,7 @@ int eip_flow_add(struct eip_tun *tun, struct eip_flow_info *info)
 		return -ENOMEM;
 	}
 
-	idx = EIP_FLOW_HASH_IDX(flow->hash);
+	idx = EIP_FLOW_HASH_IDX(flow->hash, drv->flow_max - 1);
 	flow_head = &tbl->sw_head[idx];
 
 	/*
@@ -580,13 +586,14 @@ void eip_flow_del(struct eip_tun *tun, struct eip_flow_info *info)
 	struct eip_pdev *ep = platform_get_drvdata(eip_drv_g.pdev);
 	struct eip_flow_tuple *flow_tuple = &info->tuple;
 	struct eip_flow *flow, *prev_flow;
+	struct eip_drv *drv = &eip_drv_g;
 	struct hlist_head *flow_head;
 	struct eip_flow_tbl *tbl;
 	eip_flow_hash_t hash;
 	uint32_t idx;
 
 	hash = eip_flow_get_hash(flow_tuple);
-	idx = EIP_FLOW_HASH_IDX(hash);
+	idx = EIP_FLOW_HASH_IDX(hash, drv->flow_max - 1);
 	tbl = &ep->flow_table;
 	flow_head = &tbl->sw_head[idx];
 
@@ -653,12 +660,21 @@ bool eip_flow_table_init(struct platform_device *pdev)
 {
 	struct eip_pdev *ep = platform_get_drvdata(pdev);
 	void __iomem *base_addr = ep->dev_vaddr;
-	struct eip_flow_tbl *tbl;
+	struct eip_drv *drv = &eip_drv_g;
 	size_t tbl_sz, collision_sz;
+	struct eip_flow_tbl *tbl;
+	u32 hw_tbl_sz = 0;
+	u32 tbl_cnt = 0;
 	dma_addr_t paddr;
 	void *addr;
-
 	int i;
+
+	/*
+	 * Derive HW table size by converting the maximum supported flows
+	 * (normalized by minimum bucket size) into a log2 exponent.
+	 */
+	tbl_cnt = drv->flow_max/EIP_FLOW_HW_MIN;
+	hw_tbl_sz = ilog2(tbl_cnt);
 
 	ep->flow_swcache = kmem_cache_create("eip_sw_flow", sizeof(struct eip_flow), 0, 0, NULL);
 	if (!ep->flow_swcache) {
@@ -667,13 +683,20 @@ bool eip_flow_table_init(struct platform_device *pdev)
 	}
 
 	tbl = &ep->flow_table;
-	tbl_sz = EIP_FLOW_MAX * sizeof(struct eip_flow_hw);
-	collision_sz = EIP_FLOW_MAX_COLLISION * sizeof(struct eip_flow_hw);
+	tbl->sw_head = kcalloc(drv->flow_max, sizeof(struct hlist_head), GFP_KERNEL);
+	if (!tbl->sw_head) {
+		pr_err("%px: Failed to allocate sw flow head\n", pdev);
+		goto fail_sw;
+	}
+
+	tbl_sz = drv->flow_max * sizeof(struct eip_flow_hw);
+	collision_sz = drv->collision_max * sizeof(struct eip_flow_hw);
+	tbl->pool_sz = tbl_sz + collision_sz;
 
 	/*
 	 * Allocate contiguous memory for hash table and collision list
 	 */
-	addr = dma_alloc_coherent(&pdev->dev, (tbl_sz + collision_sz), &paddr, GFP_DMA);
+	addr = dma_alloc_coherent(&pdev->dev, tbl->pool_sz, &paddr, GFP_DMA);
 	if (!addr) {
 		pr_err("%px: Failed to allocate entries\n",pdev);
 		goto fail_dma;
@@ -688,13 +711,13 @@ bool eip_flow_table_init(struct platform_device *pdev)
 	pr_debug("%px: DMA Address %px\n", pdev, tbl->hw_head);
 	pr_debug("%px: DMA Physical address %pad\n", pdev, &tbl->hw_head_paddr);
 
-	iowrite32(EIP_HW_FLUE_CONFIG_VAL, base_addr + EIP_HW_FLUE_CONFIG(0));
+	iowrite32(EIP_HW_FLUE_CONFIG_VAL(hw_tbl_sz), base_addr + EIP_HW_FLUE_CONFIG(0));
 	iowrite32(0x0, base_addr + EIP_HW_FLUE_CACHEBASE_LO(0));
 	iowrite32(0x0, base_addr + EIP_HW_FLUE_CACHEBASE_HI(0));
 	iowrite32(tbl->hw_head_paddr, base_addr + EIP_HW_FLUE_HASHBASE_LO(0));
 	iowrite32(0x0, base_addr + EIP_HW_FLUE_HASHBASE_HI(0));
 
-	for (i = 0; i < EIP_FLOW_MAX; i++){
+	for (i = 0; i < drv->flow_max; i++){
 		INIT_HLIST_HEAD(&tbl->sw_head[i]);
 	}
 
@@ -705,6 +728,9 @@ bool eip_flow_table_init(struct platform_device *pdev)
 	return true;
 
 fail_dma:
+	kfree(tbl->sw_head);
+	tbl->sw_head = NULL;
+fail_sw:
 	kmem_cache_destroy(ep->flow_swcache);
 	return false;
 }
@@ -723,5 +749,7 @@ void eip_flow_table_deinit(struct platform_device *pdev)
 	eip_flow_dump_deinit(tbl);
 	iowrite32(0x0, base_addr + EIP_HW_FLUE_HASHBASE_LO(0));
 	kmem_cache_destroy(ep->flow_swcache);
-	dma_free_coherent(&pdev->dev, EIP_FLOW_MAX * sizeof(struct eip_flow_hw), tbl->hw_head, tbl->hw_head_paddr);
+	dma_free_coherent(&pdev->dev, tbl->pool_sz, tbl->hw_head, tbl->hw_head_paddr);
+	kfree(tbl->sw_head);
+	tbl->sw_head = NULL;
 }

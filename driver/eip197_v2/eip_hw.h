@@ -803,8 +803,7 @@
 /*
  * Macros to store table size for hardware flow table
  */
-#define EIP_HW_FLUE_CONFIG_TABLE_SZ 3U   /* Max val 1 to 15 */
-#define EIP_HW_FLUE_CONFIG_VAL ((EIP_HW_FLUE_CONFIG_TABLE_SZ << 4) | (3U << 30))
+#define EIP_HW_FLUE_CONFIG_VAL(table_sz) (((table_sz) << 4) | (3U << 30))
 
 /*
  * error macros.
