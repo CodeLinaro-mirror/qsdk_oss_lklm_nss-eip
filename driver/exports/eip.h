@@ -345,7 +345,7 @@ static inline bool eip_is_enabled(void)
 			soc_id == QCOM_ID_IPQ9554 || soc_id == QCOM_ID_IPQ5332 ||
 			soc_id == QCOM_ID_IPQ5300 || soc_id == QCOM_ID_IPQ5424 ||
 			soc_id == QCOM_ID_IPQ5404 || soc_id == QCOM_ID_IPQ5200 ||
-			soc_id == QCOM_ID_IPQ5210);
+			soc_id == QCOM_ID_IPQ5210 || soc_id == QCOM_ID_IPQ9650 || soc_id == QCOM_ID_IPQ9620);
 }
 #endif
 
