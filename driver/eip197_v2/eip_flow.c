@@ -15,6 +15,7 @@
 #include <linux/dmapool.h>
 #include <linux/dma-direct.h>
 #include <linux/spinlock.h>
+#include <eip.h>
 
 #include "eip_priv.h"
 #include "eip_flow.h"
@@ -28,7 +29,7 @@ static struct eip_flow *eip_flow_get_tail(struct hlist_head *flow_head)
 	struct hlist_node *entry;
 	hlist_for_each(entry, flow_head) {
 		if (entry->next == NULL) {
-			return hlist_entry(entry, struct eip_flow, node);
+			return hlist_entry(entry, struct eip_flow, h_node);
 		}
 	}
 	return NULL;
@@ -40,7 +41,7 @@ static struct eip_flow *eip_flow_get_tail(struct hlist_head *flow_head)
  */
 static struct eip_flow *eip_flow_get_next(struct eip_flow *flow)
 {
-	return hlist_entry(flow->node.next, struct eip_flow, node);
+	return hlist_entry(flow->h_node.next, struct eip_flow, h_node);
 
 }
 
@@ -50,7 +51,7 @@ static struct eip_flow *eip_flow_get_next(struct eip_flow *flow)
  */
 static struct eip_flow *eip_flow_get_prev(struct eip_flow *flow)
 {
-	return hlist_entry(flow->node.pprev, struct eip_flow, node.next);
+	return hlist_entry(flow->h_node.pprev, struct eip_flow, h_node.next);
 }
 
 /*
@@ -79,7 +80,8 @@ static eip_flow_hash_t eip_flow_get_hash(struct eip_flow_tuple *flow)
 	 */
 	data[2] = ntohl(flow->spi);
 	data[3] = flow->epoch;
-	data[4] = 0;
+	data[4] = (flow->dst_port << 16);
+	data[4] |= flow->src_port;
 
 	if (flow->ip_ver == IPVERSION) {
 		data[5] = flow->dst_ip[0];
@@ -134,12 +136,13 @@ static eip_flow_hash_t eip_flow_get_hash(struct eip_flow_tuple *flow)
  */
 static struct eip_flow *_eip_flow_lookup(struct eip_flow_tbl *flow_table, eip_flow_hash_t hash)
 {
+	struct eip_pdev *ep = platform_get_drvdata(eip_drv_g.pdev);
 	struct hlist_head *flow_head;
 	struct hlist_node *entry;
 	struct eip_flow *flow;
 	uint32_t idx;
 
-	assert_spin_locked(&flow_table->lock);
+	assert_spin_locked(&ep->lock);
 
 	idx = EIP_FLOW_HASH_IDX(hash);
 	flow_head = &flow_table->sw_head[idx];
@@ -149,7 +152,7 @@ static struct eip_flow *_eip_flow_lookup(struct eip_flow_tbl *flow_table, eip_fl
 	}
 
 	hlist_for_each(entry, flow_head) {
-		flow = hlist_entry (entry, struct eip_flow, node);
+		flow = hlist_entry (entry, struct eip_flow, h_node);
 		if (EIP_HASH_EQUAL(flow->hash,hash))
 			return flow;
 	}
@@ -161,7 +164,7 @@ static struct eip_flow *_eip_flow_lookup(struct eip_flow_tbl *flow_table, eip_fl
  * eip_flow_alloc
  * 	Allocate flow
  */
-static struct eip_flow *eip_flow_alloc(struct eip_flow_tuple *flow_tuple, struct eip_tr *tr)
+static struct eip_flow *eip_flow_alloc(struct eip_tun *tun, struct eip_flow_tuple *flow_tuple, struct eip_tr *tr)
 {
 	struct eip_pdev *ep = platform_get_drvdata(eip_drv_g.pdev);
 	struct hlist_head *flow_head = NULL;
@@ -177,7 +180,7 @@ static struct eip_flow *eip_flow_alloc(struct eip_flow_tuple *flow_tuple, struct
 	tbl = &ep->flow_table;
 	flow_head = &tbl->sw_head[idx];
 
-	assert_spin_locked(&tbl->lock);
+	assert_spin_locked(&ep->lock);
 	if (_eip_flow_lookup(tbl, hash) != NULL) {
 		pr_warn("%px: Flow already exists \n", tr);
 		return NULL;
@@ -192,9 +195,11 @@ static struct eip_flow *eip_flow_alloc(struct eip_flow_tuple *flow_tuple, struct
 	}
 
 	memset(flow, 0, sizeof(struct eip_flow));
-	INIT_HLIST_NODE(&flow->node);
+	INIT_HLIST_NODE(&flow->h_node);
+	INIT_LIST_HEAD(&flow->t_node);
 	flow->hash = hash;
 	flow->tuple = *flow_tuple;
+	flow->tr = eip_tr_ref(tr);
 
 	/*
 	 * Check if hardware flow is available in the hash table
@@ -206,7 +211,9 @@ static struct eip_flow *eip_flow_alloc(struct eip_flow_tuple *flow_tuple, struct
 		hflow->next_flow_offset = 0;
 		hflow->hashid_1 = hash;
 
-
+		/*
+		 * Update SW flow object
+		 */
 		flow->hflow = hflow ;
 		flow->hflow_paddr = tbl->hw_head_paddr + (idx * sizeof(*hflow));
 		flow->sentinel = true;
@@ -233,7 +240,14 @@ static struct eip_flow *eip_flow_alloc(struct eip_flow_tuple *flow_tuple, struct
 		}
 	}
 
+	/*
+	 * Failure condition that occurs when the collision list reaches
+	 * its maximum capacity.
+	 */
+	tbl->stats.fail_collision++;
+	eip_tr_deref(flow->tr);
 	kmem_cache_free(ep->flow_swcache, flow);
+	pr_err("%px: Failed to allocate flow from collision\n", tun);
 	return NULL;
 }
 
@@ -243,9 +257,10 @@ static struct eip_flow *eip_flow_alloc(struct eip_flow_tuple *flow_tuple, struct
  */
 static void eip_flow_free(struct eip_flow *flow, struct eip_pdev *ep)
 {
-	hlist_del_init(&flow->node);
+	hlist_del_init(&flow->h_node);
 
 	flow->hflow->tr_addr_type_1 = EIP_FLOW_TR_DISABLE;
+	eip_tr_deref(flow->tr);
 	memset(flow->hflow, 0, sizeof(*(flow->hflow)));
 	memset(flow, 0, sizeof(struct eip_flow));
 	kmem_cache_free(ep->flow_swcache, flow);
@@ -271,22 +286,35 @@ static void eip_flow_swap_hflow(struct eip_flow *flow, struct eip_flow *next_flo
 /*
  * eip_flow_add()
  */
-struct eip_flow *eip_flow_add(struct eip_flow_tuple *flow_tuple, struct eip_tr *tr)
+int eip_flow_add(struct eip_tun *tun, struct eip_flow_info *info)
 {
 	struct eip_pdev *ep = platform_get_drvdata(eip_drv_g.pdev);
+	struct eip_flow_tuple *flow_tuple = &info->tuple;
 	struct eip_flow *flow, *tail_flow;
+	struct list_head *tun_flow_head;
 	struct hlist_head *flow_head;
+	struct eip_tr *tr = info->tr;
 	struct eip_flow_tbl *tbl;
+	eip_features_t feature;
 	uint32_t idx;
 
-	tbl = &ep->flow_table;
 
-	spin_lock_bh(&tbl->lock);
-	flow = eip_flow_alloc(flow_tuple, tr);
+	feature = !!(tr->tr_flags & EIP_TR_IPSEC_FLAG_ENC) ? EIP_OFFLOAD_INNER_FLOW : EIP_OFFLOAD_OUTER_FLOW;
+
+	if (!eip_feature_check(tun->ctx, feature)) {
+		pr_err("%px: Feature (%x) not supported \n", tun, feature);
+		return -ENOTSUPP;
+	}
+
+	tbl = &ep->flow_table;
+	tun_flow_head = &tun->flows;
+
+	spin_lock_bh(&ep->lock);
+	flow = eip_flow_alloc(tun, flow_tuple, tr);
 	if (!flow) {
-		spin_unlock_bh(&tbl->lock);
+		spin_unlock_bh(&ep->lock);
 		pr_err("%px: Failed to allocate EIP flow\n", tr);
-		return NULL;
+		return -ENOMEM;
 	}
 
 	idx = EIP_FLOW_HASH_IDX(flow->hash);
@@ -296,17 +324,22 @@ struct eip_flow *eip_flow_add(struct eip_flow_tuple *flow_tuple, struct eip_tr *
 	 * Fast addition: Addition of a new node at the begining of hlist
 	 */
 	if (flow->sentinel) {
-		hlist_add_head(&flow->node, flow_head);
+		hlist_add_head(&flow->h_node, flow_head);
 		tbl->stats.alloc++;
 
-		spin_unlock_bh(&tbl->lock);
+		/*
+		 * Add sentinel flow to tun flow list
+		 */
+		list_add_tail(&flow->t_node, tun_flow_head);
+
+		spin_unlock_bh(&ep->lock);
 		if (flow_tuple->ip_ver == 6) {
 			pr_debug("%px Flow (src:%pI6n dst:%pI6n spi:0x%X) added at the head at index %u\n", flow, flow_tuple->src_ip, flow_tuple->dst_ip, ntohl(flow_tuple->spi), idx);
 		} else {
 			pr_debug("%px Flow (src:%pI4n dst:%pI4n spi:0x%X) added at the head at index %u\n", flow, flow_tuple->src_ip, flow_tuple->dst_ip, ntohl(flow_tuple->spi), idx);
 		}
 
-		return flow;
+		return 0;
 	}
 
 	/*
@@ -319,28 +352,61 @@ struct eip_flow *eip_flow_add(struct eip_flow_tuple *flow_tuple, struct eip_tr *
 	pr_debug("%px: Physical address of hardware head: %pad\n", tr, &tbl->hw_head_paddr);
 	tail_flow->hflow->next_flow_offset = (flow->hflow_paddr - tbl->hw_head_paddr) | EIP_FLOW_VALID_BIT;
 
-	hlist_add_behind(&flow->node, &tail_flow->node);
+	hlist_add_behind(&flow->h_node, &tail_flow->h_node);
 	tbl->stats.alloc++;
 	tbl->stats.collision++;
 	tbl->stats.active_collision++;
 
-	spin_unlock_bh(&tbl->lock);
+	/*
+	 * Add in to tun flow list;
+	 */
+	list_add_tail(&flow->t_node, tun_flow_head);
+
+	spin_unlock_bh(&ep->lock);
 	if (flow_tuple->ip_ver == 6) {
 		pr_debug("%px Flow (src:%pI6n dst:%pI6n spi:0x%X) added after collision at index %u\n", flow, flow_tuple->src_ip, flow_tuple->dst_ip, ntohl(flow_tuple->spi), idx);
 	} else {
 		pr_debug("%px Flow (src:%pI4n dst:%pI4n spi:0x%X) added after collision at index %u\n", flow, flow_tuple->src_ip, flow_tuple->dst_ip, ntohl(flow_tuple->spi), idx);
 	}
 
-	return flow;
+	return 0;
+}
+EXPORT_SYMBOL(eip_flow_add);
+
+/*
+ * eip_flow_update_by_tr
+ *	Update flows TR mapping.
+ */
+int eip_flow_update_by_tr(struct eip_tun *tun, struct eip_tr *tr, struct eip_tr *new_tr)
+{
+	struct eip_pdev *ep = platform_get_drvdata(eip_drv_g.pdev);
+	struct list_head *head = &tun->flows;
+	struct eip_flow *flow;
+
+	spin_lock_bh(&ep->lock);
+
+	list_for_each_entry(flow, head, t_node) {
+		/* Compare and update only matching TR */
+		if (flow->tr == tr) {
+			flow->tr =  eip_tr_ref(new_tr);
+			WARN_ON(!flow->tr);
+
+			flow->hflow->tr_addr_type_1 = new_tr->tr_addr_type;
+			eip_tr_deref(tr);
+		}
+	}
+	spin_unlock_bh(&ep->lock);
+	return 0;
 }
 
 /*
  * eip_flow_del()
  * 	Deletion of flow from the hardware table
  */
-void eip_flow_del(struct eip_flow_tuple *flow_tuple, struct eip_tr *tr)
+void eip_flow_del(struct eip_tun *tun, struct eip_flow_info *info)
 {
 	struct eip_pdev *ep = platform_get_drvdata(eip_drv_g.pdev);
+	struct eip_flow_tuple *flow_tuple = &info->tuple;
 	struct eip_flow *flow, *prev_flow;
 	struct hlist_head *flow_head;
 	struct eip_flow_tbl *tbl;
@@ -352,18 +418,23 @@ void eip_flow_del(struct eip_flow_tuple *flow_tuple, struct eip_tr *tr)
 	tbl = &ep->flow_table;
 	flow_head = &tbl->sw_head[idx];
 
-	spin_lock_bh(&tbl->lock);
+	spin_lock_bh(&ep->lock);
 	flow = _eip_flow_lookup(tbl, hash);
 	if (flow == NULL) {
-		spin_unlock_bh(&tbl->lock);
-		pr_err("%px: Flow doesn't exist \n", tr);
+		spin_unlock_bh(&ep->lock);
+		pr_err("%px: Flow doesn't exist \n", tun);
 		return;
 	}
 
 	/*
+	 * Remove from node from flow list
+	 */
+	list_del(&flow->t_node);
+
+	/*
 	 * This the only flow in the chain, Reset & free the flow.
 	 */
-	if (hlist_is_singular_node(&flow->node, flow_head)) {
+	if (hlist_is_singular_node(&flow->h_node, flow_head)) {
 		ASSERT(flow->sentinel);
 		pr_debug("%px Flow (src:%pI4n dst:%pI4n spi:0x%X) deleted at head at index %u\n",
 				flow, flow_tuple->src_ip, flow_tuple->dst_ip, ntohl(flow_tuple->spi), idx);
@@ -398,8 +469,9 @@ void eip_flow_del(struct eip_flow_tuple *flow_tuple, struct eip_tr *tr)
 free:
 	tbl->stats.free++;
 	eip_flow_free(flow, ep);
-	spin_unlock_bh(&tbl->lock);
+	spin_unlock_bh(&ep->lock);
 }
+EXPORT_SYMBOL(eip_flow_del);
 
 /*
  * eip_flow_table_init()
@@ -476,4 +548,3 @@ void eip_flow_table_deinit(struct platform_device *pdev)
 	kmem_cache_destroy(ep->flow_swcache);
 	dma_free_coherent(&pdev->dev, EIP_FLOW_MAX * sizeof(struct eip_flow_hw), tbl->hw_head, tbl->hw_head_paddr);
 }
-

@@ -154,10 +154,9 @@ void eip_tr_ipsec_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
 	 * TODO: Round robin ring
 	 */
 	if (tr->svc == EIP_SVC_HYBRID_IPSEC) {
-		struct eip_ctx *ctx = tr->ctx;
 		tr_words[65] |= EIP_TR_REDIR_EN;
-		tr_words[65] |= EIP_TR_REDIR_IFACE(ctx->dma[1].ring_id);;
-		pr_debug("%px: Redirection enable to ring(%u) for decap record\n", tr, ctx->dma[0].ring_id);
+		tr_words[65] |= EIP_TR_REDIR_IFACE(EIP_HW_INLINE_RING);
+		pr_debug("%px: Redirection enable to ring(%u) for decap record\n", tr, EIP_HW_INLINE_RING);
 	}
 
 	tr_words[66] = EIP_TR_IPSEC_TTL(ipsec->ip_ttl);
