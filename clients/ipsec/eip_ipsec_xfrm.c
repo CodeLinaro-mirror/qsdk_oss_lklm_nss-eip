@@ -386,6 +386,7 @@ static int eip_ipsec_xfrm_sa_data_init(struct xfrm_state *xs, struct eip_ipsec_d
 {
 	struct net_device *local_dev;
 	xfrm_address_t remote = {0};
+	xfrm_address_t local = {0};
 	size_t ip_addr_len;
 	uint8_t ttl_hop_limit;
 	int ret;
@@ -440,16 +441,21 @@ static int eip_ipsec_xfrm_sa_data_init(struct xfrm_state *xs, struct eip_ipsec_d
 		 */
 		if (!local_dev) {
 			sa_data->base.flags |= EIP_IPSEC_FLAG_ENC;
+			memcpy(&local.in6, &xs->props.saddr.in6, ip_addr_len);
 			memcpy(&remote.in6, &xs->id.daddr.in6, ip_addr_len);
 		} else {
 			dev_put(local_dev);
+			memcpy(&local.in6, &xs->id.daddr.in6, ip_addr_len);
 			memcpy(&remote.in6, &xs->props.saddr.in6, ip_addr_len);
 		}
 
 		rt6 = rt6_lookup(&init_net, &remote.in6, NULL, 0, 0, 0);
 		if (!rt6) {
-			pr_warn("No IPv6 dst found\n");
-			return -1;
+			rt6 = rt6_lookup(&init_net, &remote.in6, &local.in6, 0, 0, 0);
+			if (!rt6) {
+				pr_warn("No IPv6 dst found\n");
+				return -1;
+			}
 		}
 
 		ttl_hop_limit = ip6_dst_hoplimit(&rt6->dst);
