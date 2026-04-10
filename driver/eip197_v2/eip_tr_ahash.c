@@ -301,7 +301,7 @@ bool eip_tr_ahash_init(struct eip_tr *tr, struct eip_tr_info *info, const struct
 		 * Driver must not make any update in transform records words after this.
 		 * EIP197 will do ipad/opad update.
 		 */
-		eip_dmac_clean_range(tr->hw_words, tr->hw_words + EIP_HW_CTX_SIZE_SMALL_BYTES);
+		eip_dmac_clean_range(tr->hw_words, tr->hw_words + EIP_HW_CTX_SIZE_SMALL_WORDS);
 		return true;
 	}
 
@@ -317,7 +317,7 @@ bool eip_tr_ahash_init(struct eip_tr *tr, struct eip_tr_info *info, const struct
 	 * Driver must not make any update in transform records words after this.
 	 * EIP197 will do ipad/opad update.
 	 */
-	eip_dmac_clean_range(tr->hw_words, tr->hw_words+ EIP_HW_CTX_SIZE_SMALL_BYTES);
+	eip_dmac_clean_range(tr->hw_words, tr->hw_words+ EIP_HW_CTX_SIZE_SMALL_WORDS);
 
 	/*
 	 * HMAC Inner and Outer Digest Precalculation

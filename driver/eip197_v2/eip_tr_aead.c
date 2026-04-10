@@ -531,7 +531,7 @@ bool eip_tr_aead_gcm_init(struct eip_tr *tr, struct eip_tr_info *info, const str
 	 * Flush record memory.
 	 * Driver must not make any update in transform records words after this.
 	 */
-	eip_dmac_clean_range(tr->hw_words, tr->hw_words + EIP_HW_CTX_SIZE_LARGE_BYTES);
+	eip_dmac_clean_range(tr->hw_words, tr->hw_words + EIP_HW_CTX_SIZE_LARGE_WORDS);
 
 	return true;
 }
