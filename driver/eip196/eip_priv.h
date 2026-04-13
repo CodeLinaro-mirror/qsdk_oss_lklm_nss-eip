@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, 2026, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -120,6 +120,7 @@ struct eip_pdev {
 	struct dentry *dentry;			/* Driver debugfs dentry */
 	void __iomem *dev_vaddr;		/* starting virtual address of device */
 	dma_addr_t dev_paddr;			/* starting physical address of device */
+	eip_features_t flags;			/* EIP hardware-supported flags */
 };
 
 extern struct eip_drv eip_drv_g;	/* Global Driver object */

@@ -36,6 +36,7 @@
 #include "eip_ipsec_xfrm.h"
 
 #define EIP_IPSEC_MAX_STR_LEN 64U	/* Maximum print lenght */
+#define EIP_IPSEC_TAG_MAX 128U		/* Maximum tag length for debug prints */
 #define EIP_IPSEC_HASH_SHIFT 6U
 #define EIP_IPSEC_HASH_SIZE (1U << EIP_IPSEC_HASH_SHIFT)
 #define EIP_IPSEC_HASH_MASK (EIP_IPSEC_HASH_SIZE - 1)
@@ -43,6 +44,9 @@
 #define EIP_IPSEC_RX_STEER_BUDGET 128U		/* RPS napi poll budget */
 #define EIP_IPSEC_TX_STEER_BUDGET 128U		/* TPS napi poll budget */
 #define EIP_IPSEC_PKT_STEER_FIFO_LEN 8192U	/* Packet steer FIFO length */
+
+
+#define EIP_IPSEC_NATT_PORT 4500U	/* IPsec NAT-T Port number */
 
 /*
  * IPsec driver object.
@@ -109,5 +113,14 @@ static inline void eip_ipsec_drv_deref(struct eip_ipsec_drv *drv)
 {
 	kref_put(&drv->ref, eip_ipsec_drv_final);
 }
+
+/*
+ * Flow functions
+ */
+int eip_ipsec_flow_init(void);
+void eip_ipsec_flow_deinit(void);
+void eip_ipsec_flow_del(struct net_device *ndev, struct eip_ipsec_tuple *flow_tuple, bool is_encap);
+int eip_ipsec_flow_add(struct net_device *ndev, struct eip_ipsec_tuple *flow_tuple, struct eip_ipsec_sa *sa);
+s16 eip_ipsec_flow_match_spi(__le32 spi, struct net_device *dev, u32 sa_flags);
 
 #endif /* !__EIP_IPSEC_PRIV_H */

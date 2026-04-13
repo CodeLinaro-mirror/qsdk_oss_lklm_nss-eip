@@ -19,9 +19,12 @@
 
 #include <net/dst_cache.h>
 
-#define EIP_IPSEC_SA_ESP_TRAILER_LEN 2U	/* ESP trailer len */
-
 struct eip_ipsec_dev;
+
+/*
+ * ACL invalid rule id
+ */
+#define EIP_IPSEC_INVALID_ACL_RULE_ID -1
 
 /*
  * IPsec SA statistics.
@@ -50,6 +53,7 @@ struct eip_ipsec_sa {
 	struct net_device *ndev;	/* Parent device object */
 	struct eip_ipsec_dev *eid;	/* Cached device private pointer */
 
+	uint32_t flags;			/* SA flags */
 	struct kref ref;		/* Reference incremented for each flow & packet */
 	struct dst_cache dst_cache;	/* Destination route cache */
 	__be32 spi;			/* ESP Security Parameter Index */
@@ -63,14 +67,17 @@ struct eip_ipsec_sa {
 	struct eip_ipsec_tuple tuple;	/* SA tuple */
 	struct completion completion;   /* Completion to wait for all deref */
 	struct rcu_head rcu;            /* delay rcu free */
+	s16 acl_rule_id;		/* ACL id fro decap direction */
 };
 
 void eip_ipsec_sa_final(struct kref *kref);
 struct eip_ipsec_sa *eip_ipsec_sa_ref_get_encap(struct net_device *ndev);
+struct eip_ipsec_sa *eip_ipsec_sa_ref_get_decap(struct net_device *ndev);
 struct eip_ipsec_sa *eip_ipsec_sa_ref_get_decap_v6(__be32 *addr, __be32 spi);
 struct eip_ipsec_sa *eip_ipsec_sa_ref_get_decap_v4(__be32 *addr, __be32 spi);
 struct eip_ipsec_sa *eip_ipsec_sa_match_spi(struct list_head *sa_head, __be32 spi);
 ssize_t eip_ipsec_sa_read(struct net_device *ndev, bool encap, char *buf, ssize_t max_len);
+struct eip_ipsec_sa *eip_ipsec_sa_ref_get(struct net_device *ndev, struct eip_ipsec_tuple *t);
 
 /*
  * Increment SA reference.

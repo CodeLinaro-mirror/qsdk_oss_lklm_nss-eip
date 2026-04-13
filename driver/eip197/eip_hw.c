@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, 2026, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -764,6 +764,22 @@ int eip_hw_init(struct platform_device *pdev)
 	 */
 	ep->inline_support = of_property_read_bool(np, "qcom,inline-enabled");
 	pr_info("%px: EIP inline_support: %s", pdev, ep->inline_support ? "yes" : "no");
+
+	/*
+	 * Check for outer flow offload support
+	 */
+	if(of_property_read_bool(np, "qcom,outer-offload")) {
+		ep->flags |= EIP_OFFLOAD_OUTER_FLOW;
+	}
+
+	/*
+	 * Check for inner flow offload support
+	 */
+	if(of_property_read_bool(np, "qcom,inner-offload")) {
+		ep->flags |= EIP_OFFLOAD_INNER_FLOW;
+	}
+
+	pr_info("%px: EIP Supported features : %x", pdev, ep->flags);
 
 	/*
 	 * Initialize all lookaside DMA.

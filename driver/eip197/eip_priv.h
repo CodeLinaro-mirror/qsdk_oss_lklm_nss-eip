@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, 2026, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -126,7 +126,9 @@ struct eip_pdev {
 	bool redirect_en;			/* Redirection / Hybrid mode is configured */
 	bool dma_refill_req;			/* Hybrid DMA refill required */
 	struct eip_flow_tbl flow_table;		/* Flow table */
+	spinlock_t lock;			/* Spinlock for flow table */
 	bool inline_support;			/* EIP inline port support */
+	eip_features_t flags;			/* EIP hardware-supported flags */
 };
 
 extern struct eip_drv eip_drv_g;		/* Global Driver object */

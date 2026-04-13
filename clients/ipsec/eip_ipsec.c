@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <linux/version.h>
@@ -28,6 +17,8 @@
 #include <linux/platform_device.h>
 #include <linux/of_address.h>
 #include <linux/debugfs.h>
+#include <linux/inetdevice.h>
+#include <eip.h>
 
 #include "eip_ipsec_priv.h"
 
@@ -68,7 +59,7 @@ static int eip_ipsec_ppe_init(void)
 	struct ppe_drv_iface *iface;
 	ppe_drv_ret_t ret;
 
-	if (!eip_is_inline_supported()) {
+	if (!eip_feature_check(drv->ctx, EIP_OFFLOAD_OUTER_FLOW)) {
 		return 0;
 	}
 
@@ -106,7 +97,7 @@ static void eip_ipsec_ppe_deinit(void)
 	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
 	ppe_drv_ret_t ret;
 
-	if (!eip_is_inline_supported()) {
+	if (!eip_feature_check(drv->ctx, EIP_OFFLOAD_OUTER_FLOW)) {
 		return;
 	}
 
@@ -223,7 +214,7 @@ int __init eip_ipsec_init_module(void)
 	 * Enable transmit steer when ppe-eip inline channel is not available.
 	 * With inline channel hardware supports multi-core receive.
 	 */
-	drv->tx_steer_en = !eip_is_inline_supported();
+	drv->tx_steer_en = !eip_feature_check(drv->ctx, EIP_OFFLOAD_OUTER_FLOW);
 
 	/*
 	 * Enable receive packet steer when it is configured by user.
@@ -239,10 +230,21 @@ int __init eip_ipsec_init_module(void)
 		goto fail_xfrm;
 	}
 
+	/*
+	 * Initialize flow
+	 */
+	err = eip_ipsec_flow_init();
+	if (err < 0) {
+		pr_err("%px: Failed to initialize flow module, error(%d)\n", drv, err);
+		goto fail_flow;
+	}
+
 	kref_init(&drv->ref);
 	pr_info("eip ipsec module loaded\n");
 	return 0;
 
+fail_flow:
+	eip_ipsec_xfrm_exit();
 fail_xfrm:
 	eip_ipsec_ppe_deinit();
 fail_ppe:
@@ -261,6 +263,11 @@ ctx_fail:
 void __exit eip_ipsec_exit_module(void)
 {
 	struct eip_ipsec_drv *drv = &eip_ipsec_drv_g;
+
+	/*
+	 * Deinitialize flow
+	 */
+	eip_ipsec_flow_deinit();
 
 	/*
 	 * Dereference: eip_ipsec_init_module()

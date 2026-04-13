@@ -9,6 +9,7 @@
 /*
  * eip_ctx_tr
  *	Tranform record list.
+ *	TODO: Move this under eip_tun.
  */
 struct eip_ctx_tr {
 	struct list_head head;
@@ -30,6 +31,9 @@ struct eip_ctx {
 	struct kmem_cache *tk_cache;		/* Token cache for crypto operation & auth key */
 	struct kmem_cache *sw_cache;		/* Software desc cache */
 
+	/*
+	 * TODO: Move eip_ctx_tr under tun.
+	 */
 	struct eip_ctx_tr tr;			/* TR list under this context */
 
 	struct kref ref;			/* Reference incremented for each tr */
@@ -39,6 +43,15 @@ struct eip_ctx {
 
 	struct eip_pdev *ep;			/* EIP platform data */
 	struct dentry *dentry;			/* debugfs file node */
+};
+
+/*
+ * eip_flow_ctx
+ *	EIP flow context;
+ */
+struct eip_tun {
+	struct list_head flows;		/* List of flows */
+	struct eip_ctx *ctx;	/* EIP context */
 };
 
 void eip_ctx_final(struct kref *kref);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, 2026, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -246,6 +246,18 @@ bool eip_is_inline_supported(void)
 	return false;
 }
 EXPORT_SYMBOL(eip_is_inline_supported);
+
+/*
+ * eip_feature_check()
+ *	Check what features are supported by EIP
+ */
+bool eip_feature_check(struct eip_ctx *ctx, eip_features_t feature)
+{
+	struct eip_pdev *ep = ctx->ep;
+
+	return (feature & ep->flags);
+}
+EXPORT_SYMBOL(eip_feature_check);
 
 /*
  * eip_init_module()

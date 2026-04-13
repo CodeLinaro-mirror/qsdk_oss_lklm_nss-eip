@@ -778,6 +778,7 @@ int eip_hw_init(struct platform_device *pdev)
 	uint32_t redirect_en = 0;
 	uint8_t max_ring;
 	int status, cpu;
+	uint32_t flags = 0;
 
 	/*
 	 * Initialize HW clock.
@@ -842,6 +843,14 @@ int eip_hw_init(struct platform_device *pdev)
 	ep->inline_support = of_property_read_bool(np, "qcom,inline-enabled");
 	pr_info("%px: EIP inline_support: %s", pdev, ep->inline_support ? "yes" : "no");
 
+	/*
+	 * Check for outer and inner flow offload support
+	 */
+	flags |= of_property_read_bool(np, "qcom,outer-offload") ? EIP_OFFLOAD_OUTER_FLOW : 0;
+	flags |= of_property_read_bool(np, "qcom,inner-offload") ? EIP_OFFLOAD_INNER_FLOW : 0;
+	ep->flags |= flags;
+
+	pr_info("%px: EIP Supported features : %x", pdev, ep->flags);
 
 	/*
 	 * Find first dma copmatible node.
