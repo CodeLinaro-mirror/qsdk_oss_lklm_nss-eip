@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <linux/version.h>
@@ -290,20 +279,27 @@ static inline bool eip_dma_hy_classify_err(struct eip_dma *dma, struct sk_buff *
 	dma_stats->rx_err_code[tr_err]++;
 
 	/*
-	 * Packet require to resubmit into Linux stack.
-	 * For NATT we can receive control packet with specific error code.
+	 * Resubmit packet to the Linux stack.
+	 * This includes control packets (e.g. NAT-T, IKE) and cases where
+	 * hardware flow lookup fails.
 	 */
-	if ((tr_err == EIP_HW_RES_ERR_NAT_T) || (tr_err == EIP_HW_RES_ERR_IKE)) {
-		/*
-		 * Pull the fake mac added by PPE.
-		 */
-		skb_pull(skb, sizeof(struct ethhdr));
-		if (!eip_dma_hy_deliver_linux(skb, res)) {
-			consume_skb(skb);
-			dma_stats->rx_dropped++;
-		}
 
-		return true;
+	switch (tr_err) {
+		case EIP_HW_RES_ERR_NAT_T:
+		case EIP_HW_RES_ERR_IKE:
+		case EIP_HW_RES_ERR_FLOW_FAIL:
+			/*
+			 * Pull the fake mac added by PPE.
+			 * token[3] contains offset to start of network header.
+			 */
+			skb_pull(skb, EIP_HW_RES_OFFST(res->token[3]));
+			if (!eip_dma_hy_deliver_linux(skb, res)) {
+				consume_skb(skb);
+				dma_stats->rx_dropped++;
+			}
+			return true;
+		default:
+			break;
 	}
 
 	/*
