@@ -624,6 +624,8 @@
 #define EIP_HW_CTX_CIPHER_MODE_CTR 0x2U
 #define EIP_HW_CTX_CIPHER_MODE_GCM ((0x1U << 17) | 0x2U)
 
+#define EIP_REC_TYPE_MASK 0x3U		/* Record type mask */
+
 #define EIP_HW_CTX_TYPE_SMALL 0x2U
 #define EIP_HW_CTX_TYPE_LARGE 0x3U
 #define EIP_HW_CTX_SIZE_LARGE_WORDS (80)
