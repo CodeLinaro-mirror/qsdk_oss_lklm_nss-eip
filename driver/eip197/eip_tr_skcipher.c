@@ -1,17 +1,6 @@
 /*
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <linux/version.h>
@@ -174,7 +163,7 @@ bool eip_tr_skcipher_init(struct eip_tr *tr, struct eip_tr_info *info, const str
 	 * Driver must not make any update in transform records words after this.
 	 * EIP197 will do ipad/opad update.
 	 */
-	eip_dmac_clean_range(tr->hw_words, tr->hw_words+ EIP_HW_CTX_SIZE_SMALL_BYTES);
+	eip_dmac_clean_range(tr->hw_words, tr->hw_words+ EIP_HW_CTX_SIZE_SMALL_WORDS);
 
 	return true;
 }
