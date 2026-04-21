@@ -187,21 +187,44 @@ fail:
 }
 
 /*
- * eip_ipsec_handle_plain_text_pkt()
+ * eip_ipsec_proto_except()
  *	Handle plain text(post decapsulation) packet.
  */
 void eip_ipsec_proto_except(struct eip_ipsec_dev *eid, struct sk_buff *skb)
 {
 	struct net_device *ndev;
 	struct eip_ipsec_sa *sa;
+	unsigned int ip_hdr_sz;
+	uint16_t proto;
 	__be32 spi;
+
+	/* Reset General SKB fields for further processing */
+	ndev = eid->ndev;
+	skb_scrub_packet(skb, false);
+	skb_reset_mac_header(skb);
+	skb_reset_network_header(skb);
+
+	skb->dev = ndev;
+	skb->skb_iif = ndev->ifindex;
+	skb->ip_summed = CHECKSUM_NONE;
+
+	/* Detect IPv4 / IPv6 */
+	if (ip_hdr(skb)->version == IPVERSION) {
+		proto = htons(ETH_P_IP);
+		ip_hdr_sz = sizeof(struct iphdr);
+	} else {
+		proto = htons(ETH_P_IPV6);
+		ip_hdr_sz = sizeof(struct ipv6hdr);
+	}
+
+	skb->protocol = proto;
+	skb_set_transport_header(skb, ip_hdr_sz);
 
 	/*
 	 * We will pick whatever head SA available as
 	 * we don't know which exact decap SA has been used by EIP for ESP decapsulation.
 	 * (If SA has not been rekeyed during exception then this SA would be the correct one).
 	 */
-	ndev = eid->ndev;
 	sa = eip_ipsec_sa_ref_get_decap(ndev);
 	if (!sa) {
 		pr_debug("%px: Failed to get decap SA\n", skb);

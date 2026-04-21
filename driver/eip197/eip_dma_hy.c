@@ -245,18 +245,37 @@ static inline bool eip_dma_hy_deliver_linux(struct sk_buff *skb, struct eip_hw_d
 {
 	uint16_t src_port = EIP_HW_RES_BYPASS_SRC_PORT(res->bypass[0]);
 	struct net_device *dev = ppe_drv_port_num_to_dev(src_port);
+	unsigned int ip_hdr_sz;
+	uint16_t proto;
 
 	if (!dev) {
 		return false;
 	}
 
+	/* Reset General SKB fields for further processing */
+	skb_scrub_packet(skb, false);
 	skb_reset_mac_header(skb);
 	skb_reset_network_header(skb);
+
 	skb->dev = dev;
+	skb->skb_iif = dev->ifindex;
 	skb->ip_summed = CHECKSUM_NONE;
-	skb->protocol = htons(ETH_P_IP);
-	skb_set_transport_header(skb, sizeof(struct iphdr));
+
+	/* Detect IPv4 / IPv6 */
+	if (ip_hdr(skb)->version == IPVERSION) {
+		proto = htons(ETH_P_IP);
+		ip_hdr_sz = sizeof(struct iphdr);
+	} else {
+		proto = htons(ETH_P_IPV6);
+		ip_hdr_sz = sizeof(struct ipv6hdr);
+	}
+
+	skb->protocol = proto;
+	skb_set_transport_header(skb, ip_hdr_sz);
+
+	/* Inject into stack */
 	netif_receive_skb(skb);
+
 	return true;
 }
 
