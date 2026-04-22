@@ -133,12 +133,6 @@ static int eip_ipsec_flow_notifier(struct notifier_block *nb, unsigned long acti
 		return NOTIFY_OK;
 	}
 
-	/* Early return for non-PPE flows */
-	if (data->ae_type != ECM_AE_TYPE_PPE) {
-		pr_debug("AE type is not PPE, AE_TYPE : %u\n", data->ae_type);
-		return NOTIFY_OK;
-	}
-
 	/* Check if flow is IPsec and get device */
 	ipsec_dev = __flow_get_dev(data, &ipsec);
 	if (!ipsec_dev) {
@@ -157,6 +151,13 @@ static int eip_ipsec_flow_notifier(struct notifier_block *nb, unsigned long acti
 
 	switch (action) {
 	case ECM_NOTIFIER_ACTION_CONNECTION_ADDED:
+
+		/* Return for non-PPE flows */
+		if (data->ae_type != ECM_AE_TYPE_PPE) {
+			pr_debug("AE type is not PPE, AE_TYPE : %u\n", data->ae_type);
+			return NOTIFY_OK;
+		}
+
 		sa = eip_ipsec_sa_ref_get_encap(ipsec_dev);
 		if (!sa) {
 			pr_debug("%px: Failed to get SA\n", ipsec_dev);
@@ -262,7 +263,7 @@ s16 eip_ipsec_flow_match_spi(__le32 spi, struct net_device *dev, u32 sa_flags)
 	udf = &acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_UDF].rule.udf;
 
 	/* Fill common part of ACL */
-	acl_rule->cmn.cmn_flags = PPE_ACL_RULE_CMN_FLAG_NO_RULEID;
+	acl_rule->cmn.cmn_flags = PPE_ACL_RULE_CMN_FLAG_NO_RULEID | PPE_ACL_RULE_CMN_FLAG_POST_RT_EN;
 	acl_rule->valid_flags = PPE_ACL_RULE_MATCH_TYPE_UDF_VALID;
 	acl_rule->userspace_rule = false;
 	acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_UDF].rule_flags = 0;
