@@ -16,6 +16,28 @@
 
 #include "eip_priv.h"
 
+/* eip_set_disable_hw_ctx()
+ *	Set disable bit in HW ctx
+ */
+static inline void eip_tr_disable_hw(struct eip_tr *tr)
+{
+	uint32_t *disable_word;
+
+	switch (tr->tr_addr_type & EIP_REC_TYPE_MASK) {
+	case EIP_HW_CTX_TYPE_LARGE:
+		disable_word = &tr->hw_words[65];
+		break;
+	case EIP_HW_CTX_TYPE_SMALL:
+		disable_word = &tr->hw_words[49];
+		break;
+	default:
+		pr_err("%px : Invalid Record type\n", tr);
+		return;
+	}
+
+	 *disable_word |= 0x1;
+}
+
 /*
  * eip_tr_append_stats()
  */
@@ -75,6 +97,26 @@ static void eip_tr_inval_done(struct eip_tr *tr, struct eip_hw_desc *hw, struct 
 	 * free the memory associated with the operation.
 	 */
 	kmem_cache_free(ctx->sw_cache, sw);
+	eip_tr_deref(tr);
+	pr_debug("%px: TR disabled successfully\n", tr);
+}
+
+/*
+ * eip_tr_inval_n_free()
+ *	Invalidation completion and free the TR.
+ */
+static void eip_tr_inval_n_free(struct eip_tr *tr, struct eip_hw_desc *hw, struct eip_sw_desc *sw)
+{
+	struct eip_pdev *ep;
+	struct eip_ctx *ctx;
+
+	ctx = tr->ctx;
+	ep = ctx->ep;
+
+	/*
+	 * free the memory associated with the operation.
+	 */
+	kmem_cache_free(ctx->sw_cache, sw);
 
 	/*
 	 * Free TR and all dependent resource.
@@ -86,7 +128,7 @@ static void eip_tr_inval_done(struct eip_tr *tr, struct eip_hw_desc *hw, struct 
 
 	free_percpu(tr->stats_pcpu);
 	kmem_cache_free(ep->tr_cache, tr);
-	pr_debug("%px: TR freed successfully\n", tr);
+	pr_debug("TR freed successfully\n");
 }
 
 /*
@@ -95,8 +137,14 @@ static void eip_tr_inval_done(struct eip_tr *tr, struct eip_hw_desc *hw, struct 
  */
 static void eip_tr_inval_err(struct eip_tr *tr, struct eip_hw_desc *hw, struct eip_sw_desc *sw, uint16_t cle_err, uint16_t tr_err)
 {
+	if (kref_read(&tr->ref)) {
+		pr_err("%px: TR Invalidation for disable failed with cle_err(%u) tr_err(%u)\n", tr, cle_err, tr_err);
+		eip_tr_inval_done(tr, hw, sw);
+		return;
+	}
+
 	pr_err("%px: TR Invalidation failed with cle_err(%u) tr_err(%u)\n", tr, cle_err, tr_err);
-	eip_tr_inval_done(tr, hw, sw);
+	eip_tr_inval_n_free(tr, hw, sw);
 }
 
 /*
@@ -116,11 +164,6 @@ static void eip_tr_inval(struct work_struct *work)
 	ctx = tr->ctx;
 
 	/*
-	 * Disable Record, To avoid any unanticipated record read.
-	 */
-	iowrite32(0x1, &tr->hw_words[65]);
-
-	/*
 	 * Initialize scatterlist with dummy data address.
 	 * Although Invalidation does not use any data buffer. We do it for DMA.
 	 */
@@ -138,8 +181,7 @@ static void eip_tr_inval(struct work_struct *work)
 	sw = kmem_cache_alloc(ctx->sw_cache, GFP_NOWAIT | __GFP_NOWARN);
 	if (!sw) {
 		pr_warn("%px: Failed to allocate SW descriptor; Rescheduling..\n", tr);
-		schedule_delayed_work(&tr->inval_work, EIP_TR_INVAL_TIMEOUT);
-		return;
+		goto reschedule;
 	}
 
 	/*
@@ -148,7 +190,6 @@ static void eip_tr_inval(struct work_struct *work)
 	 */
 	sw->tr = tr;
 	sw->tk = NULL;
-	sw->comp = eip_tr_inval_done;
 	sw->err_comp = eip_tr_inval_err;
 	sw->tk_hdr = tk_hdr;
 	sw->tr_addr_type = tr->tr_addr_type;
@@ -156,6 +197,11 @@ static void eip_tr_inval(struct work_struct *work)
 	sw->tk_words = 0;
 	sw->hw_svc = EIP_HW_CMD_HWSERVICE_INV_TRC;
 	sw->req = NULL;
+
+	if (kref_read(&tr->ref))
+		sw->comp = eip_tr_inval_done;
+	else
+		sw->comp = eip_tr_inval_n_free;
 
 	/*
 	 * Schedule the transformation.
@@ -168,11 +214,21 @@ static void eip_tr_inval(struct work_struct *work)
 		pr_warn("%px: DMA is busy for invalidation schedule\n", tr);
 
 		kmem_cache_free(ctx->sw_cache, sw);
-		schedule_delayed_work(&tr->inval_work, EIP_TR_INVAL_TIMEOUT);
-		return;
+		goto reschedule;
 	}
 
 	return;
+
+reschedule:
+	/*
+	 * Schedule TR invalidation.
+	 * Use delayed invalidation for final teardown, otherwise run immediately
+	 * for update or retry paths.
+	 */
+	if (kref_read(&tr->ref))
+		schedule_delayed_work(&tr->inval_work, EIP_TR_INVAL_TIMEOUT);
+	else
+		schedule_delayed_work(&tr->inval_work, 0);
 }
 
 /*
@@ -342,9 +398,16 @@ void eip_tr_disable(struct eip_tr *tr)
 	struct eip_tr_ops *ops;
 
 	/*
+	 * Hold a reference so the TR is not freed by final teardown
+	 * until the invalidation worker has completed.
+	 */
+	eip_tr_ref(tr);
+
+	/*
 	 * Mark TR as inactive.
 	 */
 	atomic_set(&tr->active, 0);
+	eip_tr_disable_hw(tr);
 
 	/*
 	 * Atomically change callback to dummy.
@@ -381,6 +444,12 @@ void eip_tr_disable(struct eip_tr *tr)
 		pr_err("%px: Service database not found\n", tr);
 		break;
 	}
+
+	/*
+	 * Disable Record, To avoid any unanticipated record read.
+	 */
+	eip_dmac_clean_range(tr->hw_words, tr->hw_words + EIP_HW_CTX_SIZE_LARGE_WORDS);
+	schedule_delayed_work(&tr->inval_work, 0);
 }
 EXPORT_SYMBOL(eip_tr_disable);
 
