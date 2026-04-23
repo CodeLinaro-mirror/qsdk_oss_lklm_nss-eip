@@ -568,47 +568,6 @@ consume:
 	consume_skb(skb);
 }
 
-/* eip_ipsec_dev_is_local()
- *	Packet originated from local interface
- */
-static bool eip_ipsec_dev_is_local(struct sk_buff *skb, void *cb_data __maybe_unused)
-{
-	void *next_hdr;
-	u8 ip_hdr_sz;
-	u8 protocol;
-
-	if (ip_hdr(skb)->version == IPVERSION) {
-		ip_hdr_sz = ip_hdr(skb)->ihl * 4;
-		protocol = ip_hdr(skb)->protocol;
-	} else {
-		ip_hdr_sz = sizeof(struct ipv6hdr);
-		protocol = ipv6_hdr(skb)->nexthdr;
-
-		/* IPsec tunnel never adds extension header */
-		if (ipv6_ext_hdr(protocol))
-			return false;
-	}
-
-	/* ESP packet */
-	if (protocol == IPPROTO_ESP)
-		return true;
-
-	/* UDP encapsulated ESP (NAT-T) */
-	next_hdr = skb_network_header(skb) + ip_hdr_sz;
-	if (protocol == IPPROTO_UDP) {
-		struct udphdr *udph = next_hdr;
-		u8 is_natt = 0;
-
-		is_natt += (udph->dest == htons(EIP_IPSEC_NATT_PORT));
-		is_natt += (udph->source == htons(EIP_IPSEC_NATT_PORT));
-
-		if (is_natt)
-			return true;
-	}
-
-	return false;
-}
-
 /*
  * eip_ipsec_dev_vp_except()
  *	VP callback for outer exception.
@@ -631,7 +590,8 @@ bool eip_ipsec_dev_vp_except(struct ppe_vp_cb_info *info, void *cb_data)
 	 * If inner-flow offload is enabled and the packet did not originate from
 	 * a local interface, treat it as a post decapsulation exception.
 	 */
-	if (eip_feature_check(ctx, EIP_OFFLOAD_INNER_FLOW) && !eip_ipsec_dev_is_local(skb, cb_data)) {
+	if (eip_feature_check(ctx, EIP_OFFLOAD_INNER_FLOW) &&
+			info->service_code == PPE_DRV_SC_IPSEC_EIP2PPE_DECAP) {
 		eip_ipsec_proto_except(eid, skb);
 		return true;
 	}

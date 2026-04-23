@@ -368,7 +368,12 @@ static void eip_ipsec_ppe_mdata_set(struct eip_tr_info *tr_info, ppe_vp_num_t vp
 	memset(mdata, 0, sizeof(*mdata));
 
 	mdata->ppe_src_port = (0x2000 | vp_num);
-	mdata->service_code = PPE_DRV_SC_IPSEC_EIP2PPE;
+
+	if (tr_info->ipsec.sa_flags & EIP_TR_IPSEC_FLAG_ENC)
+		mdata->service_code = PPE_DRV_SC_IPSEC_EIP2PPE_ENCAP;
+	else
+		mdata->service_code = PPE_DRV_SC_IPSEC_EIP2PPE_DECAP;
+
 	mdata->fake_mac = true;
 	mdata->fake_l2_prot = true;
 }
