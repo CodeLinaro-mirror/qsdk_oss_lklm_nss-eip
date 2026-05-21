@@ -77,9 +77,10 @@ struct eip_sw_desc {
 	eip_dma_callback_t comp;		/* HW Rx completion callback */
 	eip_dma_err_callback_t err_comp;	/* HW Rx completion with error callback */
 
+	phys_addr_t tk_addr;		/* Control token physical address (EIP96 instructions) */
+	phys_addr_t tr_addr_type;	/* TR physical address with lower 2 bits OR'd with type */
+
 	uint32_t tk_hdr;		/* Command token[2] */
-	uint32_t tk_addr;		/* Control token address (EIP96 instructions) */
-	uint32_t tr_addr_type;		/* TR physical address with lower 2 bits OR'd with type */
 	uint32_t tk_words;		/* Command Frag[0] Contol token length in words */
 	uint32_t hw_svc;		/* HW service */
 
