@@ -156,6 +156,75 @@ void eip_tr_ipsec_enc_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, cons
 }
 
 /*
+ * eip_tr_ipsec_enc_err()
+ *	Hardware error callback API for LA mode Encapsulation.
+ *
+ * EIP197 hardware handles all header addition/removal. We only need to
+ * undo the fake eth header push and call the client error callback.
+ */
+static void eip_tr_ipsec_enc_err(struct eip_tr *tr, struct eip_hw_desc *hw, struct eip_sw_desc *sw,
+		uint16_t cle_err, uint16_t tr_err)
+{
+	struct eip_tr_ipsec *ipsec = &tr->ipsec;
+	struct eip_ctx *ctx = tr->ctx;
+	struct sk_buff *skb = eip_req2skb(sw->req);
+	uint32_t err;
+
+	/*
+	 * Remove the fake eth header that was pushed in eip_tr_ipsec_enc()
+	 * before submitting to EIP, so the client sees the original SKB.
+	 */
+	skb_pull(skb, sizeof(struct ethhdr));
+
+	/*
+	 * Call the client error callback.
+	 * Note: app_data is stored in ipsec->app_data (not ipsec->ops.app_data).
+	 */
+	err = ((tr_err << EIP_TR_ERR_SHIFT) | cle_err);
+	ipsec->ops.err_cb(ipsec->app_data, sw->req, err);
+
+	kmem_cache_free(ctx->sw_cache, sw);
+	eip_tr_deref(tr);
+}
+
+/*
+ * eip_tr_ipsec_enc_done()
+ *	Hardware tx completion callback API for LA mode Encapsulation.
+ */
+static void eip_tr_ipsec_enc_done(struct eip_tr *tr, struct eip_hw_desc *hw, struct eip_sw_desc *sw)
+{
+	uint16_t out_len = EIP_HW_RES_DATA_LEN(hw->token[0]);
+	struct eip_tr_ipsec *ipsec = &tr->ipsec;
+	struct eip_ctx *ctx = tr->ctx;
+	struct sk_buff *skb;
+
+	skb = eip_req2skb(sw->req);
+
+	/*
+	 * Adjust SKB length to the hardware output length.
+	 * Encap: out_len > skb->len  (outer IP + ESP + IV + ICV added by HW)
+	 */
+	skb_put(skb, out_len - skb->len);
+
+	/*
+	 * Remove the fake eth header that was pushed in eip_tr_ipsec_enc()
+	 * before submitting to EIP. After this skb->data points to the
+	 * outer IP header of the encapsulated packet.
+	 */
+	skb_pull(skb, sizeof(struct ethhdr));
+
+	/*
+	 * Reset network header pointer to the outer IP header.
+	 */
+	skb_reset_network_header(skb);
+
+	ipsec->ops.cb(ipsec->app_data, sw->req);
+
+	kmem_cache_free(ctx->sw_cache, sw);
+	eip_tr_deref(tr);
+}
+
+/*
  * eip_tr_ipsec_enc()
  *	IPsec Encapsulation.
  */
@@ -165,17 +234,10 @@ int eip_tr_ipsec_enc(struct eip_tr *tr, struct sk_buff *skb)
 	struct eip_ctx *ctx = tr->ctx;
 	struct eip_sw_desc *sw;
 	struct eip_dma *dma;
-	u32 redir_ring;
 	int status = 0;
 
-	dma_tx = skb_is_nonlinear(skb) ? eip_dma_hy_tx_nonlinear_skb : eip_dma_hy_tx_linear_skb;
+	dma_tx = skb_is_nonlinear(skb) ? eip_dma_tx_nonlinear_skb : eip_dma_tx_linear_skb;
 	dma = &ctx->dma[smp_processor_id()];
-
-	/*
-	 * If the packet length exceeds the maximum jumbo size supported by the PPE
-	 * (EIP_MAX_PKT_LEN), redirect it to the Hybrid DMA ring for processing.
-	 */
-	redir_ring = (skb->len > EIP_MAX_PKT_LEN) ? dma->ring_id : EIP_HW_INLINE_RING;
 
 	/*
 	 * Allocate SW descriptor.
@@ -196,7 +258,7 @@ int eip_tr_ipsec_enc(struct eip_tr *tr, struct sk_buff *skb)
 	sw->tk_addr = 0;
 	sw->tr_addr_type = tr->tr_addr_type;
 	sw->tk_words = 0;
-	sw->hw_svc = EIP_HW_CMD_HWSERVICE_LIP | EIP_HW_CMD_PKT_REDIR_RING_ID(redir_ring);
+	sw->hw_svc = EIP_HW_CMD_HWSERVICE_LIP;
 	sw->req = skb;
 
 	/*
@@ -205,8 +267,8 @@ int eip_tr_ipsec_enc(struct eip_tr *tr, struct sk_buff *skb)
 	 */
 	skb_push(skb, sizeof(struct ethhdr));
 	sw->tk_hdr |= skb->len;
-	sw->comp = &eip_tr_ipsec_tx_done;
-	sw->err_comp = NULL; /* There is no error in Transmit completion */
+	sw->comp = &eip_tr_ipsec_enc_done;
+	sw->err_comp = &eip_tr_ipsec_enc_err;
 
 	status = dma_tx(dma, sw, skb);
 	if (status < 0) {
@@ -222,4 +284,3 @@ fail_tx:
 	return status;
 }
 EXPORT_SYMBOL(eip_tr_ipsec_enc);
-

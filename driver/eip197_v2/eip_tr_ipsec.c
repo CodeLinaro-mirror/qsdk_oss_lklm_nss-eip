@@ -502,32 +502,6 @@ static bool eip_tr_ipsec_null_hmac_init(struct eip_tr *tr, struct eip_tr_info *i
 }
 
 /*
- * eip_tr_ipsec_tx_done()
- *	Hardware tx completion callback API for Encapsulation/Decapsulation.
- */
-void eip_tr_ipsec_tx_done(struct eip_tr *tr, struct eip_hw_desc *hw, struct eip_sw_desc *sw)
-{
-	struct sk_buff *skb = eip_req2skb(sw->req);
-	struct eip_ctx *ctx = tr->ctx;
-
-	/*
-	 * Free the SKB
-	 */
-	skb = eip_req2skb(sw->req);
-
-	/*
-	 * Free the SKB.
-	 */
-	consume_skb(skb);
-	kmem_cache_free(ctx->sw_cache, sw);
-
-	/*
-	 * Dereference: eip_tr_ipsec_enc/dec()
-	 */
-	eip_tr_deref(tr);
-}
-
-/*
  * eip_tr_ipsec_get_svc()
  *	Get algo database for ipsec.
  */
