@@ -17,6 +17,7 @@
 #define __EIP_H
 
 #include <linux/version.h>
+#include <linux/stddef.h>
 #include <linux/netdevice.h>
 #include <crypto/aead.h>
 #include <crypto/skcipher.h>
@@ -193,6 +194,40 @@ struct eip_tun_update_info {
 };
 
 /*
+ * ppe_src_port encoding follows PPE SRC_INFO/DST_INFO 14-bit format:
+ *   bits[13:12] = type (0b10 = DST_PORT), bits[11:0] = port/VP number.
+ *   EIP_PPE_MDATA_SRC_PORT_VP_TYPE sets the DST_PORT type bits.
+ */
+#define EIP_PPE_MDATA_SRC_PORT_VP_TYPE	0x2000	/* DST_PORT type in PPE SRC_INFO encoding */
+
+/*
+ * eip_ppe_mdata
+ *	PPE metadata format written by EIP197 into TR info for PPE bypass.
+ *	Common structure shared by IPsec and DTLS clients.
+ */
+struct eip_ppe_mdata {
+	uint16_t ppe_src_port;		/* Source port */
+	uint16_t ppe_dest_port;		/* Destination port */
+
+	struct_group_attr(flags, __packed,
+		uint8_t tstamp_high;		/* Timestamp high */
+		uint8_t tstamp_flag:1;		/* Timestamp flag */
+		uint8_t ptp_type:4;		/* PTP Type */
+		uint8_t ts_dir:1;		/* Direction: 0 = From MAC, 1 = To MAC */
+		uint8_t rsv:1;			/* Reserved */
+		uint8_t fake_mac:1;		/* MAC header is fake */
+		uint8_t service_code;		/* PPE service code */
+		uint8_t rsv2:7;			/* Reserved */
+		uint8_t fake_l2_prot:1;		/* Fake L2 protocol */
+	);
+
+	uint32_t tstamp_low;		/* Timestamp low */
+	uint32_t hash;			/* Hashing information */
+} __attribute__((packed));
+
+static_assert(sizeof(struct eip_ppe_mdata) == 16, "eip_ppe_mdata must stay 16 bytes to match tr->bypass[4]");
+
+/*
  * eip_flow_info
  *	EIP flow info.
  */
@@ -231,7 +266,8 @@ struct eip_tr_info_ipsec {
 	__be16 src_port;	/* Source port for ESP-over-UDP flow */
 	__be16 dst_port;	/* Destination port for ESP-over-UDP flow */
 
-	uint32_t ppe_mdata[4];	/* EIP-PPE meta/bypass information */
+	struct eip_ppe_mdata ppe_mdata;	/* EIP-PPE meta/bypass information */
+
 	uint8_t ip_ver;		/* Version 4 or 6 */
 	uint8_t ip_ttl;		/* Default time-to-live */
 	uint8_t ip_df;		/* Default don't fragment bit */

@@ -248,7 +248,7 @@ static void eip_tr_ipsec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, c
 	tr->ipsec.ops.err_cb = ipsec->err_cb;
 	tr->ipsec.app_data = ipsec->app_data;
 
-	memcpy(tr->bypass, ipsec->ppe_mdata, sizeof(tr->bypass));
+	memcpy(tr->bypass, &ipsec->ppe_mdata, sizeof(tr->bypass));
 }
 
 /*

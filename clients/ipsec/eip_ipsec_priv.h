@@ -71,25 +71,6 @@ struct eip_ipsec_drv {
 #endif
 };
 
-/*
- * EIP-PPE bypass data
- */
-struct eip_ipsec_ppe_mdata {
-	uint16_t ppe_src_port;                   /* Source port */
-	uint16_t ppe_dest_port;                  /* Destination port */
-	uint8_t tstamp_high;                    /* Timestamp high */
-	uint8_t tstamp_flag:1;                  /* Timestamp flag */
-	uint8_t ptp_type:4;			/* PTP Type */
-	uint8_t ts_dir:1;			/* Direct 0 = From MAC, 1 = To MAC */
-	uint8_t rsv:1;				/* Reserved */
-	uint8_t fake_mac:1;			/* Mac header is fake */
-	uint8_t service_code;                   /* Service code */
-	uint8_t rsv2:7;				/* Reserved */
-	uint8_t fake_l2_prot:1;                   /* fake_l2_prot */
-	uint32_t tstamp_low;                    /* Timestamp low */
-	uint32_t hash;                          /* Hashing information */
-}__attribute__((packed));
-
 extern struct eip_ipsec_drv eip_ipsec_drv_g;	/* Global Driver object */
 extern uint8_t eip_ipsec_core_id;		/* Global ipsec core id */
 extern int eip_pkt_steer_qlen;			/* Global queue length for packet steer */
