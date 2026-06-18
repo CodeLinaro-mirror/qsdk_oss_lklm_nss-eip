@@ -248,6 +248,7 @@ struct eip_tr_dtls {
 	uint8_t seq_offset;		/* Sequence no offset in context record */
 	uint8_t remove_len;		/* Length of headers to be removed */
 	uint8_t bypass_len;		/* Length of headers to be bypassed (IP/IP+UDP) */
+	uint8_t headroom;		/* Outer IP/UDP headroom needed for encapsulation */
 	void *app_data;			/* Opaque to pass with callback */
 };
 
