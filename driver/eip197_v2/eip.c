@@ -49,7 +49,7 @@ uint32_t ring_sz = 256;
 module_param(ring_sz, uint, S_IRUSR | S_IRGRP);
 MODULE_PARM_DESC(ring_sz, "EIP ring size");
 
-ulong la_cpu_map = 0x1F;
+ulong la_cpu_map = 0;
 module_param(la_cpu_map, ulong, S_IRUSR | S_IRGRP);
 MODULE_PARM_DESC(la_cpu_map, "Configure EIP Lookaside DMA for CPU(s)");
 
@@ -252,6 +252,10 @@ int __init eip_init_module(void)
 		pr_info("Crypto hardware is unavailable\n");
 		return 0;
 	}
+
+	if (!la_cpu_map)
+		la_cpu_map = *cpumask_bits(cpu_online_mask);
+
 	drv->la_cpu_map = *(to_cpumask(&la_cpu_map));
 	if (!cpumask_subset(&drv->la_cpu_map, cpu_possible_mask)) {
 		pr_err("%px: Invalid LA CPU mask\n", drv);
