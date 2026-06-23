@@ -101,7 +101,7 @@ static ssize_t eip_ctx_read_tr_stats(struct file *filep, char __user *ubuf, size
 		 * TR statistics.
 		 */
 		eip_tr_get_stats(tr, &stats);
-		len += snprintf(buf + len, max_buf_len - len, "Transform Record (%u) (%X) ----\n", i++, tr->tr_addr_type);
+		len += snprintf(buf + len, max_buf_len - len, "Transform Record (%u) (%pa) ----\n", i++, &tr->tr_addr_type);
 		len += snprintf(buf + len, max_buf_len - len, "\tActive Ref (%u)  ----\n", kref_read(&tr->ref));
 		len += snprintf(buf + len, max_buf_len - len, "\tTx Packets - %llu\n", stats.tx_pkts);
 		len += snprintf(buf + len, max_buf_len - len, "\tTx SG fragments - %llu\n", stats.tx_frags);
