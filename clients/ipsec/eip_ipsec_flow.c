@@ -141,7 +141,7 @@ static int eip_ipsec_flow_notifier(struct notifier_block *nb, unsigned long acti
 	}
 
 	/* Skip tunnel outer flows */
-	if (data->is_tun_outer) {
+	if (data->tun_type != ECM_NOTIFIER_CON_TUN_TYPE_IPSEC_INNER) {
 		pr_debug("The flow is encapsulated flow\n");
 		return NOTIFY_OK;
 	}
@@ -151,12 +151,6 @@ static int eip_ipsec_flow_notifier(struct notifier_block *nb, unsigned long acti
 
 	switch (action) {
 	case ECM_NOTIFIER_ACTION_CONNECTION_ADDED:
-
-		/* Return for non-PPE flows */
-		if (data->ae_type != ECM_AE_TYPE_PPE) {
-			pr_debug("AE type is not PPE, AE_TYPE : %u\n", data->ae_type);
-			return NOTIFY_OK;
-		}
 
 		sa = eip_ipsec_sa_ref_get_encap(ipsec_dev);
 		if (!sa) {

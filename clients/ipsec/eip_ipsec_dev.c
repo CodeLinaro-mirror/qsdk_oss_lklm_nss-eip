@@ -833,6 +833,57 @@ steer_fail:
 }
 
 /*
+ * eip_ipsec_offload_tx()
+ *	Forwards plaintext packet to EIP for encapsulation through ppe_vp_tx.
+ */
+static bool eip_ipsec_offload_tx(struct net_device *ndev, struct sk_buff *skb)
+{
+	struct eip_ipsec_dev *eid = netdev_priv(ndev);
+	struct eip_ipsec_dev_stats *dev_stats;
+	struct ppe_vp_tx_info tx_info = {0};
+
+	dev_stats = this_cpu_ptr(eid->stats_pcpu);
+
+	/*
+	 * check whether the packet length is within
+	 * max jumbo size limit supported by the HW.
+	 */
+	if (unlikely(skb->len > EIP_IPSEC_DEV_MAX_PKT_LEN)) {
+		eip_ipsec_dev_tx(skb, ndev);
+		return true;
+	}
+
+	/*
+	 * Unshare the SKB as we will be modifying it.
+	 */
+	if (unlikely(skb_shared(skb))) {
+		skb = skb_unshare(skb, GFP_NOWAIT | __GFP_NOWARN);
+		if (!skb) {
+			dev_stats->tx_fail++;
+			return false;
+		}
+	}
+
+	tx_info.type = PPE_VP_TX_TYPE_IPSEC_ENCAP;
+
+	/*
+	 * skb is consumed/freed by ppe_vp_tx_to_vp() on failure
+	 */
+	if (unlikely(!ppe_vp_tx_to_vp(eid->vp_num, &tx_info, skb)))
+		goto fail;
+
+	/*
+	 * Update VP statistics.
+	 */
+	dev_stats->tx_vp++;
+
+	return true;
+fail:
+	dev_stats->tx_fail++;
+	return false;
+}
+
+/*
  * eip_ipsec_dev_free()
  *	Free netdevice memory.
  */
@@ -902,6 +953,14 @@ static struct net_device_ops ipsec_dev_ops = {
 	.ndo_start_xmit = eip_ipsec_dev_tx,
 	.ndo_get_stats64 = eip_ipsec_dev_stats64,
 	.ndo_change_mtu = eip_ipsec_dev_mtu,
+};
+
+/*
+ * Ipsec dev offload ops.
+ */
+static struct netdev_hw_offload_ops ipsec_offload_ops = {
+	.xmit = &eip_ipsec_offload_tx,
+	.recv = NULL,
 };
 
 /*
@@ -1041,6 +1100,8 @@ bool eip_ipsec_dev_sa_exist(struct net_device *ndev)
 void eip_ipsec_dev_del(struct net_device *ndev)
 {
 	struct eip_ipsec_dev *eid = netdev_priv(ndev);
+	struct eip_ctx *ctx = eip_ipsec_drv_g.ctx;
+	u32 offload_mask;
 
 	/*
 	 * the given net_device should be unlinked from the db
@@ -1069,6 +1130,17 @@ void eip_ipsec_dev_del(struct net_device *ndev)
 	}
 
 	/*
+	 * If full inline(outer+inner) offload is supported unregister offload ops.
+	 */
+	offload_mask =  EIP_OFFLOAD_OUTER_FLOW | EIP_OFFLOAD_INNER_FLOW;
+	if (eip_feature_check(ctx, offload_mask)) {
+		if (netdev_hw_offload_ops_unregister(ndev, &ipsec_offload_ops)) {
+			pr_warn("%px: Failed to unregister hw offload ops\n", ndev);
+		}
+		synchronize_rcu();
+	}
+
+	/*
 	 * Bring down the device and unregister from linux.
 	 */
 	rtnl_lock();
@@ -1088,6 +1160,7 @@ struct net_device *eip_ipsec_dev_add(void)
 	struct netfn_pkt_steer_info info = {0};
 	struct eip_ipsec_dev *eid;
 	struct net_device *ndev;
+	u32 offload_mask;
 	int status;
 
 	/*
@@ -1172,10 +1245,18 @@ struct net_device *eip_ipsec_dev_add(void)
 	eid->tun = eip_tun_alloc(drv->ctx);
 	if (!eid->tun) {
 		pr_err("%px: Unable to allocate tunnel object\n", ndev);
-		unregister_netdevice(ndev);
-		rtnl_unlock();
+		goto fail_unreg;
+	}
 
-		return NULL;
+	/*
+	 * If full inline(outer+inner) offload is supported register offload ops.
+	 */
+	offload_mask =  EIP_OFFLOAD_OUTER_FLOW | EIP_OFFLOAD_INNER_FLOW;
+	if (eip_feature_check(drv->ctx, offload_mask)) {
+		if (netdev_hw_offload_ops_register(ndev, &ipsec_offload_ops, "eip-ipsec")) {
+			pr_err("%px: Failed to register hw offload ops\n", ndev);
+			goto fail_tun;
+		}
 	}
 
 	/*
@@ -1184,27 +1265,39 @@ struct net_device *eip_ipsec_dev_add(void)
 	status = dev_open(ndev, NULL);
 	if (status < 0) {
 		pr_err("%px: Failed to Open netdevce, error(%d)\n", ndev, status);
-		unregister_netdevice(ndev);
-		rtnl_unlock();
-
-		return NULL;
+		goto fail_offload;
 	}
 
-	rtnl_unlock();
 #if defined(EIP_IPSEC_VP_SUPP)
 	/*
-	 * Device will be only used after SA addition; So there wont be any race condition.
-	 * Allocate VP. On Failure IPsec outer flow will be via SFE.
-	 * TODO: After Encapsulation, Packet will exception from PPE and IPsec callback has to be called.
-	 * shell we create default VP for handling those cases?
+	 * Allocate VP. On failure, device cannot offload traffic so teardown.
 	 */
 	eid->vp_num = eip_ipsec_dev_alloc_vp(ndev);
 	if (eid->vp_num < 0) {
-		pr_warn("%px: Failed to allocate VP(%d).\n", ndev, eid->vp_num);
+		pr_err("%px: Failed to allocate VP(%d), teardown device.\n", ndev, eid->vp_num);
+		goto fail_vp;
 	}
 #endif
 
+	rtnl_unlock();
 	eid->dentry = debugfs_create_file(ndev->name, S_IRUGO, drv->dentry, eid, &eip_ipsec_dev_file_ops);
 	return ndev;
+
+fail_vp:
+	dev_close(ndev);
+
+fail_offload:
+	if (eip_feature_check(drv->ctx, offload_mask))
+		netdev_hw_offload_ops_unregister(ndev, &ipsec_offload_ops);
+
+fail_tun:
+	eip_tun_free(eid->tun);
+
+fail_unreg:
+	unregister_netdevice(ndev);
+	rtnl_unlock();
+	synchronize_rcu();
+
+	return NULL;
 }
 EXPORT_SYMBOL(eip_ipsec_dev_add);

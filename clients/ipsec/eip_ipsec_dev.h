@@ -29,6 +29,7 @@
 						   Total		: 96 bytes
 						 */
 #define EIP_IPSEC_DEV_ARPHRD 31U		/* ARP (iana.org) hardware type for an IPsec tunnel. */
+#define EIP_IPSEC_DEV_MAX_PKT_LEN 9216		/* MAX packet length for vp offload Bytes */
 
 /*
  * IPsec device statistics.
