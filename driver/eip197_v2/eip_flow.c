@@ -714,8 +714,8 @@ bool eip_flow_table_init(struct platform_device *pdev)
 	iowrite32(EIP_HW_FLUE_CONFIG_VAL(hw_tbl_sz), base_addr + EIP_HW_FLUE_CONFIG(0));
 	iowrite32(0x0, base_addr + EIP_HW_FLUE_CACHEBASE_LO(0));
 	iowrite32(0x0, base_addr + EIP_HW_FLUE_CACHEBASE_HI(0));
-	iowrite32(tbl->hw_head_paddr, base_addr + EIP_HW_FLUE_HASHBASE_LO(0));
-	iowrite32(0x0, base_addr + EIP_HW_FLUE_HASHBASE_HI(0));
+	iowrite32(lower_32_bits(tbl->hw_head_paddr), base_addr + EIP_HW_FLUE_HASHBASE_LO(0));
+	iowrite32(upper_32_bits(tbl->hw_head_paddr), base_addr + EIP_HW_FLUE_HASHBASE_HI(0));
 
 	for (i = 0; i < drv->flow_max; i++){
 		INIT_HLIST_HEAD(&tbl->sw_head[i]);

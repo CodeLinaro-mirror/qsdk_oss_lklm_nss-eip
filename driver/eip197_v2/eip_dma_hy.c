@@ -45,6 +45,7 @@ static inline void eip_dma_hy_notify(struct eip_hw_ring *ring, uint8_t desc, uin
 static inline void eip_dma_hy_tx_res(struct eip_dma *dma, struct sk_buff *skb, struct eip_frag *frag)
 {
 	struct eip_hw_desc *res;
+	phys_addr_t data_paddr;
 
 	/*
 	 * Invalidate the all cache line associated with output data to avoid any corruption due to cache eviction.
@@ -61,8 +62,9 @@ static inline void eip_dma_hy_tx_res(struct eip_dma *dma, struct sk_buff *skb, s
 	res->frag[0] = frag->flag;
 	res->frag[0] |= EIP_HW_RES_FRAG_LEN(frag->len);
 	res->frag[1] = 0;
-	res->frag[2] = virt_to_phys(frag->data);
-	res->frag[3] = 0;
+	data_paddr = virt_to_phys(frag->data);
+	res->frag[2] = lower_32_bits(data_paddr);
+	res->frag[3] = upper_32_bits(data_paddr);
 
 	res->token[0] = res->token[1] = res->token[2] = res->token[3] = 0;
 	res->token[4] = res->token[5] = res->token[6] = res->token[7] = 0;
@@ -79,6 +81,7 @@ static inline void eip_dma_hy_tx_res(struct eip_dma *dma, struct sk_buff *skb, s
 static inline void eip_dma_hy_tx_cmd(struct eip_dma *dma, struct eip_sw_desc *sw, struct eip_frag *frag)
 {
 	struct eip_hw_desc *cmd;
+	phys_addr_t data_paddr;
 
 	/*
 	 * Flush all the data to be read by hardware.
@@ -93,16 +96,17 @@ static inline void eip_dma_hy_tx_cmd(struct eip_dma *dma, struct eip_sw_desc *sw
 	cmd->frag[0] = frag->flag;
 	cmd->frag[0] |= EIP_HW_CMD_FRAG_LEN(frag->len);
 	cmd->frag[1] = 0;
-	cmd->frag[2] = virt_to_phys(frag->data);
-	cmd->frag[3] = 0;
+	data_paddr = virt_to_phys(frag->data);
+	cmd->frag[2] = lower_32_bits(data_paddr);
+	cmd->frag[3] = upper_32_bits(data_paddr);
 
 	if (frag->flag & EIP_HW_CMD_FLAGS_FIRST) {
 		struct eip_tr *tr = sw->tr;
 
 		cmd->frag[0] |= EIP_HW_CMD_TOKEN_WORDS(sw->tk_words);
 
-		cmd->token[0] = sw->tk_addr;
-		cmd->token[1] = 0;
+		cmd->token[0] = lower_32_bits(sw->tk_addr);
+		cmd->token[1] = upper_32_bits(sw->tk_addr);
 		cmd->token[2] = sw->tk_hdr;
 		cmd->token[3] = 0;
 		cmd->token[4] = sw->tr_addr_type;
@@ -446,7 +450,7 @@ int eip_dma_hy_rx(struct eip_dma *dma, int budget)
 		 */
 		frag_len = EIP_HW_RES_FRAG_LEN(res->frag[0]);
 		BUG_ON(!frag_len);
-		data = phys_to_virt(res->frag[2]);
+		data = phys_to_virt((phys_addr_t)U64_FROM_U32(res->frag[3], res->frag[2]));
 		eip_dmac_inv_range(data, data + frag_len);
 
 		/*

@@ -53,6 +53,7 @@ static inline void eip_dma_notify(struct eip_dma *dma, uint8_t in_desc, uint8_t 
 static inline void eip_dma_tx_res(struct eip_dma *dma, struct eip_sw_desc *sw, struct eip_frag *frag)
 {
 	struct eip_hw_desc *res;
+	phys_addr_t data_paddr;
 
 	/*
 	 * Invalidate the all cache line associated with output data to avoid any corruption due to cache eviction.
@@ -69,8 +70,9 @@ static inline void eip_dma_tx_res(struct eip_dma *dma, struct eip_sw_desc *sw, s
 	res->frag[0] = frag->flag;
 	res->frag[0] |= EIP_HW_RES_FRAG_LEN(frag->len);
 	res->frag[1] = 0;
-	res->frag[2] = virt_to_phys(frag->data);
-	res->frag[3] = 0;
+	data_paddr = virt_to_phys(frag->data);
+	res->frag[2] = lower_32_bits(data_paddr);
+	res->frag[3] = upper_32_bits(data_paddr);
 
 	res->token[0] = res->token[1] = res->token[2] = res->token[3] = 0;
 	res->token[4] = res->token[5] = res->token[6] = res->token[7] = 0;
@@ -86,6 +88,7 @@ static inline void eip_dma_tx_res(struct eip_dma *dma, struct eip_sw_desc *sw, s
 static inline void eip_dma_tx_cmd(struct eip_dma *dma, struct eip_sw_desc *sw, struct eip_frag *frag)
 {
 	struct eip_hw_desc *cmd;
+	phys_addr_t data_paddr;
 
 	/*
 	 * Flush all the data to be read by hardware.
@@ -100,14 +103,15 @@ static inline void eip_dma_tx_cmd(struct eip_dma *dma, struct eip_sw_desc *sw, s
 	cmd->frag[0] = frag->flag;
 	cmd->frag[0] |= EIP_HW_CMD_FRAG_LEN(frag->len);
 	cmd->frag[1] = 0;
-	cmd->frag[2] = virt_to_phys(frag->data);
-	cmd->frag[3] = 0;
+	data_paddr = virt_to_phys(frag->data);
+	cmd->frag[2] = lower_32_bits(data_paddr);
+	cmd->frag[3] = upper_32_bits(data_paddr);
 
 	if (frag->flag & EIP_HW_CMD_FLAGS_FIRST) {
 		cmd->frag[0] |= EIP_HW_CMD_TOKEN_WORDS(sw->tk_words);
 
-		cmd->token[0] = sw->tk_addr;
-		cmd->token[1] = 0;
+		cmd->token[0] = lower_32_bits(sw->tk_addr);
+		cmd->token[1] = upper_32_bits(sw->tk_addr);
 		cmd->token[2] = sw->tk_hdr;
 		cmd->token[3] = 0;
 		cmd->token[4] = sw->tr_addr_type;
@@ -250,7 +254,7 @@ static int eip_dma_rx(struct eip_dma *dma, int budget)
 		 */
 		frag_len = EIP_HW_RES_FRAG_LEN(res->frag[0]);
 		if (likely(frag_len)) {
-			data = phys_to_virt(res->frag[2]);
+			data = phys_to_virt((phys_addr_t)U64_FROM_U32(res->frag[3], res->frag[2]));
 			eip_dmac_inv_range(data, data + frag_len);
 		}
 
@@ -719,6 +723,7 @@ int eip_dma_cmd_init(struct eip_dma *dma, struct eip_dma_ring_info *info, bool e
 	void __iomem *base_addr = info->base_addr;
 	struct eip_hw_ring *cmd = &dma->in;
 	uint32_t ring_id = dma->ring_id;
+	phys_addr_t ring_paddr;
 	size_t total_sz;
 	size_t dma_sz;
 	int ret = 0;
@@ -780,7 +785,9 @@ int eip_dma_cmd_init(struct eip_dma *dma, struct eip_dma_ring_info *info, bool e
 	/*
 	 * Configure Ring
 	 */
-	iowrite32(virt_to_phys(cmd->desc), base_addr + EIP_HW_HIA_CDR_RING_BASE_ADDR_LO(ring_id));
+	ring_paddr = virt_to_phys(cmd->desc);
+	iowrite32(lower_32_bits(ring_paddr), base_addr + EIP_HW_HIA_CDR_RING_BASE_ADDR_LO(ring_id));
+	iowrite32(upper_32_bits(ring_paddr), base_addr + EIP_HW_HIA_CDR_RING_BASE_ADDR_HI(ring_id));
 	iowrite32(EIP_HW_RING_DESC_SZ(dma_sz/sizeof(uint32_t)), base_addr + EIP_HW_HIA_CDR_RING_SIZE(ring_id));
 	iowrite32(EIP_HW_CDR_DESC_SIZE_VAL, base_addr + EIP_HW_HIA_CDR_DESC_SIZE(ring_id));
 	iowrite32(EIP_HW_CDR_CFG_VAL, base_addr + EIP_HW_HIA_CDR_CFG(ring_id));
@@ -817,6 +824,7 @@ int eip_dma_res_init(struct eip_dma *dma, struct eip_dma_ring_info *info, bool e
 	void __iomem *base_addr = info->base_addr;
 	struct eip_hw_ring *res = &dma->out;
 	uint32_t ring_id = dma->ring_id;
+	phys_addr_t ring_paddr;
 	size_t total_sz;
 	size_t dma_sz;
 	int ret = 0;
@@ -878,7 +886,9 @@ int eip_dma_res_init(struct eip_dma *dma, struct eip_dma_ring_info *info, bool e
 	/*
 	 * Configure Ring
 	 */
-	iowrite32(virt_to_phys(res->desc), base_addr + EIP_HW_HIA_RDR_RING_BASE_ADDR_LO(ring_id));
+	ring_paddr = virt_to_phys(res->desc);
+	iowrite32(lower_32_bits(ring_paddr), base_addr + EIP_HW_HIA_RDR_RING_BASE_ADDR_LO(ring_id));
+	iowrite32(upper_32_bits(ring_paddr), base_addr + EIP_HW_HIA_RDR_RING_BASE_ADDR_HI(ring_id));
 	iowrite32(EIP_HW_RING_DESC_SZ(dma_sz/sizeof(uint32_t)), base_addr + EIP_HW_HIA_RDR_RING_SIZE(ring_id));
 	iowrite32(EIP_HW_RDR_DESC_SIZE_VAL, base_addr + EIP_HW_HIA_RDR_DESC_SIZE(ring_id));
 	iowrite32(EIP_HW_RDR_CFG_VAL, base_addr + EIP_HW_HIA_RDR_CFG(ring_id));
