@@ -23,6 +23,7 @@ $(NSS_EIP_MOD_NAME)-objs += eip_tr_aead.o
 $(NSS_EIP_MOD_NAME)-objs += eip_tr_ipsec.o
 $(NSS_EIP_MOD_NAME)-objs += eip_tr_ipsec_dec.o
 $(NSS_EIP_MOD_NAME)-objs += eip_tr_ipsec_enc.o
+$(NSS_EIP_MOD_NAME)-objs += eip_tr_dtls.o
 $(NSS_EIP_MOD_NAME)-objs += eip_tk.o
 $(NSS_EIP_MOD_NAME)-objs += eip_flow.o
 obj ?= .
