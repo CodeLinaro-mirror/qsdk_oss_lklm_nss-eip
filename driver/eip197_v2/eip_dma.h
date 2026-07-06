@@ -134,6 +134,9 @@ int eip_dma_tx_sg(struct eip_dma *dma, struct eip_sw_desc *sw, struct scatterlis
 int eip_dma_hy_tx_linear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct sk_buff *skb);
 int eip_dma_hy_tx_nonlinear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct sk_buff *skb);
 
+int eip_dma_tx_linear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct sk_buff *skb);
+int eip_dma_tx_nonlinear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct sk_buff *skb);
+
 int eip_dma_cmd_init(struct eip_dma *dma, struct eip_dma_ring_info *info, bool en_irq);
 int eip_dma_res_init(struct eip_dma *dma, struct eip_dma_ring_info *info, bool en_irq);
 

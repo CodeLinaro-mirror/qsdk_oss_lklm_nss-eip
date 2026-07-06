@@ -113,7 +113,14 @@ static inline void eip_dma_tx_cmd(struct eip_dma *dma, struct eip_sw_desc *sw, s
 		cmd->token[4] = sw->tr_addr_type;
 		cmd->token[5] = 0;
 		cmd->token[6] = sw->hw_svc;
-		cmd->token[7] = 0;
+
+		/*
+		 * Set bypass offset for LIP (IPsec) service only.
+		 * For LIP, a fake eth header is pushed before encap/decap and must be bypassed by HW.
+		 * For LAC (crypto: skcipher/aead/ahash), no header is pushed so bypass must be zero.
+		 */
+		cmd->token[7] = (sw->hw_svc == EIP_HW_CMD_HWSERVICE_LIP) ?
+				EIP_HW_CMD_OFFSET(sizeof(struct ethhdr)) : 0;
 
 		*((struct eip_sw_desc **)&cmd->bypass) = sw;
 	} else {
@@ -372,6 +379,56 @@ static int eip_dma_napi_rx_poll(struct napi_struct *napi, int budget)
 }
 
 /*
+ * eip_dma_tx_skb_paged()
+ *	Send SKB which may be paged.
+ */
+static void eip_dma_tx_skb_paged(struct eip_dma *dma, struct eip_sw_desc *sw, struct sk_buff *skb,
+		uint32_t *cmd_idx, uint32_t *res_idx, bool last)
+{
+	uint8_t nr_frags = skb_shinfo(skb)->nr_frags;
+	skb_frag_t *skb_frag;
+	struct eip_frag frag;
+
+	/*
+	 * Head SKB
+	 * Fill fragment details for command & result ring
+	 * Using inplace, so dst is same as src
+	 */
+	frag.data = skb->data;
+	frag.len = skb_headlen(skb);
+	frag.flag = EIP_HW_CMD_FLAGS(!sw->src_nsegs, (last && !nr_frags));
+	frag.idx = *cmd_idx;
+	eip_dma_tx_cmd(dma, sw, &frag);
+	*cmd_idx = EIP_DMA_IDX_INC(*cmd_idx);
+
+	/*
+	 * Update for result ring
+	 */
+	frag.idx = *res_idx;
+	eip_dma_tx_res(dma, sw, &frag);
+	*res_idx = EIP_DMA_IDX_INC(*res_idx);
+
+	/*
+	 * Handle nr_frags for command & result ring
+	 */
+	skb_frag = &skb_shinfo(skb)->frags[0];
+	while(nr_frags--) {
+		frag.data = skb_frag_address(skb_frag);
+		frag.len = skb_frag_size(skb_frag);
+		frag.flag = EIP_HW_CMD_FLAGS(0, (last && !nr_frags));
+		frag.idx = *cmd_idx;
+		eip_dma_tx_cmd(dma, sw, &frag);
+		*cmd_idx = EIP_DMA_IDX_INC(*cmd_idx);
+
+		frag.idx = *res_idx;
+		eip_dma_tx_res(dma, sw, &frag);
+		*res_idx = EIP_DMA_IDX_INC(*res_idx);
+
+		skb_frag++;
+	}
+}
+
+/*
  * eip_dma_tx_linear_skb()
  *	Schedule linear SKB for transformation. The function must be called with prempt disabled.
  */
@@ -446,10 +503,87 @@ fail:
  */
 int eip_dma_tx_nonlinear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct sk_buff *skb)
 {
+	struct eip_tr_stats *tr_stats = this_cpu_ptr(sw->tr->stats_pcpu);
+	struct eip_dma_stats *dma_stats = &dma->stats;
+	uint32_t in_count, out_count, desc_count;
+	struct sk_buff *iter_skb = NULL;
+	unsigned int len = skb->len;
+	uint32_t cmd_idx, res_idx;
+	uint8_t desc_req;
+	bool last_frag;
+	int nsegs = 0;
+
+	BUG_ON(!skb_is_nonlinear(skb));
+
 	/*
-	 * TODO: Add support.
+	 * We may be in process context. disable bottom half to prevent preemption.
+	 * We have per cpu DMA object. So this ensures that there is no race condition.
 	 */
-	return -EINVAL;
+	local_bh_disable();
+
+	in_count = eip_dma_avail_idx_and_count(&dma->in, &cmd_idx);
+	out_count = eip_dma_avail_idx_and_count(&dma->out, &res_idx);
+
+	if (unlikely(in_count != out_count)) {
+		goto fail;
+	}
+
+	desc_count = in_count;
+
+	/*
+	 * Send Head SKB which may be paged.
+	 * Command & result descriptor required is head SKB + nr_frags in it.
+	 */
+	desc_req = skb_shinfo(skb)->nr_frags + 1;
+	if (desc_count < desc_req) {
+		goto fail;
+	}
+
+	last_frag = !skb_has_frag_list(skb);
+	eip_dma_tx_skb_paged(dma, sw, skb, &cmd_idx, &res_idx, last_frag);
+	desc_count -= desc_req;
+	nsegs += desc_req;
+
+	/*
+	 * Walk through all fraglist skbs and fill command & result ring
+	 */
+	skb_walk_frags(skb, iter_skb) {
+		desc_req = skb_shinfo(iter_skb)->nr_frags + 1;
+		if (desc_count < desc_req) {
+			goto fail;
+		}
+
+		last_frag = !iter_skb->next;
+		eip_dma_tx_skb_paged(dma, sw, iter_skb, &cmd_idx, &res_idx, last_frag);
+
+		desc_count -= desc_req;
+		nsegs += desc_req;
+	}
+
+	sw->dst_nsegs = sw->src_nsegs = nsegs;
+
+	/* Update TR stats */
+	tr_stats->tx_pkts++;
+	tr_stats->tx_bytes += len;
+	tr_stats->tx_frags += nsegs;
+
+	/* Update DMA stats */
+	dma_stats->tx_pkts++;
+	dma_stats->tx_bytes += len;
+	dma_stats->tx_frags += nsegs;
+
+	/* Update the indexes to notify HW for transformation */
+	eip_dma_notify(dma, sw->src_nsegs, sw->dst_nsegs, cmd_idx, res_idx);
+
+	/*
+	 * Re-enable preemption.
+	 */
+	local_bh_enable();
+	return 0;
+
+fail:
+	local_bh_enable();
+	return -EBUSY;
 }
 
 /*

@@ -14,6 +14,7 @@
 #define EIP_TR_CTRL_CONTEXT_WORDS(x) (((x) & 0x3FU) << 8)
 #define EIP_TR_REDIR_EN (0x1U << 11) /* Redirect enable */
 #define EIP_TR_REDIR_IFACE(i) (((i) & 0xFU) << 12) /* Redirect destination interface */
+#define EIP_TR_ERR_SHIFT 16U
 #define EIP_MAX_PKT_LEN	9216 /* Bytes */
 
 struct eip_svc_entry;
