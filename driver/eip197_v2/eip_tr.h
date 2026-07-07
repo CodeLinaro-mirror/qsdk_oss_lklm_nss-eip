@@ -190,6 +190,8 @@ const struct eip_svc_entry *eip_tr_aead_get_svc(void);
 size_t eip_tr_aead_get_svc_len(void);
 const struct eip_svc_entry *eip_tr_ipsec_get_svc(void);
 size_t eip_tr_ipsec_get_svc_len(void);
+const struct eip_svc_entry *eip_tr_dtls_get_svc(void);
+size_t eip_tr_dtls_get_svc_len(void);
 
 bool eip_tr_ahash_key2digest(struct eip_tr *tr, struct eip_tr_info *info, const struct eip_svc_entry *algo);
 int eip_tr_genkey(struct eip_tr *tr, struct eip_tr_info *info, uint8_t *key, uint16_t len);

@@ -230,6 +230,11 @@ struct eip_ctx *eip_ctx_alloc(enum eip_svc svc, struct dentry **dentry)
 		ctx->db_size = eip_tr_ipsec_get_svc_len();
 		ctx->dma = ep->hy;
 		break;
+	case EIP_SVC_DTLS:
+		ctx->svc_db = eip_tr_dtls_get_svc();
+		ctx->db_size = eip_tr_dtls_get_svc_len();
+		ctx->dma = ep->la;
+		break;
 	default:
 		pr_err("%px: Service database not found\n", ep);
 		goto fail;
