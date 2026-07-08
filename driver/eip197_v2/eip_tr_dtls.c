@@ -16,6 +16,7 @@
 #include <linux/errno.h>
 
 struct eip_tr;
+struct eip_svc_entry;
 
 /*
  * eip_tr_dtls_enc()
@@ -36,3 +37,23 @@ int eip_tr_dtls_dec(struct eip_tr *tr, struct sk_buff *skb)
 	return -ENOTSUPP;
 }
 EXPORT_SYMBOL(eip_tr_dtls_dec);
+
+/*
+ * eip_tr_dtls_get_svc()
+ *	Not supported on eip197_v2 — return NULL service database.
+ */
+const struct eip_svc_entry *eip_tr_dtls_get_svc(void)
+{
+	return NULL;
+}
+EXPORT_SYMBOL(eip_tr_dtls_get_svc);
+
+/*
+ * eip_tr_dtls_get_svc_len()
+ *	Not supported on eip197_v2 — return zero.
+ */
+size_t eip_tr_dtls_get_svc_len(void)
+{
+	return 0;
+}
+EXPORT_SYMBOL(eip_tr_dtls_get_svc_len);
