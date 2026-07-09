@@ -245,10 +245,9 @@ static inline u32 __flow_get_esph_offset(u32 sa_flags)
 s16 eip_ipsec_flow_match_spi(__le32 spi, struct net_device *dev, u32 sa_flags)
 {
 	s16 acl_rule_id = EIP_IPSEC_INVALID_ACL_RULE_ID;
-	struct ppe_acl_rule_match_udf *udf;
 	struct ppe_acl_rule *acl_rule;
-	u32 esp_offset;
 	ppe_acl_ret_t ret;
+	u32 esp_offset;
 	bool is_ipv6;
 
 	esp_offset = __flow_get_esph_offset(sa_flags);
@@ -260,27 +259,56 @@ s16 eip_ipsec_flow_match_spi(__le32 spi, struct net_device *dev, u32 sa_flags)
 		return acl_rule_id;
 	}
 
-	udf = &acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_UDF].rule.udf;
-
 	/* Fill common part of ACL */
 	acl_rule->cmn.cmn_flags = PPE_ACL_RULE_CMN_FLAG_NO_RULEID | PPE_ACL_RULE_CMN_FLAG_POST_RT_EN;
-	acl_rule->valid_flags = PPE_ACL_RULE_MATCH_TYPE_UDF_VALID;
 	acl_rule->userspace_rule = false;
 	acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_UDF].rule_flags = 0;
 
-	udf->udf_a.min = upper_16_bits(spi);
-	udf->udf_a.mask_max = U16_MAX;
-	udf->udf_a.valid_op = PPE_ACL_UDF_OP_MASK;
-	udf->udf_a.offset = esp_offset;
-	udf->udf_a.offset_base = PPE_ACL_UDF_OFFSET_BASE_L3;
-	udf->udf_a.proto = is_ipv6 ? PPE_ACL_UDF_IPV6 : PPE_ACL_UDF_IPV4;
+	if (is_ipv6) {
+		struct ppe_acl_rule_match_udf *udf;
+		acl_rule->valid_flags = PPE_ACL_RULE_MATCH_TYPE_UDF_VALID;
+		udf = &acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_UDF].rule.udf;
 
-	udf->udf_b.min = lower_16_bits(spi);
-	udf->udf_b.mask_max = U16_MAX;
-	udf->udf_b.valid_op = PPE_ACL_UDF_OP_MASK;
-	udf->udf_b.offset = esp_offset + 2;
-	udf->udf_b.offset_base = PPE_ACL_UDF_OFFSET_BASE_L3;
-	udf->udf_b.proto = is_ipv6 ? PPE_ACL_UDF_IPV6 : PPE_ACL_UDF_IPV4;
+		udf->udf_a.min = upper_16_bits(spi);
+		udf->udf_a.mask_max = U16_MAX;
+		udf->udf_a.valid_op = PPE_ACL_UDF_OP_MASK;
+		udf->udf_a.offset = esp_offset;
+		udf->udf_a.offset_base = PPE_ACL_UDF_OFFSET_BASE_L3;
+		udf->udf_a.proto = PPE_ACL_UDF_IPV6;
+
+		udf->udf_b.min = lower_16_bits(spi);
+		udf->udf_b.mask_max = U16_MAX;
+		udf->udf_b.valid_op = PPE_ACL_UDF_OP_MASK;
+		udf->udf_b.offset = esp_offset + 2;
+		udf->udf_b.offset_base = PPE_ACL_UDF_OFFSET_BASE_L3;
+		udf->udf_b.proto = PPE_ACL_UDF_IPV6;
+	} else {
+		struct ppe_acl_rule_match_udf_with_ip *udf_ip;
+		acl_rule->valid_flags = PPE_ACL_RULE_MATCH_TYPE_UDF_WITH_IP_VALID;
+		udf_ip = &acl_rule->rules[PPE_ACL_RULE_MATCH_TYPE_UDF_WITH_IP].rule.udf_with_ip;
+
+		udf_ip->udf_a.min = upper_16_bits(spi);
+		udf_ip->udf_a.mask_max = U16_MAX;
+		udf_ip->udf_a.valid_op = PPE_ACL_UDF_OP_MASK;
+		udf_ip->udf_a.offset = esp_offset;
+		udf_ip->udf_a.offset_base = PPE_ACL_UDF_OFFSET_BASE_L3;
+		udf_ip->udf_a.proto = PPE_ACL_UDF_IPV4;
+
+		udf_ip->udf_b.min = lower_16_bits(spi);
+		udf_ip->udf_b.mask_max = U16_MAX;
+		udf_ip->udf_b.valid_op = PPE_ACL_UDF_OP_MASK;
+		udf_ip->udf_b.offset = esp_offset + 2;
+		udf_ip->udf_b.offset_base = PPE_ACL_UDF_OFFSET_BASE_L3;
+		udf_ip->udf_b.proto = PPE_ACL_UDF_IPV4;
+
+		/*
+		 * Match only non-fragmented IPv4 packets using L3 fragment flag.
+		 */
+		udf_ip->ip_misc.flags = PPE_ACL_IP_MISC_FLAG_L3_FRAG;
+		udf_ip->ip_misc.l3_fragment_flag = 0;
+		udf_ip->ip_misc.l3_fragment_flag_mask = 1;
+
+	}
 
 	/* Fill ACL action information */
 	acl_rule->action.flags |= PPE_ACL_RULE_ACTION_FLAG_SERVICE_CODE_EN;
