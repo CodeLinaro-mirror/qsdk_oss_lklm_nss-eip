@@ -15,9 +15,122 @@
 #include <linux/firmware.h>
 #include <linux/clk.h>
 #include <linux/reset.h>
-
 #include "eip_priv.h"
 #include <linux/of.h>
+
+#ifdef CONFIG_IO_COHERENCY
+/*
+ * struct __noc_reg
+ *	Register offset and value pair for NSS NOC IO coherency configuration.
+ */
+struct __noc_reg {
+	u32 offset;
+	u32 val;
+} __packed;
+
+/*
+ * eip_hw_noc_write()
+ *	Write EIP197 IO coherency registers using direct IO mapping.
+ */
+static int eip_hw_noc_write(uint32_t base_addr, struct __noc_reg reg[], int count)
+{
+	int i;
+
+	for (i = 0; i < count; i++) {
+		u32 addr = base_addr + reg[i].offset;
+		u32 val = reg[i].val;
+		void __iomem *vaddr;
+
+		/*
+		 * Map the physical register address and write the value directly.
+		 */
+		vaddr = ioremap(addr, sizeof(u32));
+		if (!vaddr) {
+			pr_err("Failed to ioremap NSS NOC reg = 0x%x\n", addr);
+			return -ENOMEM;
+		}
+
+		iowrite32(val, vaddr);
+		iounmap(vaddr);
+
+		pr_debug("Configuring nss_noc for addr: (0x%x), val: (0x%x)\n", addr, val);
+	}
+
+	return 0;
+}
+
+/*
+ * eip_hw_noc_reg_update()
+ *	Update EIP197 IO coherency settings in NSS NOC register.
+ *
+ * Caller should call this function only after EIP197 clock is
+ * enabled and before starting any transaction with EIP197.
+ */
+static int eip_hw_noc_reg_update(struct platform_device *pdev)
+{
+	struct device_node *np = (&pdev->dev)->of_node;
+	struct device_node *child = NULL;
+	struct __noc_reg *regs = NULL;
+	uint32_t reg_base;
+	int ret, count, nregs;
+
+	for_each_available_child_of_node(np, child) {
+		/*
+		 * Read the registers only if EIP IO coherency property (eip_ioc)
+		 * is defined in the DTSI.
+		 */
+		if (of_property_match_string(child, "prop-name", "eip_ioc") >= 0) {
+			break;
+		}
+	}
+
+	if (!child) {
+		pr_err("%px: Unable to find EIP IO coherency entry in DTSI\n", child);
+		return -EINVAL;
+	}
+
+	/*
+	 * Read the Register base address from the DTSI.
+	 */
+	ret = of_property_read_u32(child, "reg-base", &reg_base);
+	if (ret) {
+		pr_err("%px: Failed to read the Register base address\n", child);
+		return ret;
+	}
+
+	/*
+	 * Read the number of register elements.
+	 * Each entry is a pair of (offset, value) so count must be even.
+	 */
+	count = of_property_count_u32_elems(child, "reg-offset");
+	if ((count <= 0) || (count % 2)) {
+		pr_err("%px: Invalid entries obtained from the DTSI\n", child);
+		return -EINVAL;
+	}
+
+	nregs = count / 2;
+
+	/*
+	 * Allocate the __noc_reg array and read DTSI pairs directly into it.
+	 */
+	regs = vmalloc(sizeof(struct __noc_reg) * nregs);
+	if (!regs) {
+		pr_err("%px: Failed to allocate memory for NOC reg array\n", child);
+		return -ENOMEM;
+	}
+
+	ret = of_property_read_u32_array(child, "reg-offset", (u32 *)regs, count);
+	if (ret) {
+		pr_err("%px: Error in fetching the offset/value pairs from DTSI\n", child);
+		vfree(regs);
+		return ret;
+	}
+
+	ret = eip_hw_noc_write(reg_base, regs, nregs);
+	vfree(regs);
+	return ret;
+}
+#endif
 
 /*
  * eip_hw_next_compatible_child()
@@ -800,6 +913,16 @@ int eip_hw_init(struct platform_device *pdev)
 			cpumask_weight(&drv->la_cpu_map), cpumask_weight(&drv->hy_cpu_map), max_ring);
 		goto fail_init;
 	}
+
+#ifdef CONFIG_IO_COHERENCY
+	/*
+	 * Update EIP197 IO coherency registers in NSS NOC.
+	 */
+	status = eip_hw_noc_reg_update(pdev);
+	if (status) {
+		pr_err("%px:Failed to configure IO coherency\n", pdev);
+	}
+#endif
 
 	eip_hw_setup(base_addr);
 
