@@ -348,6 +348,20 @@ struct eip_tr *eip_tr_alloc(struct eip_ctx *ctx, struct eip_tr_info *info)
 	kref_init(&tr->ref);
 	INIT_DELAYED_WORK(&tr->inval_work, eip_tr_inval);
 
+	/*
+	 * Hybrid Rx reads the HW-reported record offset from a service-specific result
+	 * token word: word 3 bits[23:16] (Offset) for IPsec. Precompute the word index
+	 * & shift once so eip_dma_hy_rx() can extract it without a per-packet service check.
+	 */
+	switch (tr->svc) {
+	case EIP_SVC_HYBRID_IPSEC:
+		tr->word_idx = 3;
+		tr->word_shift = 16;
+		break;
+	default:
+		break;
+	}
+
 	tr->stats_pcpu = alloc_percpu_gfp(struct eip_tr_stats, GFP_KERNEL | __GFP_ZERO);
 	if (!tr->stats_pcpu) {
 		pr_err("%px: Failed to allocate stats memory for TR\n", tr);

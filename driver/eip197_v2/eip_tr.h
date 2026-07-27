@@ -170,6 +170,10 @@ struct eip_tr {
 	uint16_t iv_len;			/* IV length for configured algo FIXME: NA for Crypto. Move to ipsec */
 	uint16_t digest_len;			/* HMAC length for configured algo */
 	uint16_t blk_len;			/* Cipher block length for configured algo */
+	struct_group(offset,
+		uint8_t word_idx;		/* Hybrid Rx: result token word index holding HW record offset (3=IPsec, 7=DTLS) */
+		uint8_t word_shift;		/* Hybrid Rx: bit shift of the offset field within word_idx (16=IPsec, 0=DTLS) */
+	);
 
 	struct eip_tr_stats __percpu *stats_pcpu;	/* Statistisc */
 	struct kref ref;			/* Reference incremented per packet */

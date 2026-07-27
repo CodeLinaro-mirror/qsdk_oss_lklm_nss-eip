@@ -401,6 +401,9 @@ int eip_dma_hy_rx(struct eip_dma *dma, int budget)
 		struct eip_hw_desc *res;
 		struct sk_buff *skb;
 		struct eip_tr *tr;
+		uint32_t offst_word;
+		uint8_t offst_shift;
+		uint8_t pull_len;
 		uint16_t frag_len;
 		uint8_t nsegs;
 		void *data;
@@ -508,10 +511,14 @@ deliver:
 		}
 
 		/*
-		 * Pull the fake mac added by PPE.
-                 * token[3] contains offset to start of network header.
+		 * Pull the fake mac added by PPE along with any outer headers, using the
+		 * HW-reported record offset from the result token word & bit position
+		 * precomputed per service in the TR (tr->word_idx/word_shift).
 		 */
-		skb_pull(head_skb, EIP_HW_RES_OFFST(res->token[3]));
+		offst_word = res->token[tr->word_idx];
+		offst_shift = tr->word_shift;
+		pull_len = (offst_word >> offst_shift) & U8_MAX;
+		skb_pull(head_skb, pull_len);
 
 		/*
 		 * Send packet to the client's handler.
