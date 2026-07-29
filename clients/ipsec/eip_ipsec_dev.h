@@ -21,7 +21,13 @@
 
 #define EIP_IPSEC_DEV_MAX_HDR_LEN 96U
 #define EIP_IPSEC_DEV_MAX_HEADROOM 128U		/* Size of the buffer headroom. */
-#define EIP_IPSEC_DEV_MAX_TAILROOM 192U		/* Size of the buffer tailroom. */
+#define EIP_IPSEC_DEV_MAX_TAILROOM 96U		/* Outer IPv6 hdr	: 40 bytes
+						   ESP header		:  8 bytes
+						   IV			: 16 bytes
+						   ESP Trailer + Padding: 16 bytes
+						   ICV (SHA-256)	: 16 bytes
+						   Total		: 96 bytes
+						 */
 #define EIP_IPSEC_DEV_ARPHRD 31U		/* ARP (iana.org) hardware type for an IPsec tunnel. */
 
 /*
