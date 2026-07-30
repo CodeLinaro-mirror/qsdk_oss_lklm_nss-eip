@@ -511,7 +511,6 @@ int eip_dma_tx_nonlinear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct
 	uint32_t cmd_idx, res_idx;
 	uint8_t desc_req;
 	bool last_frag;
-	int nsegs = 0;
 
 	BUG_ON(!skb_is_nonlinear(skb));
 
@@ -523,6 +522,8 @@ int eip_dma_tx_nonlinear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct
 
 	in_count = eip_dma_avail_idx_and_count(&dma->in, &cmd_idx);
 	out_count = eip_dma_avail_idx_and_count(&dma->out, &res_idx);
+	sw->src_nsegs = 0;
+	sw->dst_nsegs = 0;
 
 	if (unlikely(in_count != out_count)) {
 		goto fail;
@@ -542,7 +543,7 @@ int eip_dma_tx_nonlinear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct
 	last_frag = !skb_has_frag_list(skb);
 	eip_dma_tx_skb_paged(dma, sw, skb, &cmd_idx, &res_idx, last_frag);
 	desc_count -= desc_req;
-	nsegs += desc_req;
+	sw->src_nsegs += desc_req;
 
 	/*
 	 * Walk through all fraglist skbs and fill command & result ring
@@ -557,20 +558,20 @@ int eip_dma_tx_nonlinear_skb(struct eip_dma *dma, struct eip_sw_desc *sw, struct
 		eip_dma_tx_skb_paged(dma, sw, iter_skb, &cmd_idx, &res_idx, last_frag);
 
 		desc_count -= desc_req;
-		nsegs += desc_req;
+		sw->src_nsegs += desc_req;
 	}
 
-	sw->dst_nsegs = sw->src_nsegs = nsegs;
+	sw->dst_nsegs = sw->src_nsegs;
 
 	/* Update TR stats */
 	tr_stats->tx_pkts++;
 	tr_stats->tx_bytes += len;
-	tr_stats->tx_frags += nsegs;
+	tr_stats->tx_frags += sw->src_nsegs;
 
 	/* Update DMA stats */
 	dma_stats->tx_pkts++;
 	dma_stats->tx_bytes += len;
-	dma_stats->tx_frags += nsegs;
+	dma_stats->tx_frags += sw->src_nsegs;
 
 	/* Update the indexes to notify HW for transformation */
 	eip_dma_notify(dma, sw->src_nsegs, sw->dst_nsegs, cmd_idx, res_idx);
