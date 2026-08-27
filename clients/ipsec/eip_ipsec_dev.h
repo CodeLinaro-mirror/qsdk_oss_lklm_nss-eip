@@ -84,6 +84,7 @@ struct eip_ipsec_dev {
 #if defined(EIP_IPSEC_VP_SUPP)
 	ppe_vp_num_t vp_num;		/* VP number associated with this netdevice. */
 #endif
+	atomic_t tuple_mode;	/* Encap tuple classification mode used for EIP lookup. */
 };
 
 /*
