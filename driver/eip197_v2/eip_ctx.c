@@ -8,6 +8,7 @@
 #include <linux/module.h>
 #include <linux/kref.h>
 #include <linux/cache.h>
+#include <linux/bitmap.h>
 #include <linux/debugfs.h>
 #include <linux/slab.h>
 #include <linux/rwlock_types.h>
@@ -308,6 +309,41 @@ void eip_ctx_free(struct eip_ctx *ctx)
 	eip_ctx_deref(ctx);
 }
 EXPORT_SYMBOL(eip_ctx_free);
+
+/*
+ * eip_redir_ring_alloc()
+ *	Allocate an available hybrid redirect ring.
+ */
+int eip_redir_ring_alloc(struct eip_ctx *ctx)
+{
+	struct eip_pdev *ep = ctx->ep;
+	unsigned long ring_id;
+
+	spin_lock_bh(&ep->lock);
+	ring_id = find_first_bit(&ep->avail_rings, BITS_PER_LONG);
+	if (ring_id >= BITS_PER_LONG) {
+		spin_unlock_bh(&ep->lock);
+		return -ENOSPC;
+	}
+
+	clear_bit(ring_id, &ep->avail_rings);
+	spin_unlock_bh(&ep->lock);
+
+	return ring_id;
+}
+EXPORT_SYMBOL(eip_redir_ring_alloc);
+
+/*
+ * eip_redir_ring_free()
+ *	Free a hybrid redirect ring to the available pool.
+ */
+void eip_redir_ring_free(struct eip_ctx *ctx, uint8_t ring_id)
+{
+	struct eip_pdev *ep = ctx->ep;
+
+	set_bit(ring_id, &ep->avail_rings);
+}
+EXPORT_SYMBOL(eip_redir_ring_free);
 
 /*
  * eip_ctx_algo_supported()
