@@ -116,7 +116,7 @@ static int eip_device_probe(struct platform_device *pdev)
 	/*
 	 * Initialize the tr cache.
 	 */
-	ep->tr_cache = kmem_cache_create("eip_tr", EIP_TR_SIZE, 0,SLAB_HWCACHE_ALIGN, NULL);
+	ep->tr_cache = kmem_cache_create("eip_tr", EIP_TR_SIZE, 0,SLAB_HWCACHE_ALIGN | SLAB_CACHE_DMA32, NULL);
 	if (!ep->tr_cache) {
 		pr_err("%px: Failed to allocate tr kmem cache\n", drv);
 		err = -ENOMEM;

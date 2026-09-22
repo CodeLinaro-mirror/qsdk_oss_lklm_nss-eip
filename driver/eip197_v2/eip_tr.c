@@ -306,6 +306,7 @@ struct eip_tr *eip_tr_alloc(struct eip_ctx *ctx, struct eip_tr_info *info)
 	const struct eip_svc_entry *algo;
 	struct eip_pdev *ep = ctx->ep;
 	struct eip_tr *tr;
+	phys_addr_t paddr;
 
 	might_sleep();
 
@@ -329,6 +330,17 @@ struct eip_tr *eip_tr_alloc(struct eip_ctx *ctx, struct eip_tr_info *info)
 	tr = kmem_cache_alloc(ep->tr_cache, GFP_KERNEL);
 	if (!tr) {
 		pr_err("%px: Failed to allocate EIP context\n", ctx);
+		return NULL;
+	}
+
+	/*
+	 * Check if the allocated address is within 32-bit range.
+	 * TODO: Handle this.
+	 */
+	paddr = virt_to_phys(tr);
+	if (upper_32_bits(paddr) != 0) {
+		pr_err("%px: Allocated tr address is beyond 32-bit range: %pa\n", ctx, &paddr);
+		kmem_cache_free(ep->tr_cache, tr);
 		return NULL;
 	}
 
