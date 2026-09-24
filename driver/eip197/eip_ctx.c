@@ -300,6 +300,26 @@ void eip_ctx_free(struct eip_ctx *ctx)
 EXPORT_SYMBOL(eip_ctx_free);
 
 /*
+ * eip_redir_ring_alloc()
+ *	Hybrid redirect ring allocation is not supported on this hardware.
+ */
+int eip_redir_ring_alloc(struct eip_ctx *ctx)
+{
+	return -EOPNOTSUPP;
+}
+EXPORT_SYMBOL(eip_redir_ring_alloc);
+
+/*
+ * eip_redir_ring_free()
+ *	Hybrid redirect ring allocation is not supported on this hardware.
+ */
+void eip_redir_ring_free(struct eip_ctx *ctx, uint8_t ring_id)
+{
+	return;
+}
+EXPORT_SYMBOL(eip_redir_ring_free);
+
+/*
  * eip_ctx_algo_supported()
  *     Check if the algo is supported by DMA.
  */

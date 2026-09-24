@@ -308,6 +308,7 @@ struct eip_tr_info_dtls {
 	uint8_t ip_ver;		/* Version 4 or 6 */
 	uint8_t ip_ttl;		/* Default time-to-live */
 	uint8_t ip_dscp;	/* Default DSCP value, when copy from inner is disabled */
+	uint8_t redir_ring;	/* Hybrid redirect ring */
 	bool ip_df;		/* Default don't fragment bit */
 
 	eip_tr_callback_t cb;		/* Transformation completion callback */
@@ -472,6 +473,26 @@ struct eip_ctx *eip_ctx_alloc(enum eip_svc svc, struct dentry **dentry);
  * @param[in] ctx	Driver context to be freed.
  */
 void eip_ctx_free(struct eip_ctx *ctx);
+
+/*
+ * eip_redir_ring_alloc
+ *	Allocate an available hybrid redirect ring.
+ *
+ * @param[in] ctx	Driver context.
+ *
+ * @return
+ * Ring ID on success, -ENOSPC when no redirect ring is available.
+ */
+int eip_redir_ring_alloc(struct eip_ctx *ctx);
+
+/*
+ * eip_redir_ring_free
+ *	Free a hybrid redirect ring to the available pool.
+ *
+ * @param[in] ctx	Driver context.
+ * @param[in] ring_id	Hybrid redirect ring ID.
+ */
+void eip_redir_ring_free(struct eip_ctx *ctx, uint8_t ring_id);
 
 /*
  * eip_tr_alloc
