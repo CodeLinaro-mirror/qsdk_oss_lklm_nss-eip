@@ -121,8 +121,9 @@ struct eip_pdev {
 	dma_addr_t hwcache_paddr;		/* Physical address for HW flow */
 	bool redirect_en;			/* Redirection / Hybrid mode is configured */
 	bool dma_refill_req;			/* Hybrid DMA refill required */
+	unsigned long avail_rings;		/* Available hybrid redirect rings */
 	struct eip_flow_tbl flow_table;		/* Flow table */
-	spinlock_t lock;			/* Spinlock for flow table */
+	spinlock_t lock;			/* Spinlock for flow table and redirect ring allocation */
 	bool inline_support;			/* EIP inline port support */
 	eip_features_t flags;			/* EIP hardware-supported flags */
 };

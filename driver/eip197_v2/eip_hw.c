@@ -888,7 +888,7 @@ int eip_hw_init(struct platform_device *pdev)
 	struct eip_drv *drv = &eip_drv_g;
 	struct device_node *child = NULL;
 	struct device_node *prev = NULL;
-	uint32_t redirect_en = 0;
+	uint32_t redir_ring_mask = 0;
 	uint8_t max_ring;
 	int status, cpu;
 	uint32_t flags = 0;
@@ -1018,7 +1018,8 @@ int eip_hw_init(struct platform_device *pdev)
 			goto fail_init;
 		}
 
-		redirect_en |= EIP_HW_ICE_REDIRECT_EN(dma->ring_id);
+		redir_ring_mask |= EIP_HW_ICE_REDIRECT_EN(dma->ring_id);
+		__set_bit(dma->ring_id, &ep->avail_rings);
 
 		prev = child;
 		child = eip_hw_next_compatible_child(np, prev, "qcom,eip-dma");
@@ -1028,11 +1029,12 @@ int eip_hw_init(struct platform_device *pdev)
 	/*
 	 * Configure HW for Redirection.
 	 */
-	if (redirect_en) {
-		uint8_t err_redir_ring = __builtin_ffs(redirect_en) - 1;
+	if (redir_ring_mask) {
+		uint8_t err_redir_ring = __builtin_ffs(redir_ring_mask) - 1;
 		uint32_t cfg;
 
-		ep->redirect_en = !!redirect_en;
+		ep->redirect_en = !!redir_ring_mask;
+		__clear_bit(err_redir_ring, &ep->avail_rings);
 
 		/*
 		 * Enable inorder bit when redirection is used.
@@ -1043,8 +1045,8 @@ int eip_hw_init(struct platform_device *pdev)
 		/*
 		 * Allow redirection from those interface.
 		 */
-		redirect_en |= EIP_HW_ICE_REDIRECT_EN(EIP_HW_ICE_INLINE_BIT);
-		iowrite32(redirect_en, base_addr + EIP_HW_ICE_REDIRECT_CFG);
+		redir_ring_mask |= EIP_HW_ICE_REDIRECT_EN(EIP_HW_ICE_INLINE_BIT);
+		iowrite32(redir_ring_mask, base_addr + EIP_HW_ICE_REDIRECT_CFG);
 
 		/*
 		 * Redirect all error packet to hybrid ring with lowest ring index (4).
@@ -1060,7 +1062,8 @@ int eip_hw_init(struct platform_device *pdev)
 			goto fail_init;
 		}
 
-		pr_info("%px: Redirection enabled, map(%x) error ring(%u)\n", pdev, redirect_en, err_redir_ring);
+		pr_info("%px: Redirection enabled, map(%x) error ring(%u) available rings(%lx)\n",
+			pdev, redir_ring_mask, err_redir_ring, ep->avail_rings);
 	}
 
 

@@ -182,10 +182,9 @@ void eip_tr_dtls_dec_cmn_init(struct eip_tr *tr, struct eip_tr_info *info, const
 	 * Enable redirection for dtls
 	 */
 	if (tr->svc == EIP_SVC_HYBRID_DTLS) {
-		struct eip_ctx *ctx = tr->ctx;
 		tr_words[65] |= EIP_TR_REDIR_EN;
-		tr_words[65] |= EIP_TR_REDIR_IFACE(ctx->dma[1].ring_id);
-		pr_debug("%px: Redirection enable to ring(%u) for decap record\n", tr, ctx->dma[1].ring_id);
+		tr_words[65] |= EIP_TR_REDIR_IFACE(dtls->redir_ring);
+		pr_debug("%px: Redirection enable to ring(%u) for decap record\n", tr, dtls->redir_ring);
 	}
 
 	tr_words[66] = 0;
