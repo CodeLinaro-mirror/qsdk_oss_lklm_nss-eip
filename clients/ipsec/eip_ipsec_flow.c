@@ -4,6 +4,7 @@
  */
 
 #include <linux/ip.h>
+#include <net/vxlan.h>
 #include <ppe_acl.h>
 #include <eip_ipsec.h>
 #include <eip.h>
@@ -11,10 +12,6 @@
 #include <ecm_notifier.h>
 #include "eip_ipsec_priv.h"
 
-/*
- * __flow_tuple_print()
- *	Print IPsec tuple information with formatted context tag.
- */
 /*
  * __flow_tuple_print()
  *      Print IPsec tuple information with formatted context tag.
@@ -98,7 +95,7 @@ static void __flow_tuple_from_ecm(struct ecm_notifier_connection_data *ecm_info,
 }
 
 /*
- * eip_ipsecget_dev()
+ * __flow_get_dev()
  *	Get IPsec dev.
  */
 static inline struct net_device *__flow_get_dev(struct ecm_notifier_connection_data *data, bool *ipsec)
@@ -117,6 +114,33 @@ static inline struct net_device *__flow_get_dev(struct ecm_notifier_connection_d
 }
 
 /*
+ * __flow_tuple_mode_set()
+ *	Set EIP VP encap tuple mode. Once set, it cannot change.
+ */
+static bool __flow_tuple_mode_set(struct net_device *ipsec_dev, struct net_device *from_dev)
+{
+	struct eip_ipsec_dev *eid = netdev_priv(ipsec_dev);
+	int t_mode, ret;
+
+	/*
+	 * TODO: Add cases for other 3-tuple lookup like GRE, ether-ip, etc for inner flows.
+	 */
+	t_mode = netif_is_vxlan(from_dev) ? PPE_VP_TX_TYPE_IPSEC_3_TUPLE_ENCAP : PPE_VP_TX_TYPE_IPSEC_ENCAP;
+
+	ret = atomic_read(&eid->tuple_mode);
+	if (ret != PPE_VP_TX_TYPE_NONE)
+		return (ret == t_mode);
+
+	/*
+	 * Set tuple_mode if it is still NONE (pending).
+	 */
+	ret = atomic_cmpxchg(&eid->tuple_mode, PPE_VP_TX_TYPE_NONE, t_mode);
+	pr_debug("%px: %s tuple mode set to %d\n", ipsec_dev, ipsec_dev->name, t_mode);
+
+	return true;
+}
+
+/*
  * eip_ipsec_flow_notifier()
  *	ECM notifier callback.
  */
@@ -124,8 +148,10 @@ static int eip_ipsec_flow_notifier(struct notifier_block *nb, unsigned long acti
 {
 	struct ecm_notifier_connection_data *data = dt;
 	struct eip_ipsec_tuple tuple = {0};
-	struct net_device *ipsec_dev;
 	struct eip_ipsec_sa *sa = NULL;
+	struct net_device *ipsec_dev;
+	struct net_device *from_dev;
+	struct eip_ipsec_dev *eid;
 	bool ipsec;
 
 	if (!data) {
@@ -148,6 +174,21 @@ static int eip_ipsec_flow_notifier(struct notifier_block *nb, unsigned long acti
 
 	/* Fill flow information */
 	__flow_tuple_from_ecm(data, &tuple, ipsec);
+
+	from_dev = (ipsec ? data->to_dev : data->from_dev);
+
+	if (!__flow_tuple_mode_set(ipsec_dev, from_dev)) {
+		pr_debug("%px: Failed to set EIP flow encap tuple mode\n", ipsec_dev);
+		return NOTIFY_OK;
+	}
+
+	eid = netdev_priv(ipsec_dev);
+
+	/*
+	 * In case of 3-tuple, ignore src and dest port number.
+	 */
+	if (atomic_read(&eid->tuple_mode) == PPE_VP_TX_TYPE_IPSEC_3_TUPLE_ENCAP)
+		tuple.sport = tuple.dport = 0;
 
 	switch (action) {
 	case ECM_NOTIFIER_ACTION_CONNECTION_ADDED:

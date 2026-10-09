@@ -841,8 +841,15 @@ static bool eip_ipsec_offload_tx(struct net_device *ndev, struct sk_buff *skb)
 	struct eip_ipsec_dev *eid = netdev_priv(ndev);
 	struct eip_ipsec_dev_stats *dev_stats;
 	struct ppe_vp_tx_info tx_info = {0};
+	int mode;
 
 	dev_stats = this_cpu_ptr(eid->stats_pcpu);
+
+	mode = atomic_read(&eid->tuple_mode);
+	if (unlikely(mode == PPE_VP_TX_TYPE_NONE)) {
+		eip_ipsec_dev_tx(skb, ndev);
+		return true;
+	}
 
 	/*
 	 * check whether the packet length is within
@@ -864,11 +871,11 @@ static bool eip_ipsec_offload_tx(struct net_device *ndev, struct sk_buff *skb)
 		}
 	}
 
-	tx_info.type = PPE_VP_TX_TYPE_IPSEC_ENCAP;
-
 	/*
-	 * skb is consumed/freed by ppe_vp_tx_to_vp() on failure
+	 * Set the tuple mode and forward the packet to EIP via VP path.
+	 * skb is consumed/freed by ppe_vp_tx_to_vp() on failure.
 	 */
+	tx_info.type = mode;
 	if (unlikely(!ppe_vp_tx_to_vp(eid->vp_num, &tx_info, skb)))
 		goto fail;
 
@@ -1178,6 +1185,11 @@ struct net_device *eip_ipsec_dev_add(void)
 	eid = netdev_priv(ndev);
 	eid->ndev = ndev;
 	eid->devid = -1;
+
+	/*
+	 * Tuple selection is pending EIP IPsec encapsulation by default.
+	 */
+	atomic_set(&eid->tuple_mode, PPE_VP_TX_TYPE_NONE);
 
 	/*
 	 * Map RPS core as per the configured CPU mask.
